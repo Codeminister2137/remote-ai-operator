@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remote AI Operator</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head>
+<body><main>
+<header><p class="eyebrow">REMOTE AI OPERATOR</p><h1>Supervise the work.<br>Approve the result.</h1>
+<p class="notice">Load execution mode before submitting</p></header>
+<section><h2>Access</h2>
+<div id="owner-access"><label>Local access token<input id="token" type="password" autocomplete="off"></label>
+<button id="connect">Connect and load execution mode</button></div>
+<div id="visitor-access" hidden><label>Demo access code<input id="accessCode" type="password" autocomplete="off"></label>
+<button id="enterSession">Enter demo</button></div>
+<p id="access-note">The token stays in this page's memory. Remote access is not configured.</p></section>
+<section id="key-section" hidden><h2>Your model key</h2>
+<div id="key-controls">
+<p>Attach your own Meta API key to run real AI coding in this demo. It stays in this server's memory for your session only: never written to disk, never sent to the code sandbox, and never charged to the host's credits.</p>
+<label>Meta API key<input id="modelKey" type="password" autocomplete="off"></label>
+<button id="attachKey" disabled>Attach key</button><button id="detachKey" class="secondary" disabled>Remove key</button></div>
+<p id="key-note">Without a key this demo runs a fixed offline reference and makes no model requests.</p>
+<button id="leaveSession" class="secondary">Leave demo</button><p id="session-note"></p></section>
+<section><h2>Model spending</h2><p id="allowance-summary">Connect to view this server's allowance.</p>
+<p id="allowance-note">Local reserved estimates are separate from provider credits and final billing.</p>
+<button id="refreshAllowance" class="secondary" disabled>Refresh spending</button></section>
+<section><h2>Tasks</h2><button id="newTask" class="secondary" disabled>New task</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
+<button id="refreshTasks" class="secondary" disabled>Refresh tasks</button><p>Choose a task to review its progress or result. Selecting a task never starts work or approves a change.</p></section>
+<section><h2>New development task</h2><p>This demo asks the agent to add spreadsheet-style import to a small issue tracker: accept valid issues and explain why other rows cannot be imported.</p><label>Request<textarea id="prompt" rows="4">Implement CSV import for the issue tracker, including validation and duplicate handling, following the sample acceptance specification.</textarea></label>
+<label class="check"><input id="inject" type="checkbox" checked> Inject one transport failure after the edit</label>
+<button id="submit" disabled>Create and run new task</button>
+<p>Reconnect to choose from saved tasks above. You can also bookmark this page to return to this task directly.</p>
+<details><summary>Recover another task by ID</summary>
+<label>Task ID<input id="taskId" autocomplete="off" placeholder="Optional: paste a saved task ID"></label>
+<button id="load" class="secondary" disabled>Load task</button></details>
+<p id="recovery-note" hidden></p>
+<button id="reconcile" class="secondary" disabled>Inspect interrupted action</button>
+<button id="resume" class="secondary" disabled>Resume paused task</button><button id="cancel" class="secondary" disabled>Cancel task</button></section>
+<p id="message" role="status" aria-live="polite"></p>
+<section><h2>Selected task progress <span id="status">No task selected</span></h2><p id="event-summary">Create a new task or select a saved task.</p><button id="eventHistory" class="secondary" hidden>Show all activity</button><ol id="events"></ol></section>
+<section><h2>Review exact change</h2><pre id="diff">No candidate yet.</pre>
+<h3>Validation evidence</h3><p id="validation-summary">Not validated.</p><details><summary>Show validation receipt</summary><pre id="evidence">Not validated.</pre></details>
+<p>Approval applies this candidate only to the separate local demo target. It does not push or deploy.</p>
+<button id="approve" disabled>Approve this verified change</button>
+<button id="revalidate" class="secondary" disabled>Run fresh validation</button><button id="reject" class="secondary" disabled>Reject change</button></section>
+<section><h2>Try the feature the agent built</h2>
+<p>After approving, run the new importer on the example below. Each line is one issue. Two valid issues should appear in the table; the duplicate ID and missing title should appear as row errors. You can edit the input and try again. This checks the approved code with sample data; it does not save issues to a live tracker.</p>
+<label>CSV input<textarea id="csv" rows="7">id,title,status
+existing,Duplicate,open
+new-1,First imported issue,OPEN
+new-2,,closed
+new-3,Another imported issue,closed</textarea></label>
+<button id="preview" disabled>Run approved import</button>
+<h3>Accepted issues</h3><div class="table-wrap"><table><thead><tr><th>ID</th><th>Title</th><th>Status</th></tr></thead><tbody id="issues"></tbody></table></div>
+<h3>Row errors</h3><ul id="import-errors"></ul></section>
+</main></body></html>

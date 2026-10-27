@@ -1,0 +1,13 @@
+include LICENSE
+include NOTICE
+include README.md
+include pyproject.toml
+include uv.lock
+include .python-version
+include .env.example
+include grant.example.json
+recursive-include sample *
+recursive-include tests *.py
+recursive-include scripts *.py *.mjs *.ps1
+recursive-include docs *.md
+global-exclude __pycache__ *.py[cod]

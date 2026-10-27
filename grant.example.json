@@ -1,0 +1,13 @@
+{
+  "grant_id": "REPLACE_WITH_FRESH_OWNER_APPROVED_GRANT_ID",
+  "model": "REPLACE_WITH_VERIFIED_META_MODEL",
+  "expires_at": 0,
+  "max_requests": 0,
+  "max_input_bytes": 0,
+  "max_output_tokens": 0,
+  "approved_usd": "0",
+  "input_usd_per_million": "0",
+  "output_usd_per_million": "0",
+  "credits_verified": false,
+  "local_spending_limit_accepted": false
+}
