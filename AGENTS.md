@@ -5,6 +5,13 @@ billing and public release. Investigate first. Ask about unresolved material
 choices with options, trade-offs and a recommendation. Routine coding and checks
 within approved scope do not need renewed permission.
 
+Owner priority (2026-10-28): continue engineering, integration and representative
+acceptance work. Demo recording/upload and judge-access activation are the final
+hackathon milestones near submission. Release checklists are not a development
+freeze or an instruction to provision judge access immediately. Ordinary tests
+remain development work. An approved source update does not approve recording,
+judge grants or submission.
+
 This is a standalone hackathon application. Maintain event-built provenance in
 BUILD_LOG.md. Attribute public dependencies. Do not copy private implementation,
 history, plans or configuration. Never require a private package or IDE at runtime.
