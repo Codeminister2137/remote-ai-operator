@@ -79,6 +79,12 @@ class ExternalActionBridge:
         for digest in (candidate_digest, base_digest, evidence_digest):
             if not isinstance(digest, str) or len(digest) != 64:
                 raise ValueError("Digests must be 64-character hex SHA-256 strings")
+            try:
+                digest.encode("ascii")
+            except UnicodeEncodeError:
+                raise ValueError("Digests must be 64-character hex SHA-256 strings")
+            if any(c not in "0123456789abcdefABCDEF" for c in digest):
+                raise ValueError("Digests must be 64-character hex SHA-256 strings")
         if not isinstance(expires_seconds, int) or not 30 <= expires_seconds <= 3600:
             raise ValueError("Expiry must be between 30 and 3600 seconds")
         created = time.time() if now is None else now

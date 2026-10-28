@@ -213,3 +213,5 @@ remote_ai_operator-0.1.0 wheel and sdist from the project
   `remote-ai-operator` entry point printed its CLI usage, and 139 tests passed with
   the 8 expected Docker skips. This confirms the `uv sync --locked` instructions in
   docs/reviewer-guide.md against the shipped `uv.lock`, not just a pip wheel install.
+
+2026-10-28: Meta muse-spark-1.3, through private development tooling, authored strict ASCII/hex digest validation and companion tests for the neutral external-action API. The supervisor reviewed exact candidate bytes before running unchanged original tests and separate independent checks:147 tests and69 subtests passed,8 integrations skipped,plus16 host digest cases. Only test formatting was adjusted by the host; no private tooling implementation is included. This remains a local review candidate, pending publication authorization.
