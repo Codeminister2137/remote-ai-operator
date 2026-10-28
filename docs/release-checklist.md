@@ -43,7 +43,8 @@ public source. Use this checklist after the current implementation freeze.
 - [x] Owner authorizes actual public repository creation/push and submission.
       Repository committed locally as `main @4eb7136`; public push pending creation of
       `Codeminister2137/remote-ai-operator` on GitHub.
-- [ ] Push `main` to the new GitHub repository once it exists.
+- [x] Push `main` to the new GitHub repository once it exists. Done:
+      `https://github.com/Codeminister2137/remote-ai-operator/tree/main`.
 - [ ] Check final event instructions and submit ahead of November 4,21:00 US Eastern
       (November 5,02:00 UTC). Target November 4,18:00 Budapest for margin.
 
