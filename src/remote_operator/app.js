@@ -53,7 +53,7 @@ function startPolling() {
   progressTimer = setInterval(async () => {
     if (pollBusy) return;
     pollBusy = true;
-    try { await refresh(); }
+    try { await refresh(); await refreshExternalActions(); }
     catch (error) { stopPolling(); message(error.message); }
     finally { pollBusy = false; }
   }, 1000);
@@ -102,6 +102,7 @@ function actions() {
   element("newTask").disabled = busy || connecting || selectedMode === null;
   element("submit").disabled = busy || connecting || !inferenceAllowed();
   element("refreshAllowance").disabled = selectedMode === null || connecting;
+  element("refreshExternal").disabled = selectedMode === null || connecting;
   for (const id of ["recentTasks", "refreshTasks", "load", "taskId"]) element(id).disabled = busy || connecting || selectedMode === null;
   element("approve").disabled = !active || busy || task.status !== "awaiting_approval";
   element("reject").disabled = !active || busy || !["queued", "paused", "awaiting_approval", "review_required"].includes(task.status);
@@ -131,6 +132,43 @@ async function recentTasks() {
   chooser.value = element("taskId").value.trim();
   return summaries;
 }
+async function refreshExternalActions() {
+  const session = sessionRevision;
+  if (selectedMode === null) return;
+  const actions = await api("/api/external-actions?limit=20");
+  if (session !== sessionRevision || selectedMode === null) return;
+  const list = element("externalActions");
+  if (!actions.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No pending external actions.";
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...actions.map((action) => {
+    const item = document.createElement("li");
+    item.className = "external-action";
+    const summary = document.createElement("div");
+    summary.textContent = action.status + " · " + action.description.replace(/\n/g, " · ");
+    item.append(summary);
+    if (action.status === "submitted") {
+      const approve = document.createElement("button");
+      approve.textContent = "Approve"; approve.className = "secondary";
+      approve.onclick = () => guarded(async () => {
+        await api("/api/external-actions/" + action.id + "/approve", "POST", {nonce: action.nonce});
+        await refreshExternalActions(); message("External action approved.");
+      });
+      const reject = document.createElement("button");
+      reject.textContent = "Reject"; reject.className = "secondary";
+      reject.onclick = () => guarded(async () => {
+        await api("/api/external-actions/" + action.id + "/reject", "POST");
+        await refreshExternalActions(); message("External action rejected.");
+      });
+      item.append(approve, reject);
+    }
+    return item;
+  }));
+}
+element("refreshExternal").onclick = () => guarded(refreshExternalActions);
 function renderEvents() {
   const start = showAllEvents ? 0 : Math.max(0, taskEvents.length - 20);
   element("events").replaceChildren(...taskEvents.slice(start).map((event, offset) => {
@@ -326,6 +364,8 @@ async function loadMode(session) {
   await refreshAllowance();
   if (session !== sessionRevision) return;
   const summaries = await recentTasks();
+  if (session !== sessionRevision) return;
+  await refreshExternalActions();
   if (session !== sessionRevision) return;
   const saved = element("taskId").value.trim();
   if (saved || summaries.length) {
