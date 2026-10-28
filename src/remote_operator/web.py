@@ -19,6 +19,7 @@ from starlette.middleware.body_limit import RequestBodyLimitMiddleware
 
 from remote_operator.control import Operator
 from remote_operator.credentials import SessionCapacity, SessionUnavailable
+from remote_operator.external_actions import ExternalActionBridge
 from remote_operator.hosted import AccessRefused
 from remote_operator.scripted import ScriptedModel
 
@@ -72,6 +73,15 @@ class Approval(BaseModel):
     nonce: str = Field(min_length=1, max_length=128)
 
 
+class ExternalActionSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: str = Field(min_length=1, max_length=4000)
+    candidate_digest: str = Field(min_length=64, max_length=64)
+    base_digest: str = Field(min_length=64, max_length=64)
+    evidence_digest: str = Field(min_length=64, max_length=64)
+    expires_seconds: int = Field(default=600, ge=30, le=3600)
+
+
 class AccessCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: str = Field(min_length=1, max_length=256)
@@ -92,6 +102,7 @@ class Principal:
     allowance_status: object | None = None
     hosted: bool = False
     key_attached: bool = False
+    external_actions: ExternalActionBridge | None = None
 
 
 def _origin(public_origin):
@@ -258,6 +269,64 @@ def _task_routes(app, principal):
         return who.allowance_status() if who.allowance_status is not None else {"enabled": False}
 
 
+def _external_action_routes(app, principal):
+    """Register neutral external pending-action routes."""
+
+    @app.post("/api/external-actions")
+    def submit_external(
+        body: ExternalActionSubmission, who: Annotated[Principal, Depends(principal)]
+    ):
+        if who.external_actions is None:
+            raise HTTPException(503, "External action bridge is not configured")
+        action = who.external_actions.submit(
+            body.description,
+            body.candidate_digest,
+            body.base_digest,
+            body.evidence_digest,
+            expires_seconds=body.expires_seconds,
+        )
+        return {
+            "id": action.id,
+            "status": action.status,
+            "nonce": action.nonce,
+            "expires": action.expires,
+        }
+
+    @app.get("/api/external-actions")
+    def list_external(
+        who: Annotated[Principal, Depends(principal)], limit: int = Query(20, ge=1, le=50)
+    ):
+        if who.external_actions is None:
+            raise HTTPException(503, "External action bridge is not configured")
+        return [a.to_dict() for a in who.external_actions.recent(limit)]
+
+    @app.get("/api/external-actions/{action_id}")
+    def review_external(action_id: str, who: Annotated[Principal, Depends(principal)]):
+        if who.external_actions is None:
+            raise HTTPException(503, "External action bridge is not configured")
+        return who.external_actions.get(action_id).to_dict()
+
+    @app.post("/api/external-actions/{action_id}/approve")
+    def approve_external(
+        action_id: str, body: Approval, who: Annotated[Principal, Depends(principal)]
+    ):
+        if who.external_actions is None:
+            raise HTTPException(503, "External action bridge is not configured")
+        return who.external_actions.approve(action_id, body.nonce).to_dict()
+
+    @app.post("/api/external-actions/{action_id}/reject")
+    def reject_external(action_id: str, who: Annotated[Principal, Depends(principal)]):
+        if who.external_actions is None:
+            raise HTTPException(503, "External action bridge is not configured")
+        return who.external_actions.reject(action_id).to_dict()
+
+    @app.post("/api/external-actions/{action_id}/cancel")
+    def cancel_external(action_id: str, who: Annotated[Principal, Depends(principal)]):
+        if who.external_actions is None:
+            raise HTTPException(503, "External action bridge is not configured")
+        return who.external_actions.cancel(action_id).to_dict()
+
+
 def create_app(
     operator: Operator,
     access_token: str,
@@ -273,14 +342,17 @@ def create_app(
     public_origin = _origin(public_origin)
     app = _base_app(public_origin=public_origin, sessions=None)
 
+    external = ExternalActionBridge(operator.store)
+
     def owner(request: Request):
         expected = "Bearer " + access_token
         actual = request.headers.get("authorization", "")
         if not secrets.compare_digest(actual.encode(), expected.encode()):
             raise HTTPException(401, "Owner credential required")
-        return Principal(operator, model_factory, mode, allowance_status)
+        return Principal(operator, model_factory, mode, allowance_status, external_actions=external)
 
     _task_routes(app, owner)
+    _external_action_routes(app, owner)
 
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
@@ -326,14 +398,22 @@ def create_hosted_app(
         ):
             raise HTTPException(403, "Explicit session request header required")
         operator = scoped.for_subject(subject)
+        external = ExternalActionBridge(operator.store)
         if grant is not None and sessions.has_key(token, subject):
             factory = lambda: build_actor(operator.store, lambda: sessions.key_for(token, subject))
             return Principal(
-                operator, factory, "meta", lambda: grant.budget_status(operator.store), True, True
+                operator,
+                factory,
+                "meta",
+                lambda: grant.budget_status(operator.store),
+                True,
+                True,
+                external,
             )
-        return Principal(operator, ScriptedModel, "scripted", None, True, False)
+        return Principal(operator, ScriptedModel, "scripted", None, True, False, external)
 
     _task_routes(app, visitor)
+    _external_action_routes(app, visitor)
 
     @app.get("/api/config")
     def configuration(request: Request):
