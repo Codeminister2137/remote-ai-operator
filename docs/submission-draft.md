@@ -70,8 +70,11 @@ real-browser UI pass). Judges receive the shared access code out-of-band; it is 
 committed. The hosted app starts on the labelled scripted reference at zero inference
 cost and has no access to the owner's PC or private source. A visitor may attach their
 own Meta key only when a finite judge grant is enabled; until then the key endpoint
-refuses. Repository URL and video URL must be filled only after actual
-publication/recording approval. The owner's private phone network is not a shared
+refuses. Existing published repository:
+`https://github.com/Codeminister2137/remote-ai-operator/tree/main`.
+The current local review candidate has not been published. Video URL remains
+pending explicit recording/upload approval and an actual reviewed recording.
+The owner's private phone network is not a shared
 judge endpoint.
 
 ## Scope and honest limits
