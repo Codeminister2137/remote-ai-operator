@@ -23,6 +23,9 @@
 <button id="refreshAllowance" class="secondary" disabled>Refresh spending</button></section>
 <section><h2>Tasks</h2><button id="newTask" class="secondary" disabled>New task</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
 <button id="refreshTasks" class="secondary" disabled>Refresh tasks</button><p>Choose a task to review its progress or result. Selecting a task never starts work or approves a change.</p></section>
+<section><h2>Workbench pending actions</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
+<p>External actions from AI Workbench or other connected tools appear here. Approve or reject the exact pending change.</p>
+<ul id="externalActions"><li>Connect to load pending actions.</li></ul></section>
 <section><h2>New development task</h2><p>This demo asks the agent to add spreadsheet-style import to a small issue tracker: accept valid issues and explain why other rows cannot be imported.</p><label>Request<textarea id="prompt" rows="4">Implement CSV import for the issue tracker, including validation and duplicate handling, following the sample acceptance specification.</textarea></label>
 <label class="check"><input id="inject" type="checkbox" checked> Inject one transport failure after the edit</label>
 <button id="submit" disabled>Create and run new task</button>

@@ -36,15 +36,16 @@ public source. Use this checklist after the current implementation freeze.
       name, email, Modal app id, provider-key patterns, `Bearer` values or private
       `.remote-operator` references; `uv.lock` matches the declared runtime, `modal`
       extra and `dev` group.
-- [ ] Review reachable Git history before publishing: the repository has no commits
-      yet, so the first public history must be created from the reviewed tree only.
-      Exclude private configuration, nonces, accounts, plans, raw receipts and personal
-      screenshots.
-- [x] Owner authorizes actual public repository creation/push and submission.
-      Repository committed locally as `main @4eb7136`; public push pending creation of
-      `Codeminister2137/remote-ai-operator` on GitHub.
+- [ ] Review the exact next release tree and its reachable history before further
+      publication. Existing public history remains intact. Exclude private
+      configuration, nonces, accounts, plans, raw receipts and personal screenshots.
+- [x] Initial public repository creation and main push were authorized and completed.
+      This historical authorization does not authorize a later release or submission.
 - [x] Push `main` to the new GitHub repository once it exists. Done:
       `https://github.com/Codeminister2137/remote-ai-operator/tree/main`.
+- [ ] Obtain explicit owner authorization for the exact reviewed next release,
+      video recording/upload, public push and form submission. Current preparation
+      does not grant any of these actions.
 - [ ] Check final event instructions and submit ahead of November 4,21:00 US Eastern
       (November 5,02:00 UTC). Target November 4,18:00 Budapest for margin.
 
@@ -52,3 +53,15 @@ Optional work after the core rehearsal: phone allowance editing with explicit sa
 adjustment semantics, receipt formatting, and an additional provider only with an
 approved route/credit grant. PC wake, desktop control, private-product integration,
 notifications and arbitrary repositories are outside the minimum submission.
+
+## October 28 candidate status
+
+The personal external-actions bridge is implemented on its feature branch, including
+the neutral API and UI. It is separate from the single-file hackathon demo and does
+not include private Workbench implementation. The deployed hosted demo has not been
+updated with this candidate. Choose the exact release scope during owner review.
+
+Current local candidate validation: 142 pytest cases passed, 8 skipped, and 69
+subtests passed. Skipped integration groups remain unverified in that run; historical
+Docker and hosted evidence above is not a rerun against this candidate. Hosted
+model acceptance, judge credential delivery, video and final submission remain open.
