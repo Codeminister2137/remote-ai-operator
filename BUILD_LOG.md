@@ -1,5 +1,13 @@
 # Event-built contributions
 
+2026-10-28: prepared the next source candidate for local release review. The
+neutral external-actions API and mobile UI are implemented separately from the
+registered importer demo; no private Workbench implementation is included. A local
+candidate run passed 142 pytest cases and 69 subtests, with 8 integration skips.
+Reconciled historical initial-publication authorization with the current requirement
+for explicit approval of recording, further public pushes and submission. No new
+Meta inference, hosted deployment, recording or submission occurred in this review.
+
 2026-10-26: began standalone implementation: task/evidence persistence, bounded
 scripted tool workflow, injected transport interruption, controlled source editing,
 Docker validation and exact-candidate local approval. Added synthetic issue-import
@@ -180,7 +188,7 @@ No real Meta quality or physical phone/VPN acceptance is claimed.
 
 - Prepared the local release artifact and public-tree review (no publication, no push,
   no inference). Built 
-emote_ai_operator-0.1.0 wheel and sdist from the project
+remote_ai_operator-0.1.0 wheel and sdist from the project
   with an explicit `MANIFEST.in` allowlist: LICENSE, NOTICE, README, pyproject,
   `uv.lock`, `.python-version`, `.env.example`, `grant.example.json`, the sample
   workspace, protected checks, `scripts/` and `docs/`. The sdist carries 80 entries
