@@ -1,7 +1,13 @@
 # Remaining release checklist
 
 The local review package is not a submission. Keep private runtime evidence out of
-public source. Use this checklist after the current implementation freeze.
+public source. Use this checklist for the final release phase, after engineering
+and representative acceptance work. There is no current development freeze.
+
+Owner priority (2026-10-28): demo recording/upload and judge-access activation are
+the final hackathon milestones near submission. Do not treat the unchecked items
+below as the immediate development queue. Historical deployment checks do not
+establish that a service is running now.
 
 - [x] Standalone source and uv lockfile; no private runtime dependency.
 - [x] Apache-2.0 decision, LICENSE/NOTICE and wheel metadata.
@@ -44,8 +50,9 @@ public source. Use this checklist after the current implementation freeze.
 - [x] Push `main` to the new GitHub repository once it exists. Done:
       `https://github.com/Codeminister2137/remote-ai-operator/tree/main`.
 - [ ] Obtain explicit owner authorization for the exact reviewed next release,
-      video recording/upload, public push and form submission. Current preparation
-      does not grant any of these actions.
+      video recording/upload and form submission. The reviewed October28 source
+      update was separately authorized and published through PR #1; this does not
+      authorize recording, judge grants or submission.
 - [ ] Check final event instructions and submit ahead of November 4,21:00 US Eastern
       (November 5,02:00 UTC). Target November 4,18:00 Budapest for margin.
 
@@ -56,12 +63,12 @@ notifications and arbitrary repositories are outside the minimum submission.
 
 ## October 28 candidate status
 
-The personal external-actions bridge is implemented on its feature branch, including
-the neutral API and UI. It is separate from the single-file hackathon demo and does
-not include private Workbench implementation. The deployed hosted demo has not been
-updated with this candidate. Choose the exact release scope during owner review.
+The external-actions API/UI and strict hexadecimal digest validation were published
+through [PR #1](https://github.com/Codeminister2137/remote-ai-operator/pull/1).
+They are separate from the single-file hackathon demo and do not include private
+Workbench implementation. Source publication did not update a hosted deployment.
 
-Current local candidate validation: 142 pytest cases passed, 8 skipped, and 69
+Published candidate validation: 147 pytest cases passed, 8 skipped, and 69
 subtests passed. Skipped integration groups remain unverified in that run; historical
 Docker and hosted evidence above is not a rerun against this candidate. Hosted
 model acceptance, judge credential delivery, video and final submission remain open.

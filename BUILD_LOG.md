@@ -215,3 +215,10 @@ remote_ai_operator-0.1.0 wheel and sdist from the project
   docs/reviewer-guide.md against the shipped `uv.lock`, not just a pip wheel install.
 
 2026-10-28: Meta muse-spark-1.3, through private development tooling, authored strict ASCII/hex digest validation and companion tests for the neutral external-action API. The supervisor reviewed exact candidate bytes before running unchanged original tests and separate independent checks:147 tests and69 subtests passed,8 integrations skipped,plus16 host digest cases. Only test formatting was adjusted by the host; no private tooling implementation is included. This remains a local review candidate, pending publication authorization.
+
+## 2026-10-28 - final release milestone ordering
+
+Owner-approved documentation update: continue engineering and acceptance work;
+recording/upload and judge-access activation are final milestones near submission.
+Recorded the completed source publication in PR #1 and its 147-test validation.
+No runtime or deployment change is part of this documentation update.
