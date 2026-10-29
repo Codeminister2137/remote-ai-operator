@@ -16,6 +16,11 @@ public source. Use this checklist after the current implementation freeze.
       scale-to-zero and a real-browser UI run). Access code and signing secret stay
       outside both repositories.
 - [ ] Record and review three-minute video; identify event-built features explicitly.
+- [ ] Verify the judged runtime calls only Meta models. Remote Operator enforces this
+      structurally (`--model-mode scripted|meta`, `muse-*` grant validation with
+      contributor-model refusal, fixed Meta endpoint), but the deployed image and the
+      recorded demo must be checked before submission. See ai-workbench ADR-079 and
+      SUBMISSION-ELIGIBILITY.md for the inventory and checklist.
 - [ ] Decide judge access delivery: the hosted app is live and the access code exists;
       only out-of-band delivery to judges is open (submission text or event channel
       assumed; organizers have not answered). Do not publish the owner token or invite

@@ -28,6 +28,12 @@ their own licenses; the original repository is Apache-2.0. See BUILD_LOG.md and 
 
 ## Meaningful use of Meta tooling
 
+In compliance with the hackathon rule, every model the submission calls at runtime
+is a Meta model. The demo runs either in scripted mode with no external model call,
+or in meta mode with a validated `muse-*` grant to the Meta Responses endpoint.
+Remote Operator refuses contributor models and non-Meta provider configurations
+before any request is built.
+
 muse-spark-1.3 inspects the registered source, authors the implementation and calls
 protected validation tools. The adapter uses structured Responses function tools
 and transient encrypted continuation. A cold continuation uses recorded visible
