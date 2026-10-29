@@ -268,3 +268,11 @@ Current candidate suite:176passed,8skipped,69subtests. Hosted/deployed/phone evi
 was not rerun, and no publication or deployment is implied by this local candidate.
 
 Current-base packaging: offline wheel/sdist build exited0. Archive audit verified87sdist/26wheel entries, exact application/checker/doc bytes, no private runtime/venv/handoff paths and no named provider credential values. Extracted sdist passed176tests,8skips,69subtests using existing dependencies; no fresh install or deployed-service claim.
+# Meta CLI dotenv export repair — 2026-10-29
+
+Meta Muse Spark1.3 authored the two-line checker parser fix through Workbench's
+existing native-tool CLI (three calls,18136tokens). Host reviewed the exact diff
+and authored eight regression cases. Independent network-blocked Modal checks
+passed184tests,8skipped,69subtests plus8protected export cases; exact cleanup
+verified. Initial full-suite fixture failures were preserved and corrected in
+the development harness only. No product runner-limit change or public deployment.

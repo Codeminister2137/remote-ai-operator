@@ -26,6 +26,8 @@ def _parse_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
+        if line.startswith("export") and len(line) > 6 and line[6] in (" ", "\t"):
+            line = line[6:].lstrip(" \t")
         if not line or line.startswith("#"):
             continue
         if "=" not in line:

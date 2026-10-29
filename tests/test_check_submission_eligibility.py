@@ -197,6 +197,29 @@ def test_bom_prefixed_env_cannot_hide_non_meta_credential(tmp_path: Path) -> Non
     assert "OPENAI_API_KEY" in result.stdout
 
 
+@pytest.mark.parametrize(
+    "assignment,expected",
+    [
+        ("export OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("  export   ANTHROPIC_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("export\tGEMINI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("\ufeffexport GOOGLE_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("export META_API_KEY=SYNTHETIC_DO_NOT_ECHO", 0),
+        ("export OPENAI_API_KEY=''", 0),
+        ("exported_OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 0),
+    ],
+)
+def test_export_assignments_cannot_hide_provider_credentials(
+    tmp_path: Path, assignment: str, expected: int
+) -> None:
+    env_file = tmp_path / ".env"
+    _write(env_file, assignment + "\n")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == expected
+    assert "SYNTHETIC_DO_NOT_ECHO" not in result.stdout + result.stderr
+
+
 def test_missing_grant_file_fails_cleanly(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     _write(env_file, "")
