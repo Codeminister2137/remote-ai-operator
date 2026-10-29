@@ -256,4 +256,3 @@ quality claim. No private infrastructure source, real grants or credentials were
 sent. No public push, deployment, judge access, video or submission performed.
 
 Packaging follow-up: wheel and sdist built offline from cached declared build dependencies. Archive checks found83sdist entries and25wheel members, required source checker/docs present and no private runtime/venv/handoff paths. Extracted sdist suite passed160tests with8skips/69subtests using existing dependencies; no fresh dependency-install claim.
-
