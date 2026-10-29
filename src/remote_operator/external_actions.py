@@ -117,8 +117,9 @@ class ExternalActionBridge:
         if row is None:
             raise KeyError("Unknown external action")
         action = ExternalAction(**json.loads(row[0]))
-        if action.status == "submitted" and (time.time() if now is None else now) > action.expires:
-            action = self._expire(action)
+        now_val = time.time() if now is None else now
+        if action.status == "submitted" and now_val > action.expires:
+            action = self._expire(action, now_val)
         return action
 
     def recent(self, limit: int = 20, *, now: float | None = None) -> list[ExternalAction]:
@@ -129,14 +130,12 @@ class ExternalActionBridge:
                 "SELECT record FROM external_actions ORDER BY rowid DESC LIMIT ?",
                 (limit,),
             ).fetchall()
+        now_val = time.time() if now is None else now
         actions = []
         for (body,) in rows:
             action = ExternalAction(**json.loads(body))
-            if (
-                action.status == "submitted"
-                and (time.time() if now is None else now) > action.expires
-            ):
-                action = self._expire(action)
+            if action.status == "submitted" and now_val > action.expires:
+                action = self._expire(action, now_val)
             actions.append(action)
         return actions
 
@@ -155,7 +154,7 @@ class ExternalActionBridge:
             if action.status == "submitted" and now_val > action.expires:
                 # Expiration must commit before this operation raises; an update
                 # in this connection would roll back on the refusal exception.
-                self._expire(action)
+                self._expire(action, now_val)
                 raise ValueError("Approval expired")
             if action.status != "submitted":
                 raise ValueError("Action is not awaiting approval")
@@ -205,7 +204,7 @@ class ExternalActionBridge:
             old_raw: str = row[0]
             action = ExternalAction(**json.loads(old_raw))
             if action.status == "submitted" and now_val > action.expires:
-                self._expire(action)
+                self._expire(action, now_val)
                 raise ValueError("Action cannot be rejected in this state")
             if action.status != "submitted":
                 raise ValueError("Action cannot be rejected in this state")
@@ -245,7 +244,7 @@ class ExternalActionBridge:
             old_raw: str = row[0]
             action = ExternalAction(**json.loads(old_raw))
             if action.status == "submitted" and now_val > action.expires:
-                self._expire(action)
+                self._expire(action, now_val)
                 raise ValueError("Action cannot be cancelled in this state")
             if action.status != "submitted":
                 raise ValueError("Action cannot be cancelled in this state")
@@ -272,9 +271,10 @@ class ExternalActionBridge:
         self._store._durable()
         return resolved
 
-    def _expire(self, action: ExternalAction) -> ExternalAction:
+    def _expire(self, action: ExternalAction, now_val: float | None = None) -> ExternalAction:
         old_raw = _serialize(action)
-        expired = replace(action, status="expired", resolved_at=time.time())
+        resolved_at = time.time() if now_val is None else now_val
+        expired = replace(action, status="expired", resolved_at=resolved_at)
         new_raw = _serialize(expired)
         with self._store.connect() as db:
             cur = db.execute(
