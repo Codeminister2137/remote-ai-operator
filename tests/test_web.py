@@ -61,6 +61,27 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         replay = await self.client.post(path + "/approve", headers=self.auth, json={"nonce": nonce})
         self.assertEqual(replay.status_code, 409)
 
+    async def test_unicode_nonce_refused_without_echo_and_valid_still_applies(self):
+        response = await self.client.post(
+            "/api/tasks", headers=self.auth, json={"prompt": "Implement sample"}
+        )
+        path = "/api/tasks/" + response.json()["id"]
+        result = await self.client.post(path + "/run", headers=self.auth, json={})
+        self.assertEqual(result.status_code, 200, result.text)
+        review = (await self.client.get(path, headers=self.auth)).json()
+        nonce = review["task"]["approval"]["nonce"]
+        bad = "é" * len(nonce)
+        refused = await self.client.post(path + "/approve", headers=self.auth, json={"nonce": bad})
+        self.assertEqual(refused.status_code, 409, refused.text)
+        self.assertNotIn(bad, refused.text)
+        pending = (await self.client.get(path, headers=self.auth)).json()
+        self.assertEqual(pending["task"]["status"], "awaiting_approval")
+        self.assertEqual(pending["task"]["approval"]["nonce"], nonce)
+        applied = await self.client.post(
+            path + "/approve", headers=self.auth, json={"nonce": nonce}
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+
     async def test_request_limits_unknown_tasks_and_extra_arguments(self):
         response = await self.client.post(
             "/api/tasks", headers=self.auth, json={"prompt": "task", "provider": "paid"}

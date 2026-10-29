@@ -283,6 +283,12 @@ class Operator:
             approval = task["approval"]
             if task["status"] != "awaiting_approval" or not approval:
                 raise ValueError("No pending approval")
+            if not isinstance(nonce, str):
+                raise ValueError("Invalid or expired approval")
+            try:
+                nonce.encode("ascii")
+            except UnicodeEncodeError:
+                raise ValueError("Invalid or expired approval")
             if (
                 not secrets.compare_digest(approval["nonce"], nonce)
                 or (time.time() if now is None else now) >= approval["expires"]

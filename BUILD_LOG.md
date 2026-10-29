@@ -370,3 +370,15 @@ Meta corrected it before acceptance. Protected validation proved failure against
 immutable original source and success with the fix. Full isolated Modal suite:
 201tests8skips115subtests; exact cleanup verified, Ruff clean. Both conversation
 turns completed. Existing session/key/restart contracts and lock order retained.
+
+## Invalid task approval nonces ? 2026-10-29
+
+Meta added nonce type/ASCII refusal before timing-safe comparison and unit/HTTP
+regressions after a protected baseline reproduced Unicode TypeError. Wrong
+values now receive the existing fixed refusal without state/event/source changes;
+exact valid approval still applies once. Independent immutable-original regression
+fails, fixed candidate passes. Full isolated Modal203tests8skips123subtests; exact
+cleanup verified, Ruff clean. Meta supplied source/tests and first-turn report;
+second-turn optional simplification exhausted shared12request cap without further
+edits/final response. Original failed receipt preserved; host code acceptance is
+separate from conversational completion. No API/policy/storage/dependency change.
