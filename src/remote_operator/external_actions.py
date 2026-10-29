@@ -132,76 +132,157 @@ class ExternalActionBridge:
         actions = []
         for (body,) in rows:
             action = ExternalAction(**json.loads(body))
-            if action.status == "submitted" and (time.time() if now is None else now) > action.expires:
+            if (
+                action.status == "submitted"
+                and (time.time() if now is None else now) > action.expires
+            ):
                 action = self._expire(action)
             actions.append(action)
         return actions
 
     def approve(self, action_id: str, nonce: str, *, now: float | None = None) -> ExternalAction:
+        if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
+            raise ValueError("Invalid action identifier")
+        now_val = time.time() if now is None else now
         with self._store.connect() as db:
-            action = self.get(action_id)
+            row = db.execute(
+                "SELECT record FROM external_actions WHERE id=?", (action_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError("Unknown external action")
+            old_raw: str = row[0]
+            action = ExternalAction(**json.loads(old_raw))
+            if action.status == "submitted" and now_val > action.expires:
+                # Expiration must commit before this operation raises; an update
+                # in this connection would roll back on the refusal exception.
+                self._expire(action)
+                raise ValueError("Approval expired")
             if action.status != "submitted":
                 raise ValueError("Action is not awaiting approval")
-            if (time.time() if now is None else now) >= action.expires:
+            if now_val >= action.expires:
                 raise ValueError("Approval expired")
-            if not secrets.compare_digest(action.nonce, nonce):
+            if not isinstance(nonce, str) or not secrets.compare_digest(action.nonce, nonce):
                 raise ValueError("Invalid approval nonce")
             resolved = replace(
                 action,
                 status="approved",
-                resolved_at=time.time() if now is None else now,
+                resolved_at=now_val,
             )
-            db.execute(
-                "INSERT INTO external_actions(id, record) VALUES (?, ?) "
-                "ON CONFLICT(id) DO UPDATE SET record=?",
-                (resolved.id, _serialize(resolved), _serialize(resolved)),
+            new_raw = _serialize(resolved)
+            cur = db.execute(
+                "UPDATE external_actions SET record=? WHERE id=? AND record=?",
+                (new_raw, resolved.id, old_raw),
             )
+            if cur.rowcount != 1:
+                current = db.execute(
+                    "SELECT record FROM external_actions WHERE id=?", (action_id,)
+                ).fetchone()
+                if current is None:
+                    raise KeyError("Unknown external action")
+                current_action = ExternalAction(**json.loads(current[0]))
+                if current_action.status != "submitted":
+                    raise ValueError("Action is not awaiting approval")
+                raise ValueError("Action is not awaiting approval")
         self._store._durable()
         return resolved
 
     def reject(self, action_id: str, *, now: float | None = None) -> ExternalAction:
+        if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
+            raise ValueError("Invalid action identifier")
+        now_val = time.time() if now is None else now
         with self._store.connect() as db:
-            action = self.get(action_id)
+            row = db.execute(
+                "SELECT record FROM external_actions WHERE id=?", (action_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError("Unknown external action")
+            old_raw: str = row[0]
+            action = ExternalAction(**json.loads(old_raw))
+            if action.status == "submitted" and now_val > action.expires:
+                self._expire(action)
+                raise ValueError("Action cannot be rejected in this state")
             if action.status != "submitted":
                 raise ValueError("Action cannot be rejected in this state")
             resolved = replace(
                 action,
                 status="rejected",
-                resolved_at=time.time() if now is None else now,
+                resolved_at=now_val,
             )
-            db.execute(
-                "INSERT INTO external_actions(id, record) VALUES (?, ?) "
-                "ON CONFLICT(id) DO UPDATE SET record=?",
-                (resolved.id, _serialize(resolved), _serialize(resolved)),
+            new_raw = _serialize(resolved)
+            cur = db.execute(
+                "UPDATE external_actions SET record=? WHERE id=? AND record=?",
+                (new_raw, resolved.id, old_raw),
             )
+            if cur.rowcount != 1:
+                current = db.execute(
+                    "SELECT record FROM external_actions WHERE id=?", (action_id,)
+                ).fetchone()
+                if current is None:
+                    raise KeyError("Unknown external action")
+                current_action = ExternalAction(**json.loads(current[0]))
+                if current_action.status != "submitted":
+                    raise ValueError("Action cannot be rejected in this state")
+                raise ValueError("Action cannot be rejected in this state")
         self._store._durable()
         return resolved
 
     def cancel(self, action_id: str, *, now: float | None = None) -> ExternalAction:
+        if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
+            raise ValueError("Invalid action identifier")
+        now_val = time.time() if now is None else now
         with self._store.connect() as db:
-            action = self.get(action_id)
+            row = db.execute(
+                "SELECT record FROM external_actions WHERE id=?", (action_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError("Unknown external action")
+            old_raw: str = row[0]
+            action = ExternalAction(**json.loads(old_raw))
+            if action.status == "submitted" and now_val > action.expires:
+                self._expire(action)
+                raise ValueError("Action cannot be cancelled in this state")
             if action.status != "submitted":
                 raise ValueError("Action cannot be cancelled in this state")
             resolved = replace(
                 action,
                 status="cancelled",
-                resolved_at=time.time() if now is None else now,
+                resolved_at=now_val,
             )
-            db.execute(
-                "INSERT INTO external_actions(id, record) VALUES (?, ?) "
-                "ON CONFLICT(id) DO UPDATE SET record=?",
-                (resolved.id, _serialize(resolved), _serialize(resolved)),
+            new_raw = _serialize(resolved)
+            cur = db.execute(
+                "UPDATE external_actions SET record=? WHERE id=? AND record=?",
+                (new_raw, resolved.id, old_raw),
             )
+            if cur.rowcount != 1:
+                current = db.execute(
+                    "SELECT record FROM external_actions WHERE id=?", (action_id,)
+                ).fetchone()
+                if current is None:
+                    raise KeyError("Unknown external action")
+                current_action = ExternalAction(**json.loads(current[0]))
+                if current_action.status != "submitted":
+                    raise ValueError("Action cannot be cancelled in this state")
+                raise ValueError("Action cannot be cancelled in this state")
         self._store._durable()
         return resolved
 
     def _expire(self, action: ExternalAction) -> ExternalAction:
+        old_raw = _serialize(action)
         expired = replace(action, status="expired", resolved_at=time.time())
+        new_raw = _serialize(expired)
         with self._store.connect() as db:
-            db.execute(
-                "INSERT INTO external_actions(id, record) VALUES (?, ?) "
-                "ON CONFLICT(id) DO UPDATE SET record=?",
-                (expired.id, _serialize(expired), _serialize(expired)),
+            cur = db.execute(
+                "UPDATE external_actions SET record=? WHERE id=? AND record=?",
+                (new_raw, expired.id, old_raw),
             )
+            if cur.rowcount != 1:
+                # Stale read: another writer already resolved this action.
+                # Never overwrite the terminal state; return the current record.
+                row = db.execute(
+                    "SELECT record FROM external_actions WHERE id=?", (action.id,)
+                ).fetchone()
+                if row is None:
+                    raise KeyError("Unknown external action")
+                return ExternalAction(**json.loads(row[0]))
         self._store._durable()
         return expired

@@ -222,3 +222,10 @@ Owner-approved documentation update: continue engineering and acceptance work;
 recording/upload and judge-access activation are final milestones near submission.
 Recorded the completed source publication in PR #1 and its 147-test validation.
 No runtime or deployment change is part of this documentation update.
+
+
+## 2026-10-29 — Concurrent external-action resolution
+
+Meta Muse Spark 1.3 Standard proposed a compare-and-swap fix after independent checks reproduced multiple successful resolutions of one action. Two model requests included one expiry-regression repair; host review corrected an expiry transaction rollback and formatted the result. Final protected Modal validation passed 17 checks with network/credential isolation and verified sandbox cleanup. Model proposals and host recovery are distinct contributions. No hosted release or submission was performed.
+
+Local full-suite validation: 152 passed, 8 skipped, 77 subtests passed; final loop-capture lint correction rechecked with 5 focused tests and 8 subtests. Ruff check/format passed. Sandbox-approved source bytes match the applied module.
