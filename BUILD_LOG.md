@@ -285,3 +285,15 @@ Four Meta calls hit the fixed cap after the edit; no worker final report was
 captured. That incomplete worker outcome is preserved separately from host
 acceptance of the doc effect. No runtime behavior or human approval policy changed,
 no commands executed by the worker, and no runtime test run claimed for this note.
+
+# Hands-off supervised Meta report-order fix — 2026-10-29
+
+Meta authored stable alphabetical credential diagnostics and a cross-hash-seed
+regression. Codex caught a misplaced existing test decorator in the first draft;
+Meta corrected it under the original six-call bound. Independent network-blocked
+Modal validation passed185tests8skips69subtests plus4protected hash-seed cases;
+cleanup verified. Host formatting preserved both ASTs. The worker hit the cap
+before its repair-turn final report; that original incomplete outcome is retained
+separately from host acceptance of the independently verified code. File edits
+used upfront hands-off authority; shell/custom tools denied and no human approval
+simulated. No publication/deployment or product approval-policy change.

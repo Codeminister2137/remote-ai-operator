@@ -249,3 +249,45 @@ def test_invalid_model_value_is_not_echoed(tmp_path: Path, model) -> None:
     assert result.returncode == 1
     assert "DO_NOT_ECHO_ME" not in result.stdout + result.stderr
     assert "NOT ELIGIBLE" in result.stdout
+
+
+def test_non_meta_credential_violations_have_stable_order_across_hash_seeds(
+    tmp_path: Path,
+) -> None:
+    import os
+
+    keys = [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+        "COHERE_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+    ]
+    env_file = tmp_path / ".env"
+    _write(env_file, "".join(f"{key}=SYNTHETIC_VALUE_{key}\n" for key in keys))
+    expected = [f"Non-Meta provider credential {key} is set." for key in sorted(keys)]
+
+    outputs: list[list[str]] = []
+    for seed in ("1", "2", "3", "4"):
+        child_env = dict(os.environ)
+        child_env["PYTHONHASHSEED"] = seed
+        result = subprocess.run(
+            [PYTHON, str(SCRIPT), "--env-file", str(env_file), "--model-mode", "scripted"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=ROOT,
+            env=child_env,
+        )
+        assert result.returncode == 1
+        assert "NOT ELIGIBLE" in result.stdout
+        combined = result.stdout + result.stderr
+        for key in keys:
+            assert f"SYNTHETIC_VALUE_{key}" not in combined
+        failures = [
+            line for line in result.stdout.splitlines() if line.strip().startswith("- [FAIL]")
+        ]
+        assert failures == [f"- [FAIL] {message}" for message in expected]
+        outputs.append(failures)
+    assert all(report == outputs[0] for report in outputs[1:])

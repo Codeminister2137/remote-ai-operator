@@ -81,7 +81,7 @@ def _check_env(env: dict[str, str]) -> list[str]:
         "COHERE_API_KEY",
         "AZURE_OPENAI_API_KEY",
     }
-    for key in non_meta_keys:
+    for key in sorted(non_meta_keys):
         if env.get(key):
             violations.append(f"Non-Meta provider credential {key} is set.")
     return violations
