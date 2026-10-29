@@ -33,6 +33,23 @@ def response(name="read_file", arguments=None, call_id="call_1", **extra):
     }
 
 
+def _decoded_echo_present(value, key):
+    """Iteratively inspect decoded receipt strings/keys for a raw credential."""
+    stack = [value]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, str):
+            if key in current:
+                return True
+        elif isinstance(current, dict):
+            for item_key, item in current.items():
+                stack.append(item_key)
+                stack.append(item)
+        elif isinstance(current, (list, tuple)):
+            stack.extend(current)
+    return False
+
+
 class MetaContracts(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -414,6 +431,110 @@ class MetaContracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot be changed"):
             replace(self.grant, approved_usd="10").budget_status(self.store)
         self.assertEqual(len(self.requests), 1)
+
+    def test_credential_echo_guard_inspects_decoded_arguments(self):
+        cases = [
+            ("simple", "fixture-secret", {"path": "issue_import.py", "content": "fixture-secret"}),
+            ("quote", 'sec"ret', {"path": "issue_import.py", "content": 'sec"ret'}),
+            ("backslash", "sec\\ret", {"path": "issue_import.py", "content": "sec\\ret"}),
+            (
+                "combined",
+                'a"b\\c',
+                {"path": "issue_import.py", "content": 'a"b\\c'},
+            ),
+            (
+                "nested",
+                'a"b\\c',
+                {"path": "issue_import.py", "content": {"nested": [['a"b\\c']]}},
+            ),
+            ("dict_key", 'a"b\\c', {"path": "issue_import.py", 'a"b\\c': "safe"}),
+        ]
+        for index, (label, key, arguments) in enumerate(cases):
+            with self.subTest(label=label):
+                grant = replace(self.grant, grant_id=f"echo-guard-{index}-{label}")
+                body = response("write_file", arguments, call_id=f"echo_{index}")
+
+                def serve(request, body=body):
+                    return httpx.Response(200, json=body)
+
+                actor = MetaModel(
+                    key,
+                    grant,
+                    self.store,
+                    transport=httpx.MockTransport(serve),
+                )
+                with self.assertRaises(MetaFailure) as failure:
+                    actor.next_operation([], prompt="task")
+                self.assertEqual(failure.exception.category, "protocol")
+                self.assertNotIn(key, str(failure.exception))
+                self.assertNotIn(key, json.dumps(actor.last_receipt, ensure_ascii=False))
+                self.assertFalse(_decoded_echo_present(actor.last_receipt, key))
+                self.assertEqual(actor.last_receipt["local_allowance"]["requests_used"], 1)
+                self.assertEqual(actor._turns, [])
+
+    def test_deeply_nested_echo_refuses_without_recursion_error(self):
+        key = 'a"b\\c'
+        nested = key
+        for _ in range(400):
+            nested = [nested]
+        arguments = {"path": "issue_import.py", "content": nested}
+        body = response("write_file", arguments, call_id="echo_deep")
+
+        def serve(request):
+            return httpx.Response(200, json=body)
+
+        actor = MetaModel(
+            key,
+            replace(self.grant, grant_id="echo-guard-deep-nested"),
+            self.store,
+            transport=httpx.MockTransport(serve),
+        )
+        with self.assertRaises(MetaFailure) as failure:
+            actor.next_operation([], prompt="task")
+        self.assertEqual(failure.exception.category, "protocol")
+        self.assertNotIn(key, str(failure.exception))
+        self.assertNotIn(key, json.dumps(actor.last_receipt, ensure_ascii=False))
+        self.assertFalse(_decoded_echo_present(actor.last_receipt, key))
+        self.assertEqual(actor.last_receipt["local_allowance"]["requests_used"], 1)
+        self.assertEqual(actor._turns, [])
+
+    def test_safe_arguments_accepted_and_rejected_echo_retains_reservation(self):
+        key = 'a"b\\c'
+        safe = response(
+            "write_file",
+            {"path": "issue_import.py", "content": "safe content without credential"},
+            call_id="safe_call",
+        )
+        safe_actor = MetaModel(
+            key,
+            replace(self.grant, grant_id="echo-safe-accepted"),
+            self.store,
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=safe)),
+        )
+        operation = safe_actor.next_operation([], prompt="task")
+        self.assertEqual(operation.name, "write_file")
+        self.assertEqual(len(safe_actor._turns), 1)
+
+        grant = replace(self.grant, grant_id="echo-rejected-reservation")
+        echoed = response(
+            "write_file",
+            {"path": "issue_import.py", "content": key},
+            call_id="echo_rejected",
+        )
+        actor = MetaModel(
+            key,
+            grant,
+            self.store,
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=echoed)),
+        )
+        with self.assertRaises(MetaFailure) as failure:
+            actor.next_operation([], prompt="task")
+        self.assertEqual(failure.exception.category, "protocol")
+        self.assertNotIn(key, str(failure.exception))
+        self.assertNotIn(key, json.dumps(actor.last_receipt, ensure_ascii=False))
+        self.assertFalse(_decoded_echo_present(actor.last_receipt, key))
+        self.assertEqual(actor.last_receipt["local_allowance"]["requests_used"], 1)
+        self.assertEqual(actor._turns, [])
 
     def test_budget_snapshot_refuses_invalid_ledger_amounts(self):
         for index, value in enumerate(("-1", "NaN", "Infinity")):

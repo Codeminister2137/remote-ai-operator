@@ -382,3 +382,14 @@ cleanup verified, Ruff clean. Meta supplied source/tests and first-turn report;
 second-turn optional simplification exhausted shared12request cap without further
 edits/final response. Original failed receipt preserved; host code acceptance is
 separate from conversational completion. No API/policy/storage/dependency change.
+
+## Decoded credential echo protection - 2026-10-29
+
+Meta replaced a serialized-JSON key check with an iterative decoded argument
+traversal, including dictionary keys and nested values. Synthetic quotes and
+backslashes had hidden echoes through JSON escaping. Host review prompted
+nonrecursive traversal and decoded receipt checks; Meta added a400-level nested
+regression. Independent original-source red check and candidate protected/full
+Modal suite passed206tests8skips129subtests, exact cleanup verified, Ruff clean.
+Both supervised turns completed. Existing refusal, reservation and retention
+policy preserved; no real credentials used by tests or release performed.

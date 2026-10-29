@@ -204,6 +204,23 @@ class MetaModel:
             return {self._redact(key): self._redact(item) for key, item in value.items()}
         return value
 
+    def _echoes_credential(self, value):
+        if not self._key:
+            return False
+        stack = [value]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, str):
+                if self._key in current:
+                    return True
+            elif isinstance(current, dict):
+                for key, item in current.items():
+                    stack.append(key)
+                    stack.append(item)
+            elif isinstance(current, (list, tuple)):
+                stack.extend(current)
+        return False
+
     def _input(self, history, prompt):
         prompt_digest = digest(prompt)
         if self._prompt_digest not in (None, prompt_digest):
@@ -405,7 +422,7 @@ class MetaModel:
                 tool["name"] for tool in TOOLS
             }:
                 raise ValueError("Unknown tool or malformed arguments")
-            if self._key in json.dumps(arguments):
+            if self._echoes_credential(arguments):
                 raise ValueError("Credential echoed in generated arguments")
             retained = []
             for item in output:
