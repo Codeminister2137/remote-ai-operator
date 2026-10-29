@@ -228,6 +228,79 @@ class HostedSessionUnitTests(unittest.TestCase):
             self.sessions.subject(token)
         self.assertFalse(self.sessions.has_key(token, subject))
 
+    def test_close_serializes_with_concurrent_attach(self):
+        token = self.sessions.open(CODE)
+        subject = self.sessions.subject(token)
+        entered = threading.Event()
+        release = threading.Event()
+        close_finished = threading.Event()
+        errors = []
+        store = self.sessions.sessions
+        original_attach = store.attach
+
+        def blocking_attach(*args, **kwargs):
+            entered.set()
+            if not release.wait(5):
+                raise AssertionError("attach release timeout")
+            return original_attach(*args, **kwargs)
+
+        store.attach = blocking_attach
+        try:
+
+            def run_attach():
+                try:
+                    self.sessions.attach_key(token, KEY)
+                except Exception as exc:  # noqa: BLE001 - captured for assertion
+                    errors.append(exc)
+
+            def run_close():
+                try:
+                    self.sessions.close(token)
+                except Exception as exc:  # noqa: BLE001 - captured for assertion
+                    errors.append(exc)
+                finally:
+                    close_finished.set()
+
+            attach_thread = threading.Thread(target=run_attach)
+            attach_thread.start()
+            try:
+                self.assertTrue(entered.wait(5), "attach did not reach key store")
+                close_thread = threading.Thread(target=run_close)
+                close_thread.start()
+                try:
+                    # While attachment is paused, give close a bounded
+                    # completion opportunity. Fixed code keeps close blocked
+                    # on the hosted lock until release; the original lets it
+                    # slip through before the key store write.
+                    self.assertFalse(
+                        close_finished.wait(1),
+                        "close completed while attach held the lock",
+                    )
+                    self.assertTrue(close_thread.is_alive(), "close did not block")
+                    release.set()
+                    close_thread.join(5)
+                    self.assertFalse(close_thread.is_alive(), "close did not finish")
+                finally:
+                    release.set()
+                    close_thread.join(5)
+            finally:
+                release.set()
+                attach_thread.join(5)
+            self.assertFalse(attach_thread.is_alive(), "attach did not finish")
+        finally:
+            store.attach = original_attach
+            release.set()
+        self.assertEqual(errors, [])
+        with self.assertRaises(SessionUnavailable):
+            self.sessions.subject(token)
+        self.assertFalse(self.sessions.has_key(token, subject))
+        with self.assertRaises(SessionUnavailable):
+            self.sessions.key_for(token, subject)
+        fresh = self.sessions.open(CODE)
+        fresh_subject = self.sessions.subject(fresh)
+        self.sessions.attach_key(fresh, KEY)
+        self.assertTrue(self.sessions.has_key(fresh, fresh_subject))
+
     def test_logout_removes_key_and_purge_prunes_revoked_expiry(self):
         token = self.sessions.open(CODE)
         subject = self.sessions.subject(token)

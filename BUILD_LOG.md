@@ -360,3 +360,13 @@ Two finite eight-request Meta runs exhausted their iteration bounds: first left
 only an import, fresh repair produced source/tests but no final report. Those
 failed runs remain preserved; code acceptance is the host's separate review and
 validation, not a claim that the worker completed its conversation. No release.
+
+## Logout versus key attachment ? 2026-10-29
+
+Meta serialized existing claims/key attachment with the hosted RLock after an
+isolated baseline proved an in-flight attachment could restore a logged-out key.
+Meta added a threaded regression; host review caught a scheduling weakness and
+Meta corrected it before acceptance. Protected validation proved failure against
+immutable original source and success with the fix. Full isolated Modal suite:
+201tests8skips115subtests; exact cleanup verified, Ruff clean. Both conversation
+turns completed. Existing session/key/restart contracts and lock order retained.

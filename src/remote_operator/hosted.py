@@ -151,8 +151,9 @@ class HostedSessions:
         return self._claims(token)[0]
 
     def attach_key(self, token, api_key):
-        subject, expires, _ = self._claims(token)
-        self.sessions.attach(token, api_key, subject=subject, expires_at=expires)
+        with self._lock:
+            subject, expires, _ = self._claims(token)
+            self.sessions.attach(token, api_key, subject=subject, expires_at=expires)
 
     def drop_key(self, token, subject):
         self.sessions.drop_key(token, subject=subject)
