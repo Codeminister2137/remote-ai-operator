@@ -336,3 +336,13 @@ all five equality operations; original defect reproduced separately, cleanup
 verified. Meta final report accurately stated its requested tests were not added;
 host completed that test work. Existing APIs/schema/approval policy retained.
 No private Workbench payload, generated host execution, publication or deployment.
+
+## Hosted invalid access codes ? 2026-10-29
+
+Meta authored a narrow ASCII input guard and unit/HTTP regressions after the host
+reproduced a TypeError for Unicode wrong codes. Those inputs now receive the
+existing fixed refusal; valid login and timing-safe ASCII comparison remain.
+Independent isolated Modal validation passed198tests8skips115subtests and six
+protected invalid-input cases; exact sandbox cleanup verified. The two-turn Meta
+conversation completed in six requests and correctly attributed test execution
+to the supervisor. No new auth mechanism, schema, dependency or deployment.

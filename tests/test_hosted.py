@@ -68,6 +68,15 @@ class HostedSessionUnitTests(unittest.TestCase):
         self.assertNotIn(CODE, token)
         self.assertNotIn(CODE, repr(self.sessions))
 
+    def test_non_ascii_wrong_codes_are_refused_without_echo(self):
+        for value in ("démonstration-code-ünïcodé", "demo-access-code-0001\U0001f600", "\ud800"):
+            with self.subTest(value=repr(value)), self.assertRaises(AccessRefused) as exc:
+                self.sessions.open(value)
+            self.assertEqual(str(exc.exception), "Access code refused")
+            self.assertNotIn(value, str(exc.exception))
+        token = self.sessions.open(CODE)
+        self.assertNotIn(CODE, token)
+
     def test_subjects_are_server_generated_and_distinct(self):
         first = self.sessions.open(CODE)
         second = self.sessions.open(CODE)
@@ -201,6 +210,18 @@ class HostedAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             (await self.client.post("/api/session", json={"code": "wrong-code"})).status_code, 403
         )
+
+    async def test_unicode_wrong_code_is_403_without_cookie_or_echo_then_valid_login(self):
+        wrong = "démonstration-code-ünïcodé\U0001f600"
+        refused = await self.enter(code=wrong)
+        self.assertEqual(refused.status_code, 403, refused.text)
+        self.assertNotIn("set-cookie", {key.lower() for key in refused.headers})
+        self.assertNotIn(wrong, refused.text)
+        self.assertFalse((await self.client.get("/api/config")).json()["authenticated"])
+        accepted = await self.enter()
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertIn("set-cookie", {key.lower() for key in accepted.headers})
+        self.assertTrue((await self.client.get("/api/config")).json()["authenticated"])
 
     async def test_session_cookie_is_httponly_and_strict_and_state_changes_need_header(self):
         response = await self.enter()

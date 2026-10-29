@@ -137,7 +137,9 @@ class HostedSessions:
 
     def open(self, code):
         """Exchange the shared code for a signed session token and server subject."""
-        if not isinstance(code, str) or not secrets.compare_digest(code, self._code):
+        if not isinstance(code, str) or not code.isascii():
+            raise AccessRefused()
+        if not secrets.compare_digest(code, self._code):
             raise AccessRefused()
         token, _ = self._issue("visitor-" + secrets.token_hex(8))
         return token
