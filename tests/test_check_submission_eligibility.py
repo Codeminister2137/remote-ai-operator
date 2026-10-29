@@ -133,3 +133,81 @@ def test_meta_mode_requires_grant_file(tmp_path: Path) -> None:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("expires_at", float("nan")),
+        ("expires_at", float("inf")),
+        ("max_requests", True),
+        ("max_requests", 101),
+        ("max_input_bytes", 0),
+        ("max_output_tokens", 16385),
+        ("approved_usd", "NaN"),
+        ("approved_usd", "Infinity"),
+        ("input_usd_per_million", "0"),
+        ("output_usd_per_million", "invalid"),
+        ("credits_verified", "false"),
+        ("local_spending_limit_accepted", 1),
+        ("model", None),
+        ("expires_at", "tomorrow"),
+    ],
+)
+def test_runtime_invalid_grants_fail_cleanly(tmp_path: Path, field: str, value) -> None:
+    env_file, grant_file = tmp_path / ".env", tmp_path / "grant.json"
+    _write(env_file, "META_API_KEY=synthetic\n")
+    grant = _valid_grant()
+    grant[field] = value
+    _write(grant_file, grant)
+    result = _run(
+        "--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta"
+    )
+    assert result.returncode == 1
+    assert "NOT ELIGIBLE" in result.stdout
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize("bad_grant", ["{bad", "[]", '{"unexpected":"DO_NOT_ECHO_ME"}'])
+def test_malformed_grants_do_not_echo_payload(tmp_path: Path, bad_grant: str) -> None:
+    env_file, grant_file = tmp_path / ".env", tmp_path / "grant.json"
+    _write(env_file, "")
+    _write(grant_file, bad_grant)
+    result = _run(
+        "--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta"
+    )
+    assert result.returncode == 1
+    assert "NOT ELIGIBLE" in result.stdout
+    assert "DO_NOT_ECHO_ME" not in result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_missing_env_file_fails_cleanly(tmp_path: Path) -> None:
+    result = _run("--env-file", str(tmp_path / "missing"), "--model-mode", "scripted")
+    assert result.returncode == 1
+    assert "Could not read env file" in result.stdout
+    assert "Traceback" not in result.stderr
+
+
+def test_bom_prefixed_env_cannot_hide_non_meta_credential(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=synthetic\n", encoding="utf-8-sig")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == 1
+    assert "OPENAI_API_KEY" in result.stdout
+
+
+def test_missing_grant_file_fails_cleanly(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    _write(env_file, "")
+    result = _run(
+        "--env-file",
+        str(env_file),
+        "--grant-file",
+        str(tmp_path / "missing"),
+        "--model-mode",
+        "meta",
+    )
+    assert result.returncode == 1
+    assert "Grant loading failed" in result.stdout
+    assert "Traceback" not in result.stderr

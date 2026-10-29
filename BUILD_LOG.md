@@ -222,3 +222,19 @@ Owner-approved documentation update: continue engineering and acceptance work;
 recording/upload and judge-access activation are final milestones near submission.
 Recorded the completed source publication in PR #1 and its 147-test validation.
 No runtime or deployment change is part of this documentation update.
+## 2026-10-29 - Submission configuration validation
+
+Host-authored correction: reuse the existing runtime grant validator, reject
+malformed/unreadable files cleanly, and read UTF-8 BOM-prefixed env files without
+hiding the first credential key. Added malformed-value and BOM regressions, plus
+standalone instructions describing exactly what the offline check can establish.
+Final local suite:158passed,8skipped,69subtests; Ruff check/format passed.
+A separate isolated Modal fixture passed23protected checks, including nonroot and
+read-only source enforcement; exact sandbox termination/poll verified. This is
+checker evidence, not full deployed-configuration or submission acceptance.
+
+A Meta review hit its output limit, and a completed Baseten proposal was rejected
+by host patch validation. Neither produced an accepted source change. Their local
+receipts remain separate; implementation and tests here are attributed to the host.
+No private development infrastructure is required by these changes. No deployment,
+public release, judge credential delivery, video or submission performed.

@@ -17,8 +17,6 @@ import argparse
 import json
 import re
 import sys
-import time
-from decimal import Decimal
 from pathlib import Path
 
 from remote_operator.meta import InferenceGrant
@@ -26,7 +24,7 @@ from remote_operator.meta import InferenceGrant
 
 def _parse_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -55,23 +53,14 @@ def _check_model_name(model: str) -> list[str]:
 
 
 def _check_grant_eligibility(grant: InferenceGrant) -> list[str]:
-    violations: list[str] = []
-    now = time.time()
-
-    violations.extend(_check_model_name(grant.model))
-
-    if grant.expires_at <= now:
-        violations.append(f"Grant expired at {grant.expires_at} (current time {now}).")
-    if grant.max_requests <= 0:
-        violations.append(f"Grant max_requests must be positive, got {grant.max_requests}.")
-    if Decimal(grant.approved_usd) <= 0:
-        violations.append(f"Grant approved_usd must be positive, got {grant.approved_usd}.")
-    if not grant.credits_verified:
-        violations.append("Grant credits_verified must be true.")
-    if not grant.local_spending_limit_accepted:
-        violations.append("Grant local_spending_limit_accepted must be true.")
-
-    return violations
+    try:
+        grant.check()
+    except ValueError as exc:
+        model_violations = _check_model_name(grant.model) if isinstance(grant.model, str) else []
+        return model_violations or [f"Grant fails runtime validation: {exc}"]
+    except (TypeError, ArithmeticError):
+        return ["Grant fails runtime validation: malformed field types."]
+    return []
 
 
 def _check_env(env: dict[str, str]) -> list[str]:
@@ -109,7 +98,11 @@ def main(argv: list[str] | None = None) -> int:
 
     violations: list[str] = []
 
-    env = _parse_env(args.env_file)
+    try:
+        env = _parse_env(args.env_file)
+    except (OSError, UnicodeError):
+        _print_report(report_lines, ["Could not read env file."])
+        return 1
     violations.extend(_check_env(env))
 
     if args.model_mode == "scripted":
@@ -121,9 +114,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--grant-file is required when --model-mode is meta")
         try:
             grant = _load_grant(args.grant_file)
-        except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            report_lines.append(f"- Could not load grant: {exc}")
-            _print_report(report_lines, [f"Grant loading failed: {exc}"])
+        except (OSError, UnicodeError, TypeError, ValueError):
+            _print_report(report_lines, ["Grant loading failed: unreadable or malformed file."])
             return 1
 
         report_lines.append(f"- grant model: `{grant.model}`")
