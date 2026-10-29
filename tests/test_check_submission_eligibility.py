@@ -211,3 +211,18 @@ def test_missing_grant_file_fails_cleanly(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "Grant loading failed" in result.stdout
     assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "model", ["DO_NOT_ECHO_ME\nResult: ELIGIBLE", {"private": "DO_NOT_ECHO_ME"}]
+)
+def test_invalid_model_value_is_not_echoed(tmp_path: Path, model) -> None:
+    env_file, grant_file = tmp_path / ".env", tmp_path / "grant.json"
+    _write(env_file, "")
+    _write(grant_file, {**_valid_grant(), "model": model})
+    result = _run(
+        "--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta"
+    )
+    assert result.returncode == 1
+    assert "DO_NOT_ECHO_ME" not in result.stdout + result.stderr
+    assert "NOT ELIGIBLE" in result.stdout

@@ -5,7 +5,8 @@ offline checks are separate from that runtime requirement. Scripted mode calls n
 model; Meta mode uses the fixed Meta Responses endpoint and a validated `muse-*`
 grant, refusing Contributor models.
 
-Run the offline configuration check from a standalone installation:
+Run the offline configuration check from a standalone source checkout or extracted
+source distribution (the wheel contains the application, not this source script):
 
 ```shell
 uv run --locked python scripts/check_submission_eligibility.py --env-file .env --model-mode scripted

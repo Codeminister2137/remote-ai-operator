@@ -44,11 +44,10 @@ def _check_model_name(model: str) -> list[str]:
     violations: list[str] = []
     if not re.fullmatch(r"muse-[a-z0-9.-]+", model):
         violations.append(
-            f"Grant model '{model}' does not match the required Meta model pattern "
-            f"'muse-<identifier>'."
+            "Grant model does not match the required Meta model pattern 'muse-<identifier>'."
         )
     if "contributor" in model:
-        violations.append(f"Grant model '{model}' is a contributor model and is refused.")
+        violations.append("Grant model is a contributor model and is refused.")
     return violations
 
 
@@ -56,8 +55,15 @@ def _check_grant_eligibility(grant: InferenceGrant) -> list[str]:
     try:
         grant.check()
     except ValueError as exc:
-        model_violations = _check_model_name(grant.model) if isinstance(grant.model, str) else []
-        return model_violations or [f"Grant fails runtime validation: {exc}"]
+        if isinstance(grant.model, str):
+            model_violations = _check_model_name(grant.model)
+            if model_violations:
+                return model_violations
+        else:
+            return [
+                "Grant model does not match the required Meta model pattern 'muse-<identifier>'."
+            ]
+        return [f"Grant fails runtime validation: {exc}"]
     except (TypeError, ArithmeticError):
         return ["Grant fails runtime validation: malformed field types."]
     return []
@@ -118,8 +124,10 @@ def main(argv: list[str] | None = None) -> int:
             _print_report(report_lines, ["Grant loading failed: unreadable or malformed file."])
             return 1
 
-        report_lines.append(f"- grant model: `{grant.model}`")
-        violations.extend(_check_grant_eligibility(grant))
+        grant_violations = _check_grant_eligibility(grant)
+        violations.extend(grant_violations)
+        if not grant_violations:
+            report_lines.append(f"- grant model: `{grant.model}`")
 
     _print_report(report_lines, violations)
     return 1 if violations else 0
