@@ -297,3 +297,13 @@ before its repair-turn final report; that original incomplete outcome is retaine
 separately from host acceptance of the independently verified code. File edits
 used upfront hands-off authority; shell/custom tools denied and no human approval
 simulated. No publication/deployment or product approval-policy change.
+
+# Meta session-key deadline guard — 2026-10-29
+
+Meta authored validation for malformed/non-finite external session-key deadlines
+and regressions, preserving finite/default expiry and APIs. Host independently
+validated8invalid and3normal cases plus188tests8skips86subtests in a nonroot,
+network-blocked Modal sandbox; exact cleanup verified. Meta correctly attributed
+those results to the supervisor in its final report. No actual keys sent to a
+worker/runner, no host execution of generated code, no new storage/auth format
+or production approval-policy change. No deployment/publication.

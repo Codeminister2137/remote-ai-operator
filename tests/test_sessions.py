@@ -104,6 +104,55 @@ class SessionKeysTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.keys.open(subject, KEY_A)
 
+    def test_attach_rejects_nonfinite_deadlines_for_new_slots_without_consuming_capacity(self):
+        self.keys.open("subjectA", KEY_A)
+        external = "X" * 40
+        invalid = [float("nan"), float("inf"), float("-inf")]
+        invalid.extend([True, False, "130", ["130"], {"at": 130}, 10**1000, object()])
+        for value in invalid:
+            with self.subTest(value=repr(value)):
+                before = dict(self.keys._entries)
+                with self.assertRaises(SessionUnavailable) as exc:
+                    self.keys.attach(external, KEY_B, subject="subjectB", expires_at=value)
+                self.assertNotIn(repr(value), str(exc.exception))
+                self.assertEqual(self.keys._entries, before)
+                self.assertEqual(len(self.keys._entries), 1)
+        # The slot is still free for a valid finite deadline.
+        self.keys.attach(external, KEY_B, subject="subjectB", expires_at=self.now + 10)
+        self.assertEqual(self.keys.key_for(external, subject="subjectB"), KEY_B)
+        self.assertEqual(len(self.keys._entries), 2)
+
+    def test_attach_rejects_nonfinite_deadlines_for_open_sessions_without_replacing_key(self):
+        token = self.keys.open("subjectA", KEY_A)
+        original_expires = self.keys._entries[self.keys._identity(token)].expires
+        for value in (float("nan"), float("inf"), float("-inf"), True, 10**1000, "130", [130]):
+            with self.subTest(value=repr(value)):
+                with self.assertRaises(SessionUnavailable) as exc:
+                    self.keys.attach(token, KEY_B, expires_at=value)
+                self.assertNotIn(repr(value), str(exc.exception))
+        entry = self.keys._entries[self.keys._identity(token)]
+        self.assertEqual(entry.key, KEY_A)
+        self.assertEqual(entry.expires, original_expires)
+        self.assertEqual(self.keys.key_for(token, subject="subjectA"), KEY_A)
+        # Advancing far beyond the normal lifetime still uses the original expiry.
+        self.now = 1000
+        with self.assertRaises(SessionUnavailable):
+            self.keys.key_for(token, subject="subjectA")
+
+    def test_attach_accepts_finite_and_default_deadlines(self):
+        token = self.keys.open("subjectA", KEY_A)
+        self.keys.attach(token, KEY_B, expires_at=self.now + 20)
+        self.assertEqual(self.keys.key_for(token, subject="subjectA"), KEY_B)
+        self.keys.attach(token, KEY_B, expires_at=float(self.now + 20))
+        self.assertEqual(self.keys.key_for(token, subject="subjectA"), KEY_B)
+        keyless = self.keys.open("subjectB")
+        self.keys.attach(keyless, KEY_B)
+        self.assertEqual(self.keys.key_for(keyless, subject="subjectB"), KEY_B)
+        external = "Y" * 40
+        self.keys.revoke(token)
+        self.keys.attach(external, KEY_B, subject="subjectC", expires_at=self.now + 10)
+        self.assertEqual(self.keys.key_for(external, subject="subjectC"), KEY_B)
+
 
 class SessionMetaTests(unittest.TestCase):
     def setUp(self):

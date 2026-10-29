@@ -133,6 +133,15 @@ class SessionKeys:
         valid_key(api_key)
         if subject is not None:
             valid_subject(subject)
+        if expires_at is not None:
+            if type(expires_at) not in (int, float):
+                raise SessionUnavailable("Invalid session deadline;reconnect to continue")
+            try:
+                finite = math.isfinite(expires_at)
+            except OverflowError:
+                raise SessionUnavailable("Invalid session deadline;reconnect to continue")
+            if not finite:
+                raise SessionUnavailable("Invalid session deadline;reconnect to continue")
         deadline = self._clock() + self.lifetime if expires_at is None else expires_at
         if deadline <= self._clock():
             raise SessionUnavailable("Session expired;reconnect to continue")
