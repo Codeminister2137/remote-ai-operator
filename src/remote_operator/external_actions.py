@@ -108,7 +108,7 @@ class ExternalActionBridge:
         return action
 
     def get(self, action_id: str, *, now: float | None = None) -> ExternalAction:
-        if not action_id.isalnum() or len(action_id) != 32:
+        if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
             raise ValueError("Invalid action identifier")
         with self._store.connect() as db:
             row = db.execute(
@@ -161,7 +161,13 @@ class ExternalActionBridge:
                 raise ValueError("Action is not awaiting approval")
             if now_val >= action.expires:
                 raise ValueError("Approval expired")
-            if not isinstance(nonce, str) or not secrets.compare_digest(action.nonce, nonce):
+            if not isinstance(nonce, str):
+                raise ValueError("Invalid approval nonce")
+            try:
+                nonce_ok = secrets.compare_digest(action.nonce, nonce)
+            except TypeError:
+                raise ValueError("Invalid approval nonce")
+            if not nonce_ok:
                 raise ValueError("Invalid approval nonce")
             resolved = replace(
                 action,
