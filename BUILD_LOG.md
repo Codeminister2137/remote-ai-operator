@@ -393,3 +393,16 @@ regression. Independent original-source red check and candidate protected/full
 Modal suite passed206tests8skips129subtests, exact cleanup verified, Ruff clean.
 Both supervised turns completed. Existing refusal, reservation and retention
 policy preserved; no real credentials used by tests or release performed.
+
+## Credential-safe provider diagnostics - 2026-10-29
+
+Meta moved credential redaction before diagnostic serialization/stringification,
+fixing recoverable quote/backslash keys in incomplete and HTTP error details.
+Meta added parsed-detail, durable-event, reservation and session-key cleanup
+regressions; host review corrected paused-return expectations through a fresh
+Meta repair and supplied a decoded saved-event assertion. Independent original
+red check and fixed full isolated Modal suite passed208tests8skips132subtests;
+exact cleanup verified, Ruff clean. Both original and repair workers exhausted
+finite request/iteration bounds without final reports; failures preserved and
+code acceptance recorded separately by host. Existing categories/status/detail
+bounds/credit reservations retained. No real credentials used by test fixtures.

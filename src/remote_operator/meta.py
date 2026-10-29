@@ -350,7 +350,7 @@ class MetaModel:
                     )
                     raise MetaFailure(
                         category,
-                        str(detail).replace(self._key, "[redacted]")[:700],
+                        str(self._redact(detail))[:700],
                         response.status_code,
                     )
         except httpx.TimeoutException as exc:
@@ -390,9 +390,7 @@ class MetaModel:
             if data.get("status") != "completed":
                 raise MetaFailure(
                     "incomplete",
-                    json.dumps(data.get("incomplete_details", {})).replace(self._key, "[redacted]")[
-                        :500
-                    ],
+                    json.dumps(self._redact(data.get("incomplete_details", {})))[:500],
                 )
             output = data["output"]
             if not isinstance(output, list):

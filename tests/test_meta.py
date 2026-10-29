@@ -1,5 +1,6 @@
 """Meta contracts exercised with local HTTPX fixtures, never actual inference."""
 
+import ast
 import json
 import tempfile
 import time
@@ -544,3 +545,116 @@ class MetaContracts(unittest.TestCase):
                 db.execute("UPDATE allowances SET reserved_usd=? WHERE id=?", (value, grant_id))
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.store.allowance_status(grant_id, "policy", 3, "1")
+
+    def test_escaped_key_diagnostics_are_redacted_before_serialization(self):
+        keys = ["fixture-secret", 'sec"ret', "sec\\ret"]
+        for index, key in enumerate(keys):
+            with self.subTest(key=key):
+                incomplete = {"reason": "max_output_tokens", key: [key, "safe"]}
+                body = response(status="incomplete", incomplete_details=incomplete)
+                grant = replace(self.grant, grant_id=f"incomplete-redact-{index}")
+                actor = MetaModel(
+                    key,
+                    grant,
+                    self.store,
+                    transport=httpx.MockTransport(
+                        lambda request, body=body: httpx.Response(200, json=body)
+                    ),
+                )
+                with self.assertRaises(MetaFailure) as failure:
+                    actor.next_operation([], prompt="task")
+                self.assertEqual(failure.exception.category, "incomplete")
+                self.assertIsNone(failure.exception.status)
+                text = str(failure.exception)
+                self.assertNotIn(key, text)
+                self.assertFalse(_decoded_echo_present(text, key))
+                self.assertFalse(_decoded_echo_present(actor.last_receipt, key))
+                # No reversible escaped form: decoding the JSON detail must not recover key.
+                detail_text = text.split(": ", 1)[1]
+                self.assertFalse(_decoded_echo_present(json.loads(detail_text), key))
+                self.assertIn("max_output_tokens", text)
+                self.assertEqual(actor.last_receipt["local_allowance"]["requests_used"], 1)
+                self.assertEqual(actor._turns, [])
+
+                error_body = {"error": {"message": {key: [key, "safe cause"]}}}
+                grant = replace(self.grant, grant_id=f"http-redact-{index}")
+                actor = MetaModel(
+                    key,
+                    grant,
+                    self.store,
+                    transport=httpx.MockTransport(
+                        lambda request: httpx.Response(429, json=error_body)
+                    ),
+                )
+                with self.assertRaises(MetaFailure) as failure:
+                    actor.next_operation([], prompt="task")
+                self.assertEqual(failure.exception.category, "rate_limit")
+                self.assertEqual(failure.exception.status, 429)
+                text = str(failure.exception)
+                self.assertNotIn(key, text)
+                self.assertFalse(_decoded_echo_present(text, key))
+                detail = ast.literal_eval(text.split(": ", 1)[1])
+                self.assertFalse(_decoded_echo_present(detail, key))
+                self.assertFalse(_decoded_echo_present(actor.last_receipt, key))
+                self.assertIn("safe cause", text)
+                self.assertIn("[redacted]", text)
+                self.assertEqual(actor.last_receipt["local_allowance"]["requests_used"], 1)
+                self.assertEqual(actor._turns, [])
+
+    def test_redacted_diagnostics_preserve_durable_receipt_and_key_source_cleanup(self):
+        from remote_operator.control import Operator, Validation
+
+        key = 'sec"ret\\key'
+        incomplete = {"reason": "max_output_tokens", key: "safe detail"}
+        body = response(status="incomplete", incomplete_details=incomplete)
+
+        def serve(request):
+            return httpx.Response(200, json=body)
+
+        grant = replace(self.grant, grant_id="incomplete-durable-cleanup")
+        actor = MetaModel(
+            "",
+            grant,
+            self.store,
+            transport=httpx.MockTransport(serve),
+            key_source=lambda: key,
+        )
+        with self.assertRaises(MetaFailure) as failure:
+            actor.next_operation([], prompt="task")
+        self.assertEqual(failure.exception.category, "incomplete")
+        self.assertNotIn(key, str(failure.exception))
+        self.assertFalse(_decoded_echo_present(actor.last_receipt, key))
+        self.assertEqual(actor._key, "")
+        self.assertEqual(actor.last_receipt["local_allowance"]["requests_used"], 1)
+        self.assertIn("safe detail", str(failure.exception))
+
+        class Validator:
+            def validate(self, workspace, candidate_digest, *, cancelled=None):
+                return Validation(True, candidate_digest, 0, "fixture", "test-double")
+
+        seed = self.root / "seed.py"
+        seed.write_text("# seed\n", encoding="utf-8")
+        operator = Operator(self.root / "runtime", seed, Validator())
+        task = operator.submit("Implement the sample")
+        error_body = {"error": {"message": {key: "safe cause"}}}
+        failing = MetaModel(
+            key,
+            replace(self.grant, grant_id="http-durable-cleanup"),
+            operator.store,
+            transport=httpx.MockTransport(lambda request: httpx.Response(429, json=error_body)),
+        )
+        result = operator.run(task["id"], failing)
+        self.assertEqual(result["status"], "paused")
+        events = operator.store.events(task["id"])
+        records = json.dumps(events, ensure_ascii=False)
+        self.assertNotIn(key, records)
+        self.assertFalse(_decoded_echo_present(events, key))
+        failed = [item for item in events if item["kind"] == "transport_failed"]
+        self.assertEqual(len(failed), 1)
+        detail = ast.literal_eval(failed[0]["payload"]["detail"].split(": ", 1)[1])
+        self.assertFalse(_decoded_echo_present(detail, key))
+        self.assertIn("safe cause", json.dumps(failed[0], ensure_ascii=False))
+        receipts = [item for item in events if item["kind"] == "inference_receipt"]
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(receipts[0]["payload"]["local_allowance"]["requests_used"], 1)
+        self.assertEqual(failing.last_receipt["local_allowance"]["requests_used"], 1)
