@@ -307,3 +307,32 @@ network-blocked Modal sandbox; exact cleanup verified. Meta correctly attributed
 those results to the supervisor in its final report. No actual keys sent to a
 worker/runner, no host execution of generated code, no new storage/auth format
 or production approval-policy change. No deployment/publication.
+
+## 2026-10-29 — Concurrent external-action resolution
+
+Meta Muse Spark 1.3 Standard proposed a compare-and-swap fix after independent checks reproduced multiple successful resolutions of one action. Two model requests included one expiry-regression repair; host review corrected an expiry transaction rollback and formatted the result. Final protected Modal validation passed 17 checks with network/credential isolation and verified sandbox cleanup. Model proposals and host recovery are distinct contributions. No hosted release or submission was performed.
+
+Local full-suite validation: 152 passed, 8 skipped, 77 subtests passed; final loop-capture lint correction rechecked with 5 focused tests and 8 subtests. Ruff check/format passed. Sandbox-approved source bytes match the applied module.
+
+
+## 2026-10-29 — Malformed external-action inputs
+
+Meta Muse Spark 1.3 Standard authored a narrow Unicode nonce refusal and a
+delegated nonstring identifier check. Real child validation and independent Modal
+validation both passed 19 protected checks with sandbox cleanup. The original
+delegation wrapper still marked a recovered tool error as failure; that report
+is preserved, and these checks do not establish general model quality. Host
+review accepted the source and added public regression tests. No hosted release.
+
+# Integrated local candidate and exact expiry — 2026-10-29
+
+Host combined existing reviewed eligibility/session fixes with the prepared one-use
+action-resolution branch, retaining both provenance histories. Meta reviewed the
+integrated public module/tests and found expiry equality inconsistent across read
+and resolution paths; Meta authored five comparison corrections. Host supplied
+the durable equality regression and independent protected checks. Final isolated
+Modal validation passed196tests8skips112subtests, including concurrency/nonce and
+all five equality operations; original defect reproduced separately, cleanup
+verified. Meta final report accurately stated its requested tests were not added;
+host completed that test work. Existing APIs/schema/approval policy retained.
+No private Workbench payload, generated host execution, publication or deployment.
