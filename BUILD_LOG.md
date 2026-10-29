@@ -256,3 +256,15 @@ quality claim. No private infrastructure source, real grants or credentials were
 sent. No public push, deployment, judge access, video or submission performed.
 
 Packaging follow-up: wheel and sdist built offline from cached declared build dependencies. Archive checks found83sdist entries and25wheel members, required source checker/docs present and no private runtime/venv/handoff paths. Extracted sdist suite passed160tests with8skips/69subtests using existing dependencies; no fresh dependency-install claim.
+
+## 2026-10-29 - Current published-base integration
+
+The first checker branch had used an older local main. Prepared this candidate
+from the current published main instead, preserving its external-action API/UI,
+release boundaries and build history. Only documentation conflicts needed manual
+resolution. One inherited long condition was mechanically formatted to pass the current formatter; application behavior and the held action-resolution fix are unchanged.
+The earlier158/160test results above describe that earlier branch, not this tree.
+Current candidate suite:176passed,8skipped,69subtests. Hosted/deployed/phone evidence
+was not rerun, and no publication or deployment is implied by this local candidate.
+
+Current-base packaging: offline wheel/sdist build exited0. Archive audit verified87sdist/26wheel entries, exact application/checker/doc bytes, no private runtime/venv/handoff paths and no named provider credential values. Extracted sdist passed176tests,8skips,69subtests using existing dependencies; no fresh install or deployed-service claim.

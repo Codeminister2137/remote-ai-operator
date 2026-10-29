@@ -132,7 +132,10 @@ class ExternalActionBridge:
         actions = []
         for (body,) in rows:
             action = ExternalAction(**json.loads(body))
-            if action.status == "submitted" and (time.time() if now is None else now) > action.expires:
+            if (
+                action.status == "submitted"
+                and (time.time() if now is None else now) > action.expires
+            ):
                 action = self._expire(action)
             actions.append(action)
         return actions
