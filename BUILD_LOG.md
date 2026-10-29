@@ -346,3 +346,17 @@ Independent isolated Modal validation passed198tests8skips115subtests and six
 protected invalid-input cases; exact sandbox cleanup verified. The two-turn Meta
 conversation completed in six requests and correctly attributed test execution
 to the supervisor. No new auth mechanism, schema, dependency or deployment.
+
+## Hosted logout/cleanup synchronization ? 2026-10-29
+
+An isolated baseline reproduced cleanup discarding a concurrent logout revocation,
+allowing the logged-out token again. Meta authored standard-library reentrant
+locking around existing revocation state, close, cleanup and clear, plus two
+regressions. Existing process-local logout/restart behavior and APIs remain.
+Independent host validation proved the new race regression fails against immutable
+original source, passes the fix, and passed the complete Modal suite:
+200tests8skips115subtests. Exact sandbox cleanup verified; Ruff clean.
+Two finite eight-request Meta runs exhausted their iteration bounds: first left
+only an import, fresh repair produced source/tests but no final report. Those
+failed runs remain preserved; code acceptance is the host's separate review and
+validation, not a claim that the worker completed its conversation. No release.

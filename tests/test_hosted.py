@@ -2,6 +2,7 @@
 
 import json
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -170,6 +171,75 @@ class HostedSessionUnitTests(unittest.TestCase):
         with self.assertRaises(SessionUnavailable):
             self.sessions.subject(token)
         self.assertEqual(self.restarted().subject(token), subject)
+
+    def test_close_serializes_with_concurrent_purge(self):
+        token = self.sessions.open(CODE)
+        subject = self.sessions.subject(token)
+        self.sessions.attach_key(token, KEY)
+        snapshot_done = threading.Event()
+        release = threading.Event()
+        errors = []
+
+        class BlockingRevoked(dict):
+            def items(self):
+                snapshot = list(super().items())
+                snapshot_done.set()
+                if not release.wait(5):
+                    raise AssertionError("purge release timeout")
+                return iter(snapshot)
+
+        self.sessions._revoked = BlockingRevoked(self.sessions._revoked)
+
+        def run_purge():
+            try:
+                self.sessions.purge_expired()
+            except Exception as exc:  # noqa: BLE001 - captured for assertion
+                errors.append(exc)
+
+        def run_close():
+            try:
+                self.sessions.close(token)
+            except Exception as exc:  # noqa: BLE001 - captured for assertion
+                errors.append(exc)
+
+        purge_thread = threading.Thread(target=run_purge)
+        purge_thread.start()
+        try:
+            self.assertTrue(snapshot_done.wait(5), "purge did not snapshot")
+            close_thread = threading.Thread(target=run_close)
+            close_thread.start()
+            try:
+                # On buggy code close slips in while purge is paused and its
+                # revocation is then discarded by the stale replacement. On
+                # fixed code close blocks on the RLock until purge finishes.
+                close_thread.join(2)
+                release.set()
+                close_thread.join(5)
+                self.assertFalse(close_thread.is_alive(), "close did not finish")
+            finally:
+                release.set()
+                close_thread.join(5)
+        finally:
+            release.set()
+            purge_thread.join(5)
+        self.assertFalse(purge_thread.is_alive(), "purge did not finish")
+        self.assertEqual(errors, [])
+        with self.assertRaises(SessionUnavailable):
+            self.sessions.subject(token)
+        self.assertFalse(self.sessions.has_key(token, subject))
+
+    def test_logout_removes_key_and_purge_prunes_revoked_expiry(self):
+        token = self.sessions.open(CODE)
+        subject = self.sessions.subject(token)
+        self.sessions.attach_key(token, KEY)
+        self.sessions.close(token)
+        self.assertFalse(self.sessions.has_key(token, subject))
+        with self.assertRaises(SessionUnavailable):
+            self.sessions.subject(token)
+        self.assertEqual(len(self.sessions._revoked), 1)
+        self.now = 130
+        self.sessions.purge_expired()
+        self.assertEqual(dict(self.sessions._revoked), {})
 
     def test_bad_access_code_configuration_is_refused(self):
         for value in ("short", "x" * 257, "code with\nnewline" + "x" * 20, None):

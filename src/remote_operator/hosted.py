@@ -18,6 +18,7 @@ import hmac
 import json
 import re
 import secrets
+import threading
 import time
 
 from remote_operator.credentials import SessionKeys, SessionUnavailable, valid_subject
@@ -71,6 +72,7 @@ class HostedSessions:
             sessions = SessionKeys(lifetime=lifetime, capacity=capacity, clock=clock or time.time)
         self._clock = clock or sessions.clock
         self._revoked = {}
+        self._lock = threading.RLock()
         self.sessions = sessions
 
     def __repr__(self):
@@ -124,11 +126,12 @@ class HostedSessions:
         if claims["e"] <= self._clock():
             raise SessionUnavailable("Session expired;reconnect to continue")
         identity = self._identity(token)
-        revoked = self._revoked.get(identity)
-        if revoked is not None:
-            if revoked > self._clock():
-                raise SessionUnavailable()
-            self._revoked.pop(identity, None)
+        with self._lock:
+            revoked = self._revoked.get(identity)
+            if revoked is not None:
+                if revoked > self._clock():
+                    raise SessionUnavailable()
+                self._revoked.pop(identity, None)
         return claims["s"], claims["e"], identity
 
     @staticmethod
@@ -167,18 +170,21 @@ class HostedSessions:
         deployment secret is the only server-side revocation lever across a
         restart. Browsers remove the cookie immediately.
         """
-        try:
-            _, expires, identity = self._claims(token)
-        except SessionUnavailable:
-            return
-        self._revoked[identity] = expires
-        self.sessions.revoke(token)
+        with self._lock:
+            try:
+                _, expires, identity = self._claims(token)
+            except SessionUnavailable:
+                return
+            self._revoked[identity] = expires
+            self.sessions.revoke(token)
 
     def purge_expired(self):
-        now = self._clock()
-        self._revoked = {token: end for token, end in self._revoked.items() if end > now}
-        return self.sessions.purge_expired()
+        with self._lock:
+            now = self._clock()
+            self._revoked = {token: end for token, end in self._revoked.items() if end > now}
+            return self.sessions.purge_expired()
 
     def clear(self):
-        self._revoked.clear()
-        self.sessions.clear()
+        with self._lock:
+            self._revoked.clear()
+            self.sessions.clear()
