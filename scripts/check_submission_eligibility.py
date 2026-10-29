@@ -1,0 +1,149 @@
+"""Validate that a Remote Operator demo configuration satisfies the Meta-only rule.
+
+Usage:
+    python scripts/check_submission_eligibility.py \
+        --env-file .env \
+        --grant-file private/grant.json \
+        --model-mode meta
+
+Exit codes:
+    0 - configuration satisfies the Meta-only submission rule
+    1 - one or more violations were found
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import time
+from decimal import Decimal
+from pathlib import Path
+
+from remote_operator.meta import InferenceGrant
+
+
+def _parse_env(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def _load_grant(path: Path) -> InferenceGrant:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return InferenceGrant(**data)
+
+
+def _check_model_name(model: str) -> list[str]:
+    violations: list[str] = []
+    if not re.fullmatch(r"muse-[a-z0-9.-]+", model):
+        violations.append(
+            f"Grant model '{model}' does not match the required Meta model pattern "
+            f"'muse-<identifier>'."
+        )
+    if "contributor" in model:
+        violations.append(f"Grant model '{model}' is a contributor model and is refused.")
+    return violations
+
+
+def _check_grant_eligibility(grant: InferenceGrant) -> list[str]:
+    violations: list[str] = []
+    now = time.time()
+
+    violations.extend(_check_model_name(grant.model))
+
+    if grant.expires_at <= now:
+        violations.append(f"Grant expired at {grant.expires_at} (current time {now}).")
+    if grant.max_requests <= 0:
+        violations.append(f"Grant max_requests must be positive, got {grant.max_requests}.")
+    if Decimal(grant.approved_usd) <= 0:
+        violations.append(f"Grant approved_usd must be positive, got {grant.approved_usd}.")
+    if not grant.credits_verified:
+        violations.append("Grant credits_verified must be true.")
+    if not grant.local_spending_limit_accepted:
+        violations.append("Grant local_spending_limit_accepted must be true.")
+
+    return violations
+
+
+def _check_env(env: dict[str, str]) -> list[str]:
+    violations: list[str] = []
+    non_meta_keys = {
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+        "COHERE_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+    }
+    for key in non_meta_keys:
+        if env.get(key):
+            violations.append(f"Non-Meta provider credential {key} is set.")
+    return violations
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--env-file", type=Path, required=True)
+    parser.add_argument("--grant-file", type=Path)
+    parser.add_argument("--model-mode", choices=("scripted", "meta"), required=True)
+    args = parser.parse_args(argv)
+
+    report_lines: list[str] = [
+        "# Submission eligibility check",
+        "",
+        f"- model-mode: `{args.model_mode}`",
+        f"- env-file: `{args.env_file}`",
+    ]
+    if args.grant_file:
+        report_lines.append(f"- grant-file: `{args.grant_file}`")
+    report_lines.append("")
+
+    violations: list[str] = []
+
+    env = _parse_env(args.env_file)
+    violations.extend(_check_env(env))
+
+    if args.model_mode == "scripted":
+        report_lines.append(
+            "Scripted mode calls no external model, so the Meta-only rule is satisfied."
+        )
+    else:
+        if not args.grant_file:
+            parser.error("--grant-file is required when --model-mode is meta")
+        try:
+            grant = _load_grant(args.grant_file)
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            report_lines.append(f"- Could not load grant: {exc}")
+            _print_report(report_lines, [f"Grant loading failed: {exc}"])
+            return 1
+
+        report_lines.append(f"- grant model: `{grant.model}`")
+        violations.extend(_check_grant_eligibility(grant))
+
+    _print_report(report_lines, violations)
+    return 1 if violations else 0
+
+
+def _print_report(lines: list[str], violations: list[str]) -> None:
+    if violations:
+        lines.append("## Violations")
+        for violation in violations:
+            lines.append(f"- [FAIL] {violation}")
+        lines.append("")
+        lines.append("Result: **NOT ELIGIBLE**")
+    else:
+        lines.append("Result: **ELIGIBLE**")
+    print("\n".join(lines))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
