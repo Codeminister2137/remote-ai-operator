@@ -276,3 +276,12 @@ and authored eight regression cases. Independent network-blocked Modal checks
 passed184tests,8skipped,69subtests plus8protected export cases; exact cleanup
 verified. Initial full-suite fixture failures were preserved and corrected in
 the development harness only. No product runner-limit change or public deployment.
+# Supervised AI-to-AI documentation trial — 2026-10-29
+
+Meta authored the dotenv/BOM eligibility note after Codex reviewed its proposal
+and sent specific corrective feedback through the existing coding-chat controller.
+Host independently checked the actual doc diff and tool receipts (7checks passed).
+Four Meta calls hit the fixed cap after the edit; no worker final report was
+captured. That incomplete worker outcome is preserved separately from host
+acceptance of the doc effect. No runtime behavior or human approval policy changed,
+no commands executed by the worker, and no runtime test run claimed for this note.
