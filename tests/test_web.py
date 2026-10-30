@@ -341,3 +341,30 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         for leak in ("traceback", "stack", "internal", "exception"):
             self.assertNotIn(leak, text)
 
+    def test_public_handlers_have_docstrings(self):
+        """Regression: public handlers must retain descriptive docstrings."""
+        import ast
+        import pathlib
+        source = pathlib.Path("src/remote_operator/web.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        required = {"_origin", "create_app", "create_hosted_app"}
+        found = {}
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name in required or node.name in {
+                    "index", "javascript", "stylesheet", "submit", "list_tasks",
+                    "review", "events", "run", "approve", "reject", "reconcile",
+                    "cancel", "sample", "revalidate", "allowance", "submit_external",
+                    "list_external", "review_external", "approve_external",
+                    "reject_external", "cancel_external", "configuration",
+                    "open_session", "close_session", "attach_key", "detach_key",
+                    "owner", "visitor"
+                }:
+                    doc = ast.get_docstring(node)
+                    found[node.name] = doc
+        for name in required:
+            self.assertIn(name, found, f"missing handler {name}")
+            self.assertTrue(found[name], f"{name} missing docstring")
+        # Ensure at least 10 handlers documented
+        documented = [k for k, v in found.items() if v]
+        self.assertGreaterEqual(len(documented), 10, f"only {documented} documented")

@@ -106,7 +106,13 @@ class Principal:
 
 
 def _origin(public_origin):
-    """Validate an explicitly configured HTTPS origin;never infer it from a header."""
+    """Validate and normalize an explicitly configured HTTPS origin.
+
+    Returns None when no origin is configured, otherwise returns a
+    canonical origin string without path, query, fragment or credentials.
+    Rejects non-HTTPS schemes and origins that include credentials.
+    Never infers the value from request headers.
+    """
     if not public_origin:
         return None
     remote = urlsplit(public_origin)
@@ -202,10 +208,12 @@ def _base_app(*, public_origin, sessions):
 
     @app.get("/", response_class=HTMLResponse)
     def index():
+        """Serve the single-page operator UI."""
         return Path(__file__).with_name("index.html").read_text(encoding="utf-8")
 
     @app.get("/app.js")
     def javascript():
+        """Serve the UI JavaScript bundle."""
         return Response(
             Path(__file__).with_name("app.js").read_text(encoding="utf-8"),
             media_type="text/javascript",
@@ -213,6 +221,7 @@ def _base_app(*, public_origin, sessions):
 
     @app.get("/app.css")
     def stylesheet():
+        """Serve the UI stylesheet."""
         return Response(
             Path(__file__).with_name("app.css").read_text(encoding="utf-8"), media_type="text/css"
         )
@@ -227,6 +236,7 @@ def _task_routes(app, principal):
 
     @app.post("/api/tasks")
     def submit(body: Submission, who: Annotated[Principal, Depends(principal)]):
+        """Create a new task for the authenticated principal."""
         task = who.operator.submit(body.prompt)
         return {"id": task["id"], "status": task["status"], "mode": who.mode}
 
@@ -234,48 +244,59 @@ def _task_routes(app, principal):
     def list_tasks(
         who: Annotated[Principal, Depends(principal)], limit: int = Query(20, ge=1, le=50)
     ):
+        """List recent tasks owned by the authenticated principal."""
         return who.operator.store.recent_tasks(limit)
 
     @app.get("/api/tasks/{task_id}")
     def review(task_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Return the current review state for a single task."""
         return who.operator.review(task_id)
 
     @app.get("/api/tasks/{task_id}/events")
     def events(task_id: str, who: Annotated[Principal, Depends(principal)], after: int = 0):
+        """Return ordered task events after the given cursor."""
         if after < 0:
             raise HTTPException(422, "Cursor must be nonnegative")
         return who.operator.store.events(task_id, after)
 
     @app.post("/api/tasks/{task_id}/run")
     def run(task_id: str, body: RunOptions, who: Annotated[Principal, Depends(principal)]):
+        """Execute the task candidate generation step."""
         return who.operator.run(task_id, who.model_factory(), inject_failure=body.inject_failure)
 
     @app.post("/api/tasks/{task_id}/approve")
     def approve(task_id: str, body: Approval, who: Annotated[Principal, Depends(principal)]):
+        """Approve a pending candidate using the bound nonce."""
         return who.operator.approve(task_id, body.nonce)
 
     @app.post("/api/tasks/{task_id}/reject")
     def reject(task_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Reject the current pending candidate."""
         return who.operator.reject(task_id)
 
     @app.post("/api/tasks/{task_id}/reconcile")
     def reconcile(task_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Reconcile an interrupted task without replaying mutations."""
         return who.operator.reconcile(task_id)
 
     @app.post("/api/tasks/{task_id}/cancel")
     def cancel(task_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Cancel an active task."""
         return who.operator.cancel(task_id)
 
     @app.post("/api/tasks/{task_id}/sample")
     def sample(task_id: str, body: SampleInput, who: Annotated[Principal, Depends(principal)]):
+        """Validate a CSV sample for the task."""
         return who.operator.sample(task_id, body.csv_text)
 
     @app.post("/api/tasks/{task_id}/revalidate")
     def revalidate(task_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Re-run validation for the task candidate."""
         return who.operator.revalidate(task_id)
 
     @app.get("/api/allowance")
     def allowance(who: Annotated[Principal, Depends(principal)]):
+        """Return spending allowance status for the principal."""
         return who.allowance_status() if who.allowance_status is not None else {"enabled": False}
 
 
@@ -286,6 +307,7 @@ def _external_action_routes(app, principal):
     def submit_external(
         body: ExternalActionSubmission, who: Annotated[Principal, Depends(principal)]
     ):
+        """Submit a new external pending action for approval."""
         if who.external_actions is None:
             raise HTTPException(503, "External action bridge is not configured")
         action = who.external_actions.submit(
@@ -306,12 +328,14 @@ def _external_action_routes(app, principal):
     def list_external(
         who: Annotated[Principal, Depends(principal)], limit: int = Query(20, ge=1, le=50)
     ):
+        """List recent external actions."""
         if who.external_actions is None:
             raise HTTPException(503, "External action bridge is not configured")
         return [a.to_dict() for a in who.external_actions.recent(limit)]
 
     @app.get("/api/external-actions/{action_id}")
     def review_external(action_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Review a single external action by id."""
         if who.external_actions is None:
             raise HTTPException(503, "External action bridge is not configured")
         return who.external_actions.get(action_id).to_dict()
@@ -320,18 +344,21 @@ def _external_action_routes(app, principal):
     def approve_external(
         action_id: str, body: Approval, who: Annotated[Principal, Depends(principal)]
     ):
+        """Approve a pending external action."""
         if who.external_actions is None:
             raise HTTPException(503, "External action bridge is not configured")
         return who.external_actions.approve(action_id, body.nonce).to_dict()
 
     @app.post("/api/external-actions/{action_id}/reject")
     def reject_external(action_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Reject a pending external action."""
         if who.external_actions is None:
             raise HTTPException(503, "External action bridge is not configured")
         return who.external_actions.reject(action_id).to_dict()
 
     @app.post("/api/external-actions/{action_id}/cancel")
     def cancel_external(action_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Cancel a pending external action."""
         if who.external_actions is None:
             raise HTTPException(503, "External action bridge is not configured")
         return who.external_actions.cancel(action_id).to_dict()
@@ -346,7 +373,19 @@ def create_app(
     public_origin=None,
     allowance_status=None,
 ) -> FastAPI:
-    """Local single-owner app:one bearer credential,one operator,no cookies."""
+    """Create the local single-owner FastAPI application.
+
+    Args:
+        operator: Task operator that owns storage and execution.
+        access_token: Bearer token required for owner authentication.
+        model_factory: Callable producing a model instance per run.
+        mode: Human-readable execution mode label.
+        public_origin: Optional explicit HTTPS origin for proxy deployments.
+        allowance_status: Optional callable returning allowance metadata.
+
+    Returns:
+        Configured FastAPI app with owner authentication and task routes.
+    """
     if len(access_token) < 32:
         raise ValueError("Access token must contain at least 32 random characters")
     public_origin = _origin(public_origin)
@@ -355,6 +394,7 @@ def create_app(
     external = ExternalActionBridge(operator.store)
 
     def owner(request: Request):
+        """Authenticate the local owner via bearer token."""
         expected = "Bearer " + access_token
         actual = request.headers.get("authorization", "")
         if not secrets.compare_digest(actual.encode(), expected.encode()):
@@ -366,6 +406,7 @@ def create_app(
 
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
+        """Return local deployment configuration."""
         return {"mode": mode, "live_inference": mode == "meta", "https_origin": public_origin}
 
     return app
@@ -379,11 +420,22 @@ def create_hosted_app(
     actor_factory=None,
     public_origin=None,
 ):
-    """Hosted app:shared access code,per-visitor stores,optional visitor-owned key.
+    """Create the hosted multi-visitor FastAPI application.
 
-    Without an attached visitor key every task runs the labelled offline
-    reference,so browsing the workflow costs nothing. A configured grant plus a
-    visitor key enables real Meta work paid by that visitor's own account.
+    Hosted app uses a shared access code and per-visitor stores with an
+    optional visitor-owned provider key. Without an attached key tasks run
+    the labelled offline reference; with a key and grant they run live
+    inference paid by the visitor.
+
+    Args:
+        scoped: Scoped operator factory providing per-subject operators.
+        sessions: Session manager handling visitor cookies and keys.
+        grant: Optional budget/allowance grant for live inference.
+        actor_factory: Optional factory for hosted model actors.
+        public_origin: Optional explicit HTTPS origin.
+
+    Returns:
+        Configured FastAPI app with visitor authentication and task routes.
     """
     public_origin = _origin(public_origin)
 
@@ -397,6 +449,7 @@ def create_hosted_app(
     app = _base_app(public_origin=public_origin, sessions=sessions)
 
     def visitor(request: Request):
+        """Authenticate a hosted visitor from session cookie."""
         token = request.cookies.get(SESSION_COOKIE, "")
         try:
             subject = sessions.subject(token)
@@ -427,6 +480,7 @@ def create_hosted_app(
 
     @app.get("/api/config")
     def configuration(request: Request):
+        """Return hosted deployment configuration for the visitor."""
         token = request.cookies.get(SESSION_COOKIE, "")
         try:
             subject = sessions.subject(token)
@@ -453,6 +507,7 @@ def create_hosted_app(
 
     @app.post("/api/session")
     def open_session(body: AccessCode, response: Response):
+        """Open a visitor session from an access code."""
         try:
             token = sessions.open(body.code)
         except AccessRefused:
@@ -472,6 +527,7 @@ def create_hosted_app(
     def close_session(
         request: Request, response: Response, who: Annotated[Principal, Depends(visitor)]
     ):
+        """Close the current visitor session."""
         sessions.close(request.cookies.get(SESSION_COOKIE, ""))
         response.delete_cookie(SESSION_COOKIE, path="/")
         return {"closed": True}
@@ -480,6 +536,7 @@ def create_hosted_app(
     def attach_key(
         body: ProviderKey, request: Request, who: Annotated[Principal, Depends(visitor)]
     ):
+        """Attach a visitor-owned provider key to the session."""
         if grant is None:
             raise HTTPException(409, "Hosted model route is not configured")
         try:
@@ -490,6 +547,7 @@ def create_hosted_app(
 
     @app.delete("/api/session/key")
     def detach_key(request: Request, who: Annotated[Principal, Depends(visitor)]):
+        """Detach the provider key from the visitor session."""
         token = request.cookies.get(SESSION_COOKIE, "")
         sessions.drop_key(token, sessions.subject(token))
         return {"key_attached": False, "mode": "scripted"}
