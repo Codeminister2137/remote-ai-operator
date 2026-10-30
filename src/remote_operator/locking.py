@@ -1,7 +1,10 @@
 """Cross-process exclusion for one explicitly started local controller."""
 
+import logging
 import os
 import threading
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessLock:
@@ -30,6 +33,7 @@ class ProcessLock:
                 import fcntl
 
                 fcntl.flock(self.stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            logger.debug("acquired lock %s", self.path)
             return True
         except OSError:
             if self.stream:

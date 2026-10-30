@@ -41,3 +41,20 @@ class ScopedModuleDocstring(unittest.TestCase):
 
         self.assertTrue(scoped.__doc__)
         self.assertTrue(scoped.__doc__.strip())
+
+
+class ProcessLockLogging(unittest.TestCase):
+    def test_acquire_emits_debug_log(self):
+        from remote_operator.locking import ProcessLock
+
+        with tempfile.TemporaryDirectory() as folder:
+            lock_path = Path(folder) / "test.lock"
+            lock = ProcessLock(lock_path)
+            try:
+                with self.assertLogs("remote_operator.locking", level="DEBUG") as cm:
+                    acquired = lock.acquire(blocking=False)
+                    self.assertTrue(acquired)
+                self.assertTrue(any("acquired lock" in m for m in cm.output))
+            finally:
+                if lock.stream is not None:
+                    lock.release()
