@@ -113,6 +113,27 @@ class RunnerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("Usage: sandbox_bootstrap.py", result.stdout)
 
+    def test_public_api_docstrings_exist_and_behavior_unchanged(self):
+        """Regression: docstring-only change preserves public API and behavior."""
+        import inspect
+        from remote_operator.runner import Execution, SourceValidator, DockerValidator
+        # Public classes and methods remain exposed with docstrings
+        for cls in (Execution, SourceValidator, DockerValidator):
+            self.assertIsNotNone(cls.__doc__)
+            self.assertGreater(len(cls.__doc__.strip()), 0)
+        for name in ("policy_digest", "validate", "preview", "policy_settings", "command"):
+            obj = getattr(SourceValidator, name, None) or getattr(DockerValidator, name, None)
+            self.assertIsNotNone(obj)
+            self.assertIsNotNone(obj.__doc__)
+            self.assertGreater(len(obj.__doc__.strip()), 0)
+        # Signatures unchanged
+        self.assertEqual(inspect.signature(DockerValidator.command).parameters["entry"].default, "run_checks.py")
+        # Behavior unchanged: invalid entry still raises
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(ValueError):
+                DockerValidator(root).command(root, "n", entry="evil.py")
+
 
 if __name__ == "__main__":
     unittest.main()

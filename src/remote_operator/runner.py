@@ -20,6 +20,8 @@ DEFAULT_IMAGE = (
 
 @dataclass(frozen=True)
 class Execution:
+    """Result of an isolated runner execution."""
+
     code: int | None
     output: str
     failure: str | None
@@ -31,6 +33,13 @@ class SourceValidator:
     runner_name = "unconfigured"
 
     def __init__(self, checks: Path, image: str, timeout: float):
+        """Initialize a source validator with policy checks and isolation settings.
+
+        Args:
+            checks: Directory containing validation policy scripts.
+            image: Container image reference used by concrete backends.
+            timeout: Execution deadline in seconds; must be finite, positive, and at most 120.
+        """
         if (
             type(timeout) not in (int, float)
             or not math.isfinite(timeout)
@@ -50,6 +59,7 @@ class SourceValidator:
             return None
 
     def policy_digest(self):
+        """Compute a fingerprint of the current validation policy."""
         fingerprint = hashlib.sha256(json.dumps(self.policy_settings(), sort_keys=True).encode())
         for name in ("run_checks.py", "test_import.py", "preview.py"):
             path = self.checks / name
@@ -60,6 +70,16 @@ class SourceValidator:
         return fingerprint.hexdigest()
 
     def validate(self, workspace: Path, candidate_digest: str, *, cancelled=None) -> Validation:
+        """Run isolated checks and return a validation result.
+
+        Args:
+            workspace: Candidate workspace directory to validate.
+            candidate_digest: Expected digest of the candidate source.
+            cancelled: Optional callable returning True if the run should be cancelled.
+
+        Returns:
+            A Validation indicating whether the candidate passed isolated checks.
+        """
         policy = self.policy_digest()
         result = self._run(workspace, cancelled=cancelled)
         report = self._report(result.output, "OPERATOR_CHECKS ")
@@ -74,6 +94,16 @@ class SourceValidator:
         return Validation(passed, candidate_digest, result.code, output, self.runner_name, policy)
 
     def preview(self, workspace, csv_text, expected_digest):
+        """Generate a preview from CSV text inside the isolated runner.
+
+        Args:
+            workspace: Workspace whose source digest must match expected_digest.
+            csv_text: CSV content to preview, up to 8192 bytes.
+            expected_digest: Digest the workspace must currently have.
+
+        Returns:
+            Dictionary with issues, errors, existing items, and target_digest.
+        """
         if not isinstance(csv_text, str) or len(csv_text.encode()) > 8192:
             raise ValueError("Sample CSV must be at most 8192 bytes")
         if digest(read_source(workspace)) != expected_digest:
@@ -111,6 +141,7 @@ class SourceValidator:
         return {**report, "existing": existing, "target_digest": expected_digest}
 
     def policy_settings(self):
+        """Return settings that contribute to the policy digest."""
         raise NotImplementedError
 
     def _run(self, workspace, *, entry="run_checks.py", payload=b"", cancelled=None):
@@ -123,9 +154,17 @@ class DockerValidator(SourceValidator):
     runner_name = "docker"
 
     def __init__(self, checks: Path, image: str = DEFAULT_IMAGE, timeout: float = 30):
+        """Initialize a Docker-backed validator.
+
+        Args:
+            checks: Directory containing validation policy scripts.
+            image: Docker image reference to run.
+            timeout: Execution deadline in seconds.
+        """
         super().__init__(checks, image, timeout)
 
     def policy_settings(self):
+        """Return Docker-specific settings included in the policy digest."""
         # Preserve existing Docker evidence fingerprints across this extraction.
         return {
             "image": self.image,
@@ -134,6 +173,17 @@ class DockerValidator(SourceValidator):
         }
 
     def command(self, workspace: Path, name: str, *, entry="run_checks.py", interactive=False):
+        """Build the docker run command for an isolated execution.
+
+        Args:
+            workspace: Workspace directory to mount read-only.
+            name: Container name to use.
+            entry: Protected entry script to execute in /checks.
+            interactive: Whether to include interactive stdin handling.
+
+        Returns:
+            List of command arguments for subprocess execution.
+        """
         if entry not in {"run_checks.py", "preview.py"}:
             raise ValueError("Unknown protected runner entry")
         for path in (workspace.resolve(), self.checks):
