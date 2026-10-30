@@ -166,6 +166,33 @@ def test_malformed_refused_no_send():
         JsonRoles(123)  # type: ignore[arg-type]
 
 
+def test_rejects_non_string_action():
+    """Regression: JsonRoles must reject non-string `action` values without mutating state."""
+    for bad_action in [1, True, None, False, 0, 3.14, [], {}]:
+        snap = {"a.txt": b"original"}
+        view = _sup_view(snapshot=dict(snap))
+        before_snap = dict(snap)
+        before_view_snapshot = dict(view.snapshot)
+
+        def send(role: str, payload: dict[str, Any], _bad: Any = bad_action) -> dict[str, Any]:
+            return {"action": _bad}
+
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(send).supervisor(view)
+
+        # verify no mutation of input snapshot or view
+        assert snap == before_snap
+        assert view.snapshot == before_view_snapshot
+
+    # explicit cases from task description
+    for bad_action in [1, True, None]:
+        def send2(role: str, payload: dict[str, Any], _bad: Any = bad_action) -> dict[str, Any]:
+            return {"action": _bad}
+
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(send2).supervisor(_sup_view())
+
+
 def test_empty_targets_rejected():
     """Regression: empty string in targets must be rejected, not silently accepted."""
     for bad_targets in [
