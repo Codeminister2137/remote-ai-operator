@@ -380,3 +380,28 @@ def test_windows_ambiguous_allowlist_paths_refused(tmp_path, path):
         validator=lambda f: ValidationResult(True, "ok"),
     )
     assert result.status == "stopped-uncertain"
+
+
+def test_unchanged_failed_candidate_stops_without_extra_model_calls(tmp_path):
+    calls = []
+
+    def supervisor(view):
+        calls.append("supervisor")
+        return SupervisorDecision("task", task="repair")
+
+    def implementer(view):
+        calls.append("implementer")
+        return {"notes.md": "same candidate"}
+
+    result = run_development_loop(
+        workspace=tmp_path,
+        objective="obj",
+        allowlist=("notes.md",),
+        supervisor=supervisor,
+        implementer=implementer,
+        validator=lambda f: ValidationResult(False, "protected failure"),
+        max_no_progress=1,
+    )
+    assert result.status == "stopped-no-progress"
+    assert calls == ["supervisor", "implementer", "supervisor", "implementer"]
+    assert result.requests_used == 4

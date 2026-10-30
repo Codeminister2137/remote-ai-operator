@@ -717,4 +717,4 @@ def run_development_loop(
         else:
             last_outcome = "failed"
             last_passed = False
-            no_progress = 0
+            no_progress = no_progress + 1 if current == candidate_before else 0
