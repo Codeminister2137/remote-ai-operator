@@ -668,6 +668,11 @@ def run_development_loop(
         host("diff", _diff_text(baseline, current)[:MAX_OUTPUT_CHARS] or "no-change")
         exact_bytes = dict(current)
         candidate_hash = current_hash
+        if poll_stop():
+            host("stopped", "host stop callback true")
+            return FinalState(
+                "stopped", current_hash, tasks_used, repairs_used, requests_used, tuple(receipts)
+            )
         try:
             outcome = validator(exact_bytes)
         except Exception as exc:

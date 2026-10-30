@@ -405,3 +405,33 @@ def test_unchanged_failed_candidate_stops_without_extra_model_calls(tmp_path):
     assert result.status == "stopped-no-progress"
     assert calls == ["supervisor", "implementer", "supervisor", "implementer"]
     assert result.requests_used == 4
+
+
+def test_stop_arriving_during_write_prevents_validator_launch(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    stopped = False
+    validations = []
+    original_write = Path.write_bytes
+
+    def write_then_stop(path, raw):
+        nonlocal stopped
+        result = original_write(path, raw)
+        if path == tmp_path / "notes.md":
+            stopped = True
+        return result
+
+    monkeypatch.setattr(Path, "write_bytes", write_then_stop)
+    result = run_development_loop(
+        workspace=tmp_path,
+        objective="write notes",
+        allowlist=("notes.md",),
+        supervisor=lambda view: SupervisorDecision("task", task="write notes"),
+        implementer=lambda view: {"notes.md": "preserved candidate"},
+        validator=lambda files: validations.append(files) or ValidationResult(True, "ok"),
+        should_stop=lambda: stopped,
+    )
+    assert result.status == "stopped"
+    assert (tmp_path / "notes.md").read_bytes() == b"preserved candidate"
+    assert validations == []
+    assert result.requests_used == 2
