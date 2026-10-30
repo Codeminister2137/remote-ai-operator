@@ -419,7 +419,7 @@ def test_grant_duplicate_keys_handled_deterministically(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     grant_file = tmp_path / "grant.json"
     _write(env_file, "")
-    # Construct grant JSON with duplicate 'model' key containing sensitive value first, valid second
+    # Construct grant JSON with duplicate key containing sensitive value first, valid second
     # and also test reverse determinism. Payload value must not be echoed.
     grant = _valid_grant()
     # Build raw JSON string with duplicate key manually
@@ -450,5 +450,17 @@ def test_quoted_value_with_embedded_spaces_is_not_eligible_and_not_echoed(tmp_pa
     assert "NOT ELIGIBLE" in result.stdout
     assert "OPENAI_API_KEY" in result.stdout
     assert secret not in result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+    assert "Traceback" not in result.stdout
+
+def test_empty_value_after_equals_is_treated_as_not_set(tmp_path: Path) -> None:
+    # Regression: empty value after equals (e.g. OPENAI_API_KEY=) should be
+    # treated as not set / ELIGIBLE and must not leak or traceback.
+    env_file = tmp_path / ".env"
+    _write(env_file, "OPENAI_API_KEY=\n")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == 0
+    assert "ELIGIBLE" in result.stdout
+    assert "NOT ELIGIBLE" not in result.stdout
     assert "Traceback" not in result.stderr
     assert "Traceback" not in result.stdout
