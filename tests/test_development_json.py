@@ -193,6 +193,61 @@ def test_rejects_non_string_action():
             JsonRoles(send2).supervisor(_sup_view())
 
 
+def test_rejects_non_string_targets_no_mutation():
+    """Regression: JsonRoles supervisor must reject targets containing a non-string."""
+    explicit_cases: list[dict[str, Any]] = [
+        {"action": "task", "task": "do", "targets": ["a.txt", 1]},
+        {"action": "task", "task": "do", "targets": ["a.txt", True]},
+        {"action": "task", "task": "do", "targets": [123]},
+    ]
+    extra_cases: list[dict[str, Any]] = [
+        {"action": "task", "task": "do", "targets": [123]},
+        {"action": "task", "task": "do", "targets": [None]},
+        {"action": "task", "task": "do", "targets": [False]},
+        {"action": "task", "task": "do", "targets": [0]},
+        {"action": "task", "task": "do", "targets": ["a.txt", None]},
+        {"action": "task", "task": "do", "targets": ["a.txt", 3.14]},
+        {"action": "task", "task": "do", "targets": ["a.txt", {}]},
+        {"action": "task", "task": "do", "targets": ["a.txt", []]},
+        {"action": "task", "task": "do", "targets": [True]},
+    ]
+    for bad in explicit_cases + extra_cases:
+        snap = {"a.txt": b"original"}
+        view = _sup_view(snapshot=dict(snap))
+        before_snap = dict(snap)
+        before_view_snapshot = dict(view.snapshot)
+        before_bad = dict(bad)
+        # copy targets list for mutation check
+        before_targets = list(bad["targets"]) if isinstance(bad.get("targets"), list) else bad.get("targets")
+
+        def send(role: str, payload: dict[str, Any], _bad: Any = bad) -> dict[str, Any]:
+            return _bad
+
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(send).supervisor(view)
+
+        # does not mutate input snapshot/view and does not mutate returned payload dict
+        assert snap == before_snap
+        assert view.snapshot == before_view_snapshot
+        assert bad == before_bad
+        if isinstance(bad.get("targets"), list):
+            assert bad["targets"] == before_targets
+
+    # strict bool/int distinction: True is not a valid string target even though bool is subclass of int
+    for bad_targets in [["a.txt", True], [True], [123]]:
+        def send2(role: str, payload: dict[str, Any], _bt: Any = bad_targets) -> dict[str, Any]:
+            return {"action": "task", "task": "do", "targets": _bt}
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(send2).supervisor(_sup_view())
+
+    # valid targets still accepted to ensure no over-rejection
+    for good in [["a.txt"], ["a.txt", "b.txt"], []]:
+        def send_ok(role: str, payload: dict[str, Any], _g: Any = good) -> dict[str, Any]:
+            return {"action": "task", "task": "do", "targets": _g}
+        decision = JsonRoles(send_ok).supervisor(_sup_view())
+        assert decision.targets == tuple(good)
+
+
 def test_empty_targets_rejected():
     """Regression: empty string in targets must be rejected, not silently accepted."""
     for bad_targets in [
