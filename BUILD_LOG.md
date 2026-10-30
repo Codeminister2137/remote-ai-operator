@@ -406,3 +406,16 @@ exact cleanup verified, Ruff clean. Both original and repair workers exhausted
 finite request/iteration bounds without final reports; failures preserved and
 code acceptance recorded separately by host. Existing categories/status/detail
 bounds/credit reservations retained. No real credentials used by test fixtures.
+
+## Foreground model-supervised development controller - 2026-10-30
+
+Owner requested a hackathon model supervising another implementation model,
+without an owner-return deadline or sleep. Meta authored the provider-neutral
+controller and tests, then repaired concrete host-review findings. Host completed
+validator-output propagation and independent regressions for real evidence/diff,
+missing-vs-empty candidate identity, stop-before-write and Windows path safety.
+Full isolated Modal224tests8skips132subtests passed with exact cleanup; Ruff clean.
+Initial Meta run completed; repair iteration failure preserved separately.
+The controller has no network/shell/storage dependency and uses trusted injected
+validation. Production human approvals remain separate. Live Meta-to-Meta wiring
+is temporary developer tooling; live workflow acceptance is NOT yet achieved.
