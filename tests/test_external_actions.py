@@ -121,6 +121,21 @@ class TestExternalActionBridge(unittest.TestCase):
         recent = self.bridge.recent(limit=10)
         self.assertEqual([a.id for a in recent], [a2.id, a1.id])
 
+    def test_approve_error_message_includes_action_id(self):
+        action = self.bridge.submit(
+            "Write greeting",
+            _digest("hello"),
+            _digest("base"),
+            _digest("evidence"),
+        )
+        approved = self.bridge.approve(action.id, action.nonce)
+        # Second approve should fail and message must contain the action id
+        with self.assertRaises(ValueError) as ctx:
+            self.bridge.approve(action.id, action.nonce)
+        msg = str(ctx.exception)
+        self.assertIn(action.id, msg)
+        self.assertIn(approved.status, msg)
+
 
 class TestScriptedActionErrorMessage(unittest.TestCase):
     def test_unknown_action_error_includes_action_name(self):
