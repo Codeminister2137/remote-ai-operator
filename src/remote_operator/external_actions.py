@@ -22,12 +22,28 @@ DEFAULT_EXPIRY_SECONDS = 600
 
 
 def _serialize(action: ExternalAction) -> str:
+    """Serialize an ExternalAction to a canonical JSON string."""
     return json.dumps(action.to_dict(), sort_keys=True)
 
 
 @dataclass(frozen=True, slots=True)
 class ExternalAction:
-    """One pending decision published by an external system."""
+    """One pending decision published by an external system.
+
+    Attributes:
+        id: 32-character hex identifier generated at submission.
+        status: Lifecycle state — ``submitted``, ``approved``, ``rejected``,
+            ``cancelled``, or ``expired``.
+        description: Human-readable summary of the proposed change.
+        candidate_digest: SHA-256 hex digest of the proposed candidate.
+        base_digest: SHA-256 hex digest of the base being compared against.
+        evidence_digest: SHA-256 hex digest of supporting evidence.
+        nonce: Secret token required to approve the action.
+        expires: Unix timestamp (seconds) when the submitted action expires.
+        created_at: Unix timestamp (seconds) when the action was created.
+        resolved_at: Unix timestamp when the action reached a terminal state,
+            or ``None`` while still submitted.
+    """
 
     id: str
     status: str
@@ -41,17 +57,32 @@ class ExternalAction:
     resolved_at: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the action.
+
+        Returns:
+            Dict containing all dataclass fields suitable for JSON serialization.
+        """
         return asdict(self)
 
 
 class ExternalActionBridge:
-    """Store and resolve external pending actions in the operator database."""
+    """Store and resolve external pending actions in the operator database.
+
+    Provides a digest-only contract: callers submit descriptions and SHA-256
+    digests, and the bridge persists them until the owner approves, rejects,
+    cancels, or the action expires.
+
+    Args:
+        store: Underlying :class:`remote_operator.store.Store` instance used
+            for durable SQLite persistence.
+    """
 
     def __init__(self, store: Store) -> None:
         self._store = store
         self._ensure_table()
 
     def _ensure_table(self) -> None:
+        """Ensure the ``external_actions`` table exists."""
         with self._store.connect() as db:
             db.execute(
                 """
@@ -72,6 +103,29 @@ class ExternalActionBridge:
         expires_seconds: int = DEFAULT_EXPIRY_SECONDS,
         now: float | None = None,
     ) -> ExternalAction:
+        """Submit a new external action for owner review.
+
+        Validates inputs, generates an id and approval nonce, and persists
+        the action with ``submitted`` status.
+
+        Args:
+            description: Human-readable summary; must be non-empty and at most
+                ``MAX_DESCRIPTION_LENGTH`` characters.
+            candidate_digest: 64-character hex SHA-256 digest of the candidate.
+            base_digest: 64-character hex SHA-256 digest of the base.
+            evidence_digest: 64-character hex SHA-256 digest of evidence.
+            expires_seconds: Lifetime in seconds, between 30 and 3600 inclusive.
+                Defaults to ``DEFAULT_EXPIRY_SECONDS``.
+            now: Optional override for current Unix time (used in tests);
+                defaults to ``time.time()`` when ``None``.
+
+        Returns:
+            The newly created :class:`ExternalAction` with status ``submitted``.
+
+        Raises:
+            ValueError: If description or digests are invalid, or expiry is
+                out of range.
+        """
         if not isinstance(description, str) or not description.strip():
             raise ValueError("Description is required")
         if len(description) > MAX_DESCRIPTION_LENGTH:
@@ -108,6 +162,24 @@ class ExternalActionBridge:
         return action
 
     def get(self, action_id: str, *, now: float | None = None) -> ExternalAction:
+        """Retrieve a single action by identifier.
+
+        Lazily expires the action if it is still ``submitted`` and the current
+        time has reached or passed its expiry.
+
+        Args:
+            action_id: 32-character alphanumeric action identifier.
+            now: Optional override for current Unix time; defaults to
+                ``time.time()`` when ``None``.
+
+        Returns:
+            The matching :class:`ExternalAction`, potentially transitioned to
+            ``expired`` if its deadline has passed.
+
+        Raises:
+            ValueError: If the identifier format is invalid.
+            KeyError: If no action with the given id exists.
+        """
         if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
             raise ValueError("Invalid action identifier")
         with self._store.connect() as db:
@@ -123,6 +195,23 @@ class ExternalActionBridge:
         return action
 
     def recent(self, limit: int = 20, *, now: float | None = None) -> list[ExternalAction]:
+        """List the most recently submitted actions.
+
+        Lazily expires any returned actions that have passed their deadline.
+
+        Args:
+            limit: Maximum number of actions to return, between 1 and 50
+                inclusive. Defaults to 20.
+            now: Optional override for current Unix time; defaults to
+                ``time.time()`` when ``None``.
+
+        Returns:
+            List of :class:`ExternalAction` objects ordered from newest to
+            oldest (by insertion order).
+
+        Raises:
+            ValueError: If ``limit`` is not an int in the allowed range.
+        """
         if type(limit) is not int or not 1 <= limit <= 50:
             raise ValueError("limit must be an integer between 1 and 50")
         with self._store.connect() as db:
@@ -140,6 +229,27 @@ class ExternalActionBridge:
         return actions
 
     def approve(self, action_id: str, nonce: str, *, now: float | None = None) -> ExternalAction:
+        """Approve a pending action.
+
+        Requires the secret nonce issued at submission time. Fails if the
+        action has expired, is not in ``submitted`` state, or the nonce is
+        incorrect.
+
+        Args:
+            action_id: 32-character alphanumeric action identifier.
+            nonce: Secret approval token that must match the stored nonce.
+            now: Optional override for current Unix time; defaults to
+                ``time.time()`` when ``None``.
+
+        Returns:
+            The updated :class:`ExternalAction` with status ``approved`` and
+            ``resolved_at`` set.
+
+        Raises:
+            ValueError: If the identifier or nonce is invalid, the action has
+                expired, or it is not awaiting approval.
+            KeyError: If no action with the given id exists.
+        """
         if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
             raise ValueError("Invalid action identifier")
         now_val = time.time() if now is None else now
@@ -192,6 +302,24 @@ class ExternalActionBridge:
         return resolved
 
     def reject(self, action_id: str, *, now: float | None = None) -> ExternalAction:
+        """Reject a pending action.
+
+        Transitions a ``submitted`` action to ``rejected``. Expired or already
+        resolved actions cannot be rejected.
+
+        Args:
+            action_id: 32-character alphanumeric action identifier.
+            now: Optional override for current Unix time; defaults to
+                ``time.time()`` when ``None``.
+
+        Returns:
+            The updated :class:`ExternalAction` with status ``rejected``.
+
+        Raises:
+            ValueError: If the identifier is invalid, the action has expired,
+                or it is not in a rejectable state.
+            KeyError: If no action with the given id exists.
+        """
         if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
             raise ValueError("Invalid action identifier")
         now_val = time.time() if now is None else now
@@ -232,6 +360,24 @@ class ExternalActionBridge:
         return resolved
 
     def cancel(self, action_id: str, *, now: float | None = None) -> ExternalAction:
+        """Cancel a pending action.
+
+        Transitions a ``submitted`` action to ``cancelled``. Expired or already
+        resolved actions cannot be cancelled.
+
+        Args:
+            action_id: 32-character alphanumeric action identifier.
+            now: Optional override for current Unix time; defaults to
+                ``time.time()`` when ``None``.
+
+        Returns:
+            The updated :class:`ExternalAction` with status ``cancelled``.
+
+        Raises:
+            ValueError: If the identifier is invalid, the action has expired,
+                or it is not in a cancellable state.
+            KeyError: If no action with the given id exists.
+        """
         if not isinstance(action_id, str) or not action_id.isalnum() or len(action_id) != 32:
             raise ValueError("Invalid action identifier")
         now_val = time.time() if now is None else now
@@ -272,6 +418,7 @@ class ExternalActionBridge:
         return resolved
 
     def _expire(self, action: ExternalAction, now_val: float | None = None) -> ExternalAction:
+        """Mark a submitted action as expired and persist the change."""
         old_raw = _serialize(action)
         resolved_at = time.time() if now_val is None else now_val
         expired = replace(action, status="expired", resolved_at=resolved_at)

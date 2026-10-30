@@ -1,12 +1,13 @@
 """External pending-action bridge: digest-only contract, no source leakage."""
 
 import hashlib
+import inspect
 import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from remote_operator.external_actions import ExternalActionBridge
+from remote_operator.external_actions import ExternalAction, ExternalActionBridge
 from remote_operator.scripted import ScriptedModel
 from remote_operator.store import Store
 
@@ -145,6 +146,29 @@ class TestScriptedActionErrorMessage(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             model.next_operation(history, prompt="test")
         self.assertIn(bad_action, str(ctx.exception))
+
+
+class TestExternalActionsDocstrings(unittest.TestCase):
+    """Regression test ensuring public functions retain docstrings."""
+
+    def test_public_api_has_docstrings(self):
+        # Check class and public methods have meaningful docstrings
+        self.assertTrue(ExternalAction.__doc__ and len(ExternalAction.__doc__.strip()) > 20)
+        self.assertTrue(ExternalAction.to_dict.__doc__ and "Returns" in ExternalAction.to_dict.__doc__)
+        self.assertTrue(ExternalActionBridge.__doc__ and len(ExternalActionBridge.__doc__.strip()) > 20)
+        for name in ("submit", "get", "recent", "approve", "reject", "cancel"):
+            method = getattr(ExternalActionBridge, name)
+            doc = inspect.getdoc(method)
+            self.assertIsNotNone(doc, f"Missing docstring for ExternalActionBridge.{name}")
+            self.assertGreater(len(doc.strip()), 30, f"Docstring too short for {name}")
+            # Ensure Args/Returns documentation is present
+            self.assertIn("Args", doc, f"{name} docstring should document Args")
+
+    def test_docstring_does_not_change_signature(self):
+        sig = inspect.signature(ExternalActionBridge.submit)
+        self.assertIn("description", sig.parameters)
+        self.assertIn("candidate_digest", sig.parameters)
+        self.assertIn("expires_seconds", sig.parameters)
 
 
 if __name__ == "__main__":
