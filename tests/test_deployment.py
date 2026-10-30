@@ -122,6 +122,14 @@ class PreparedRuntimeTests(unittest.TestCase):
             prepare_runtime(self.root)
         self.assertTrue((subject / "tasks.sqlite3").exists())
 
+    def test_prepare_runtime_emits_debug_log_on_success(self):
+        with self.assertLogs("remote_operator.deployment", level="DEBUG") as captured:
+            prepared = prepare_runtime(self.root)
+        self.assertTrue(prepared.is_dir())
+        self.assertEqual(len(captured.records), 1)
+        self.assertEqual(captured.records[0].getMessage(), f"deployment prepared: {prepared}")
+        self.assertEqual(captured.records[0].levelname, "DEBUG")
+
 
 class HostedDeploymentTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

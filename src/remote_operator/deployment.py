@@ -8,6 +8,7 @@ a recorded reservation, approval or applied effect. Modal Volumes do not offer
 distributed file locking, so this module never supports multi-writer layouts.
 """
 
+import logging
 import sqlite3
 from contextlib import asynccontextmanager
 
@@ -38,6 +39,7 @@ def prepare_runtime(root, volume=None):
     root = root.absolute()
     root.mkdir(parents=True, exist_ok=True)
     verify_stores(root)
+    logging.getLogger(__name__).debug("deployment prepared: %s", root)
     return root
 
 
