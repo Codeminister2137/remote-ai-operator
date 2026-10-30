@@ -124,7 +124,8 @@ class HostedSessions:
             raise SessionUnavailable()
         valid_subject(claims["s"])
         if claims["e"] <= self._clock():
-            raise SessionUnavailable("Session expired;reconnect to continue")
+            sid = self._identity(token).hex()[:8]
+            raise SessionUnavailable(f"Session {sid} expired;reconnect to continue")
         identity = self._identity(token)
         with self._lock:
             revoked = self._revoked.get(identity)

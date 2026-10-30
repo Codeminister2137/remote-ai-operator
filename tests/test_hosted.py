@@ -1,5 +1,6 @@
 """Hosted session, isolation and visitor-key checks;all model traffic is mocked."""
 
+import hashlib
 import json
 import tempfile
 import threading
@@ -151,6 +152,18 @@ class HostedSessionUnitTests(unittest.TestCase):
         self.now = 130
         with self.assertRaisesRegex(SessionUnavailable, "expired"):
             self.sessions.subject(token)
+
+    def test_expired_session_message_includes_session_context_without_secret(self):
+        token = self.sessions.open(CODE)
+        self.now = 130
+        sid = hashlib.sha256(token.encode()).digest().hex()[:8]
+        with self.assertRaises(SessionUnavailable) as exc:
+            self.sessions.subject(token)
+        msg = str(exc.exception)
+        self.assertIn(sid, msg)
+        self.assertIn("expired", msg.lower())
+        self.assertNotIn(CODE, msg)
+        self.assertNotIn(token, msg)
 
     def test_keyless_sessions_do_not_consume_the_attached_key_capacity(self):
         small = HostedSessions(
