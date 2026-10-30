@@ -437,3 +437,18 @@ def test_grant_duplicate_keys_handled_deterministically(tmp_path: Path) -> None:
     result2 = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
     assert result.returncode == result2.returncode
     assert result.stdout == result2.stdout
+
+def test_quoted_value_with_embedded_spaces_is_not_eligible_and_not_echoed(tmp_path: Path) -> None:
+    # Regression: quoted non-Meta provider credential value containing spaces
+    # must be treated as set (NOT ELIGIBLE in scripted mode) and the synthetic
+    # secret must not be echoed.
+    env_file = tmp_path / ".env"
+    secret = " synthetic value with spaces "
+    _write(env_file, f'OPENAI_API_KEY="{secret}"\n')
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == 1
+    assert "NOT ELIGIBLE" in result.stdout
+    assert "OPENAI_API_KEY" in result.stdout
+    assert secret not in result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+    assert "Traceback" not in result.stdout
