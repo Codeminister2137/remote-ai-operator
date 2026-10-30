@@ -40,6 +40,28 @@ def _parse_env(path: Path) -> dict[str, str]:
         line = _strip_ws_bom(raw_line)
         if line.startswith("export") and len(line) > 6 and line[6].isspace():
             line = _strip_ws_bom(line[6:])
+        # Handle BOM or other non-standard whitespace between export and key
+        # that was not recognized as isspace, e.g. export\ufeffKEY
+        # Normalise any leading BOM/zero-width after export removal loop.
+        # If the line still starts with export prefix due to intervening BOM,
+        # strip it iteratively.
+        # This prevents export\ufeffOPENAI_API_KEY from bypassing detection.
+        if line.startswith("export"):
+            # If there is still an export prefix it means the separator was
+            # not recognised (e.g. BOM). Remove export and any BOM/space.
+            remainder = line[6:]
+            # Only treat as export if remainder starts with BOM or whitespace or = gap
+            # Use strip of BOM and whitespace to see if we made progress.
+            stripped = _strip_ws_bom(remainder)
+            # Also strip any internal leading BOM characters explicitly
+            stripped2 = stripped.lstrip("\ufeff")
+            stripped2 = _strip_ws_bom(stripped2)
+            if stripped != remainder or stripped2 != stripped or remainder.startswith("\ufeff"):
+                # Heuristic: if original line had export + something, treat as export
+                # but avoid mis-classifying variables like exported_*
+                # exported_ has '_' immediately after, not BOM/space
+                if remainder and (remainder[0].isspace() or remainder[0] == "\ufeff"):
+                    line = stripped2
         if not line or line.startswith("#"):
             continue
         if "=" not in line:
@@ -79,6 +101,8 @@ def _check_grant_eligibility(grant: InferenceGrant) -> list[str]:
             ]
         return [f"Grant fails runtime validation: {exc}"]
     except (TypeError, ArithmeticError):
+        return ["Grant fails runtime validation: malformed field types."]
+    except Exception:
         return ["Grant fails runtime validation: malformed field types."]
     return []
 

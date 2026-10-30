@@ -353,3 +353,40 @@ def test_dotenv_edge_cases_preserve_behavior(
         assert "OPENAI_API_KEY" in result.stdout
     else:
         assert "ELIGIBLE" in result.stdout
+
+def test_export_with_bom_separator_cannot_hide_credential(tmp_path: Path) -> None:
+    # Reproduction for BOM-as-whitespace bypass: export\ufeffKEY previously
+    # left the export prefix unstripped, causing the env key to be
+    # "export\ufeffOPENAI_API_KEY" and evading the non-Meta check.
+    env_file = tmp_path / ".env"
+    _write(env_file, "export\ufeffOPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO\n")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == 1
+    assert "OPENAI_API_KEY" in result.stdout
+    assert "SYNTHETIC_DO_NOT_ECHO" not in result.stdout + result.stderr
+    assert "ELIGIBLE" not in result.stdout or "NOT ELIGIBLE" in result.stdout
+
+def test_grant_check_unexpected_exception_reports_not_eligible_without_traceback(tmp_path: Path, monkeypatch=None) -> None:
+    # Generic crash path: if InferenceGrant.check raises an unexpected
+    # exception (e.g. AssertionError/AttributeError) it previously
+    # propagated as a traceback and exit !=1 report. Must be reported as
+    # NOT ELIGIBLE without traceback.
+    # Simulate via a grant with a model that passes construction but whose
+    # check is monkey-patched in a subprocess would be complex; instead
+    # verify the script handles arbitrary exception types by injecting a
+    # grant file that triggers AttributeError inside check (model as int
+    # subclass edge). The patched code adds a broad except Exception.
+    # We validate that any such failure still yields NOT ELIGIBLE and no traceback.
+    env_file = tmp_path / ".env"
+    grant_file = tmp_path / "grant.json"
+    _write(env_file, "")
+    # Use a grant where model is valid but other field is crafted to
+    # provoke unexpected exception if implementation uses e.g. .strip() on non-str
+    # We use model valid and approved_usd as dict to likely cause AttributeError
+    grant = _valid_grant()
+    grant["approved_usd"] = {"x": 1}  # type that may raise AttributeError/TypeError beyond ValueError
+    _write(grant_file, grant)
+    result = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    assert result.returncode == 1
+    assert "NOT ELIGIBLE" in result.stdout
+    assert "Traceback" not in result.stderr
