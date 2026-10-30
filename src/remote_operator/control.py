@@ -287,7 +287,7 @@ class Operator:
             if task["status"] != "awaiting_approval" or not approval:
                 raise ValueError("No pending approval")
             if not isinstance(nonce, str):
-                raise ValueError("Invalid or expired approval")
+                raise ValueError("Invalid or expired approval")  # noqa: TRY004
             try:
                 nonce.encode("ascii")
             except UnicodeEncodeError:

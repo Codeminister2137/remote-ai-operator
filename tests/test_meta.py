@@ -2,7 +2,6 @@
 
 import ast
 import json
-import logging
 import tempfile
 import time
 import unittest
@@ -584,7 +583,7 @@ class MetaContracts(unittest.TestCase):
                     grant,
                     self.store,
                     transport=httpx.MockTransport(
-                        lambda request: httpx.Response(429, json=error_body)
+                        lambda request, _body=error_body: httpx.Response(429, json=_body)
                     ),
                 )
                 with self.assertRaises(MetaFailure) as failure:
@@ -664,11 +663,18 @@ class MetaContracts(unittest.TestCase):
         op = self.actor().next_operation([], prompt="task")
         self.assertEqual(op.name, "read_file")
         with self.assertLogs("remote_operator.meta", level="DEBUG") as captured:
-            logged = self.actor(grant=replace(self.grant, grant_id="approval-log-check")).next_operation([], prompt="task")
+            logged = self.actor(
+                grant=replace(self.grant, grant_id="approval-log-check")
+            ).next_operation([], prompt="task")
         self.assertEqual(logged.name, "read_file")
         self.assertTrue(any("approval granted" in msg.lower() for msg in captured.output))
         # failure path must not emit approval log
-        failing = self.actor(lambda request: httpx.Response(503, json={"error": {"message": "x"}}), replace(self.grant, grant_id="approval-log-fail"))
-        with self.assertRaises(MetaFailure):
-            with self.assertNoLogs("remote_operator.meta", level="DEBUG"):
-                failing.next_operation([], prompt="task")
+        failing = self.actor(
+            lambda request: httpx.Response(503, json={"error": {"message": "x"}}),
+            replace(self.grant, grant_id="approval-log-fail"),
+        )
+        with (
+            self.assertRaises(MetaFailure),
+            self.assertNoLogs("remote_operator.meta", level="DEBUG"),
+        ):
+            failing.next_operation([], prompt="task")

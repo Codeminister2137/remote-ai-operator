@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Literal, Mapping
+from typing import Literal
 
 SupervisorAction = Literal["task", "accept", "stop", "decision_needed"]
 
@@ -402,7 +403,7 @@ def run_development_loop(
             return False
         try:
             return bool(should_stop())
-        except Exception:
+        except Exception:  # noqa: BLE001 - callback failure counts as stop
             return True
 
     while True:
@@ -452,7 +453,7 @@ def run_development_loop(
         host("supervisor-called", f"budget_left={budget_left()}")
         try:
             decision = supervisor(view)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - injected role becomes outcome
             host("error-supervisor", f"{type(exc).__name__}")
             return FinalState(
                 "error-supervisor",
@@ -635,7 +636,7 @@ def run_development_loop(
         host("implementer-called", decision.task[:200])
         try:
             batch = implementer(ImplementerView(objective, decision.task, targets, dict(current)))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - injected role becomes outcome
             host("error-implementer", f"{type(exc).__name__}")
             return FinalState(
                 "error-implementer",
@@ -740,7 +741,7 @@ def run_development_loop(
             )
         try:
             outcome = validator(exact_bytes)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - validator failure is a stop outcome
             host("unknown-validator", f"{type(exc).__name__}; effects preserved, stopping")
             return FinalState(
                 "stopped-unknown-validator",

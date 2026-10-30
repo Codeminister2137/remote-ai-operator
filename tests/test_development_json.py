@@ -186,6 +186,7 @@ def test_rejects_non_string_action():
 
     # explicit cases from task description
     for bad_action in [1, True, None]:
+
         def send2(role: str, payload: dict[str, Any], _bad: Any = bad_action) -> dict[str, Any]:
             return {"action": _bad}
 
@@ -218,7 +219,9 @@ def test_rejects_non_string_targets_no_mutation():
         before_view_snapshot = dict(view.snapshot)
         before_bad = dict(bad)
         # copy targets list for mutation check
-        before_targets = list(bad["targets"]) if isinstance(bad.get("targets"), list) else bad.get("targets")
+        before_targets = (
+            list(bad["targets"]) if isinstance(bad.get("targets"), list) else bad.get("targets")
+        )
 
         def send(role: str, payload: dict[str, Any], _bad: Any = bad) -> dict[str, Any]:
             return _bad
@@ -235,15 +238,19 @@ def test_rejects_non_string_targets_no_mutation():
 
     # strict bool/int distinction: True is not a valid string target even though bool is subclass of int
     for bad_targets in [["a.txt", True], [True], [123]]:
+
         def send2(role: str, payload: dict[str, Any], _bt: Any = bad_targets) -> dict[str, Any]:
             return {"action": "task", "task": "do", "targets": _bt}
+
         with pytest.raises((ValueError, TypeError)):
             JsonRoles(send2).supervisor(_sup_view())
 
     # valid targets still accepted to ensure no over-rejection
     for good in [["a.txt"], ["a.txt", "b.txt"], []]:
+
         def send_ok(role: str, payload: dict[str, Any], _g: Any = good) -> dict[str, Any]:
             return {"action": "task", "task": "do", "targets": _g}
+
         decision = JsonRoles(send_ok).supervisor(_sup_view())
         assert decision.targets == tuple(good)
 
@@ -256,7 +263,10 @@ def test_empty_targets_rejected():
         ["", "b.txt"],
         ["a.txt", "", "c.txt"],
     ]:
-        def send(role: str, payload: dict[str, Any], _bad_targets: Any = bad_targets) -> dict[str, Any]:
+
+        def send(
+            role: str, payload: dict[str, Any], _bad_targets: Any = bad_targets
+        ) -> dict[str, Any]:
             return {"action": "task", "task": "do", "targets": _bad_targets}
 
         with pytest.raises(ValueError):

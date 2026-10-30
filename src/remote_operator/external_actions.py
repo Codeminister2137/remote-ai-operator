@@ -267,11 +267,13 @@ class ExternalActionBridge:
                 self._expire(action, now_val)
                 raise ValueError(f"Approval expired for action {action_id}")
             if action.status != "submitted":
-                raise ValueError(f"Action {action_id} is not awaiting approval (status={action.status})")
+                raise ValueError(
+                    f"Action {action_id} is not awaiting approval (status={action.status})"
+                )
             if now_val >= action.expires:
                 raise ValueError(f"Approval expired for action {action_id}")
             if not isinstance(nonce, str):
-                raise ValueError("Invalid approval nonce")
+                raise ValueError("Invalid approval nonce")  # noqa: TRY004
             try:
                 nonce_ok = secrets.compare_digest(action.nonce, nonce)
             except TypeError:
@@ -296,8 +298,12 @@ class ExternalActionBridge:
                     raise KeyError("Unknown external action")
                 current_action = ExternalAction(**json.loads(current[0]))
                 if current_action.status != "submitted":
-                    raise ValueError(f"Action {action_id} is not awaiting approval (status={current_action.status})")
-                raise ValueError(f"Action {action_id} is not awaiting approval (status={current_action.status})")
+                    raise ValueError(
+                        f"Action {action_id} is not awaiting approval (status={current_action.status})"
+                    )
+                raise ValueError(
+                    f"Action {action_id} is not awaiting approval (status={current_action.status})"
+                )
         self._store._durable()
         return resolved
 

@@ -55,26 +55,40 @@ GOOD = b"v2 ok\n"
 
 calls = {"implementer": 0}
 
+
 def send(role, payload):
     if role == "supervisor":
         if payload["last_passed"]:
             return {"action": "accept", "reason": "passing bytes reviewed"}
         if payload["tasks_used"] == 0:
-            return {"action": "task", "task": "write v2", "targets": ["notes.txt"], "reason": "first try"}
+            return {
+                "action": "task",
+                "task": "write v2",
+                "targets": ["notes.txt"],
+                "reason": "first try",
+            }
         assert "want exact" in payload["last_validation_output"]
-        return {"action": "task", "task": "fix per validator feedback", "targets": ["notes.txt"], "reason": "repair"}
+        return {
+            "action": "task",
+            "task": "fix per validator feedback",
+            "targets": ["notes.txt"],
+            "reason": "repair",
+        }
     assert role == "implementer"
     calls["implementer"] += 1
     if calls["implementer"] == 1:
         return {"changes": {"notes.txt": "bad draft\n"}}
     return {"changes": {"notes.txt": "v2 ok\n"}}
 
+
 roles = JsonRoles(send)
+
 
 def validator(snapshot):
     if snapshot.get("notes.txt") == GOOD:
         return ValidationResult(passed=True, output="ok")
     return ValidationResult(passed=False, output="want exact 'v2 ok' line")
+
 
 with tempfile.TemporaryDirectory() as tmp:
     final = run_development_loop(

@@ -204,7 +204,9 @@ def _base_app(*, public_origin, sessions):
     async def http_exception_handler(request, exc):
         if exc.status_code == 404:
             return JSONResponse({"detail": f"Not Found: {request.url.path}"}, status_code=404)
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+        return JSONResponse(
+            {"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers
+        )
 
     @app.get("/", response_class=HTMLResponse)
     def index():

@@ -20,19 +20,19 @@ from remote_operator.runner import DEFAULT_IMAGE, Execution, SourceValidator
 class ModalValidator(SourceValidator):
     """Submit only registered source/checks to a fresh network-blocked Sandbox.
 
-    This validator extends :class:`SourceValidator` to run checks in an
-explicitly authorized, ephemeral Modal Sandbox with networking blocked.
+        This validator extends :class:`SourceValidator` to run checks in an
+    explicitly authorized, ephemeral Modal Sandbox with networking blocked.
 
-    Security boundaries:
-        * Only files registered via :meth:`request` (workspace issue source and
-          known protected checks) are transferred to the sandbox.
-        * The sandbox is created fresh per run with ``block_network=True``,
-          no secrets/env/volumes forwarded, and capped CPU/memory.
-        * Remote execution requires explicit opt-in via
-          ``allow_remote_execution=True``; otherwise no SDK call is made.
-        * Execution is bounded by timeout/deadline policies and bounded
-          supervisor receipts; untrusted model/repository text is treated as
-          data and validated before acceptance.
+        Security boundaries:
+            * Only files registered via :meth:`request` (workspace issue source and
+              known protected checks) are transferred to the sandbox.
+            * The sandbox is created fresh per run with ``block_network=True``,
+              no secrets/env/volumes forwarded, and capped CPU/memory.
+            * Remote execution requires explicit opt-in via
+              ``allow_remote_execution=True``; otherwise no SDK call is made.
+            * Execution is bounded by timeout/deadline policies and bounded
+              supervisor receipts; untrusted model/repository text is treated as
+              data and validated before acceptance.
     """
 
     runner_name = "modal_sandbox"

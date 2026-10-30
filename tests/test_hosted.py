@@ -156,7 +156,7 @@ class HostedSessionUnitTests(unittest.TestCase):
     def test_expired_session_message_includes_session_context_without_secret(self):
         token = self.sessions.open(CODE)
         self.now = 130
-        sid = hashlib.sha256(token.encode()).digest().hex()[:8]
+        sid = hashlib.sha256(token.encode()).hexdigest()[:8]
         with self.assertRaises(SessionUnavailable) as exc:
             self.sessions.subject(token)
         msg = str(exc.exception)

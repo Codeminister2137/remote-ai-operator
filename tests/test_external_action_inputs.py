@@ -30,14 +30,13 @@ class NonceContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             bridge = ExternalActionBridge(Store(Path(folder) / "state.sqlite3"))
             for value in (None, 17, [], {}, b"a" * 32):
-                with self.subTest(value_type=type(value).__name__):
-                    with self.assertRaises(ValueError):
-                        bridge.get(value)
+                with self.subTest(value_type=type(value).__name__), self.assertRaises(ValueError):
+                    bridge.get(value)
 
 
 class ScopedModuleDocstring(unittest.TestCase):
     def test_scoped_module_has_docstring(self):
-        import remote_operator.scoped as scoped
+        from remote_operator import scoped
 
         self.assertTrue(scoped.__doc__)
         self.assertTrue(scoped.__doc__.strip())

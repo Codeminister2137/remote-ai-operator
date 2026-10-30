@@ -345,23 +345,47 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         """Regression: public handlers must retain descriptive docstrings."""
         import ast
         import pathlib
+
         source = pathlib.Path("src/remote_operator/web.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
         required = {"_origin", "create_app", "create_hosted_app"}
         found = {}
+        handlers = {
+            "index",
+            "javascript",
+            "stylesheet",
+            "submit",
+            "list_tasks",
+            "review",
+            "events",
+            "run",
+            "approve",
+            "reject",
+            "reconcile",
+            "cancel",
+            "sample",
+            "revalidate",
+            "allowance",
+            "submit_external",
+            "list_external",
+            "review_external",
+            "approve_external",
+            "reject_external",
+            "cancel_external",
+            "configuration",
+            "open_session",
+            "close_session",
+            "attach_key",
+            "detach_key",
+            "owner",
+            "visitor",
+        }
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name in required or node.name in {
-                    "index", "javascript", "stylesheet", "submit", "list_tasks",
-                    "review", "events", "run", "approve", "reject", "reconcile",
-                    "cancel", "sample", "revalidate", "allowance", "submit_external",
-                    "list_external", "review_external", "approve_external",
-                    "reject_external", "cancel_external", "configuration",
-                    "open_session", "close_session", "attach_key", "detach_key",
-                    "owner", "visitor"
-                }:
-                    doc = ast.get_docstring(node)
-                    found[node.name] = doc
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                node.name in required or node.name in handlers
+            ):
+                doc = ast.get_docstring(node)
+                found[node.name] = doc
         for name in required:
             self.assertIn(name, found, f"missing handler {name}")
             self.assertTrue(found[name], f"{name} missing docstring")

@@ -125,9 +125,9 @@ def test_path_refusals_all_batch_zero_writes(tmp_path):
     for bad in bad_batches:
         state = {"n": 0}
 
-        def supervisor(view: SupervisorView):
-            state["n"] += 1
-            if state["n"] > 1:
+        def supervisor(view: SupervisorView, _state=state):
+            _state["n"] += 1
+            if _state["n"] > 1:
                 return SupervisorDecision("stop", reason="done")
             return SupervisorDecision("task", task="go")
 

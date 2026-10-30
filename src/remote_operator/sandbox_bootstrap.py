@@ -115,6 +115,8 @@ if __name__ == "__main__":
     if "--help" in sys.argv or "-h" in sys.argv:
         print("Usage: sandbox_bootstrap.py < request.json")
         print("Trusted Linux supervisor - runs only inside an explicitly isolated code sandbox.")
-        print("Reads JSON request from stdin with files/entry/timeout/payload; --help shows this message.")
+        print(
+            "Reads JSON request from stdin with files/entry/timeout/payload; --help shows this message."
+        )
         sys.exit(0)
     main()

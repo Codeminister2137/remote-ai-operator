@@ -154,8 +154,12 @@ class TestExternalActionsDocstrings(unittest.TestCase):
     def test_public_api_has_docstrings(self):
         # Check class and public methods have meaningful docstrings
         self.assertTrue(ExternalAction.__doc__ and len(ExternalAction.__doc__.strip()) > 20)
-        self.assertTrue(ExternalAction.to_dict.__doc__ and "Returns" in ExternalAction.to_dict.__doc__)
-        self.assertTrue(ExternalActionBridge.__doc__ and len(ExternalActionBridge.__doc__.strip()) > 20)
+        self.assertTrue(
+            ExternalAction.to_dict.__doc__ and "Returns" in ExternalAction.to_dict.__doc__
+        )
+        self.assertTrue(
+            ExternalActionBridge.__doc__ and len(ExternalActionBridge.__doc__.strip()) > 20
+        )
         for name in ("submit", "get", "recent", "approve", "reject", "cancel"):
             method = getattr(ExternalActionBridge, name)
             doc = inspect.getdoc(method)

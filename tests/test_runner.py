@@ -98,6 +98,7 @@ class RunnerTests(unittest.TestCase):
                 [sys.executable, "-I", "-B", "src/remote_operator/sandbox_bootstrap.py", flag],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             self.assertEqual(result.returncode, 0)
             combined = result.stdout.lower() + result.stderr.lower()
@@ -109,6 +110,7 @@ class RunnerTests(unittest.TestCase):
             input="",
             capture_output=True,
             text=True,
+            check=False,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("Usage: sandbox_bootstrap.py", result.stdout)
@@ -116,7 +118,9 @@ class RunnerTests(unittest.TestCase):
     def test_public_api_docstrings_exist_and_behavior_unchanged(self):
         """Regression: docstring-only change preserves public API and behavior."""
         import inspect
-        from remote_operator.runner import Execution, SourceValidator, DockerValidator
+
+        from remote_operator.runner import DockerValidator, Execution, SourceValidator
+
         # Public classes and methods remain exposed with docstrings
         for cls in (Execution, SourceValidator, DockerValidator):
             self.assertIsNotNone(cls.__doc__)
@@ -127,7 +131,9 @@ class RunnerTests(unittest.TestCase):
             self.assertIsNotNone(obj.__doc__)
             self.assertGreater(len(obj.__doc__.strip()), 0)
         # Signatures unchanged
-        self.assertEqual(inspect.signature(DockerValidator.command).parameters["entry"].default, "run_checks.py")
+        self.assertEqual(
+            inspect.signature(DockerValidator.command).parameters["entry"].default, "run_checks.py"
+        )
         # Behavior unchanged: invalid entry still raises
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

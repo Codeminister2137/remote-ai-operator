@@ -56,12 +56,15 @@ def _parse_env(path: Path) -> dict[str, str]:
             # Also strip any internal leading BOM characters explicitly
             stripped2 = stripped.lstrip("\ufeff")
             stripped2 = _strip_ws_bom(stripped2)
-            if stripped != remainder or stripped2 != stripped or remainder.startswith("\ufeff"):
-                # Heuristic: if original line had export + something, treat as export
-                # but avoid mis-classifying variables like exported_*
-                # exported_ has '_' immediately after, not BOM/space
-                if remainder and (remainder[0].isspace() or remainder[0] == "\ufeff"):
-                    line = stripped2
+            # Heuristic: if original line had export + something, treat as export
+            # but avoid mis-classifying variables like exported_*
+            # exported_ has '_' immediately after, not BOM/space
+            if (
+                (stripped != remainder or stripped2 != stripped or remainder.startswith("\ufeff"))
+                and remainder
+                and (remainder[0].isspace() or remainder[0] == "\ufeff")
+            ):
+                line = stripped2
         if not line or line.startswith("#"):
             continue
         if "=" not in line:
@@ -102,7 +105,7 @@ def _check_grant_eligibility(grant: InferenceGrant) -> list[str]:
         return [f"Grant fails runtime validation: {exc}"]
     except (TypeError, ArithmeticError):
         return ["Grant fails runtime validation: malformed field types."]
-    except Exception:
+    except Exception:  # noqa: BLE001 - checker reports malformed input, never raises
         return ["Grant fails runtime validation: malformed field types."]
     return []
 

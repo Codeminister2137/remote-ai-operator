@@ -354,6 +354,7 @@ def test_dotenv_edge_cases_preserve_behavior(
     else:
         assert "ELIGIBLE" in result.stdout
 
+
 def test_export_with_bom_separator_cannot_hide_credential(tmp_path: Path) -> None:
     # Reproduction for BOM-as-whitespace bypass: export\ufeffKEY previously
     # left the export prefix unstripped, causing the env key to be
@@ -366,7 +367,10 @@ def test_export_with_bom_separator_cannot_hide_credential(tmp_path: Path) -> Non
     assert "SYNTHETIC_DO_NOT_ECHO" not in result.stdout + result.stderr
     assert "ELIGIBLE" not in result.stdout or "NOT ELIGIBLE" in result.stdout
 
-def test_grant_check_unexpected_exception_reports_not_eligible_without_traceback(tmp_path: Path, monkeypatch=None) -> None:
+
+def test_grant_check_unexpected_exception_reports_not_eligible_without_traceback(
+    tmp_path: Path, monkeypatch=None
+) -> None:
     # Generic crash path: if InferenceGrant.check raises an unexpected
     # exception (e.g. AssertionError/AttributeError) it previously
     # propagated as a traceback and exit !=1 report. Must be reported as
@@ -384,14 +388,20 @@ def test_grant_check_unexpected_exception_reports_not_eligible_without_traceback
     # provoke unexpected exception if implementation uses e.g. .strip() on non-str
     # We use model valid and approved_usd as dict to likely cause AttributeError
     grant = _valid_grant()
-    grant["approved_usd"] = {"x": 1}  # type that may raise AttributeError/TypeError beyond ValueError
+    grant["approved_usd"] = {
+        "x": 1
+    }  # type that may raise AttributeError/TypeError beyond ValueError
     _write(grant_file, grant)
-    result = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    result = _run(
+        "--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta"
+    )
     assert result.returncode == 1
     assert "NOT ELIGIBLE" in result.stdout
     assert "Traceback" not in result.stderr
 
+
 # --- Focused regression tests for uncovered branches ---
+
 
 def test_env_line_without_equals_is_ignored(tmp_path: Path) -> None:
     # Line with no '=' should be ignored and not crash; scripted mode remains ELIGIBLE.
@@ -403,16 +413,20 @@ def test_env_line_without_equals_is_ignored(tmp_path: Path) -> None:
     assert "Traceback" not in result.stderr
     assert "NOEQUALS" not in result.stdout + result.stderr
 
+
 def test_grant_json_list_is_not_eligible_without_traceback_or_echo(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     grant_file = tmp_path / "grant.json"
     _write(env_file, "")
-    _write(grant_file, '[]')
-    result = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    _write(grant_file, "[]")
+    result = _run(
+        "--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta"
+    )
     assert result.returncode == 1
     assert "NOT ELIGIBLE" in result.stdout
     assert "Traceback" not in result.stderr
     assert "Traceback" not in result.stdout
+
 
 def test_grant_duplicate_keys_handled_deterministically(tmp_path: Path) -> None:
     # JSON with duplicate keys - last occurrence wins per stdlib; must not echo payload or traceback.
@@ -423,20 +437,27 @@ def test_grant_duplicate_keys_handled_deterministically(tmp_path: Path) -> None:
     # and also test reverse determinism. Payload value must not be echoed.
     grant = _valid_grant()
     # Build raw JSON string with duplicate key manually
-    dup_payload = '{"grant_id":"fixture-123","model":"DO_NOT_ECHO_ME","model":"muse-spark-fixture",'\
-                  f'"expires_at":{grant["expires_at"]},"max_requests":10,"max_input_bytes":100000,'\
-                  '"max_output_tokens":1000,"approved_usd":"1.00","input_usd_per_million":"0.50",'\
-                  '"output_usd_per_million":"0.50","credits_verified":true,"local_spending_limit_accepted":true}'
+    dup_payload = (
+        '{"grant_id":"fixture-123","model":"DO_NOT_ECHO_ME","model":"muse-spark-fixture",'
+        f'"expires_at":{grant["expires_at"]},"max_requests":10,"max_input_bytes":100000,'
+        '"max_output_tokens":1000,"approved_usd":"1.00","input_usd_per_million":"0.50",'
+        '"output_usd_per_million":"0.50","credits_verified":true,"local_spending_limit_accepted":true}'
+    )
     _write(grant_file, dup_payload)
-    result = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    result = _run(
+        "--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta"
+    )
     # Deterministic handling: no traceback, no echo of duplicate payload
     assert "Traceback" not in result.stderr
     assert "Traceback" not in result.stdout
     assert "DO_NOT_ECHO_ME" not in result.stdout + result.stderr
     # Run again to verify deterministic result
-    result2 = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    result2 = _run(
+        "--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta"
+    )
     assert result.returncode == result2.returncode
     assert result.stdout == result2.stdout
+
 
 def test_quoted_value_with_embedded_spaces_is_not_eligible_and_not_echoed(tmp_path: Path) -> None:
     # Regression: quoted non-Meta provider credential value containing spaces
@@ -452,6 +473,7 @@ def test_quoted_value_with_embedded_spaces_is_not_eligible_and_not_echoed(tmp_pa
     assert secret not in result.stdout + result.stderr
     assert "Traceback" not in result.stderr
     assert "Traceback" not in result.stdout
+
 
 def test_empty_value_after_equals_is_treated_as_not_set(tmp_path: Path) -> None:
     # Regression: empty value after equals (e.g. OPENAI_API_KEY=) should be
