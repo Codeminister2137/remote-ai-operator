@@ -357,6 +357,13 @@ class StoreModuleDocstringTests(unittest.TestCase):
         self.assertTrue(store_module.__doc__.strip())
         self.assertEqual(store_module.__doc__, expected)
 
+    def test_unknown_task_error_includes_identifier(self):
+        store = Store(Path(tempfile.mkdtemp()) / "tasks.sqlite3")
+        synthetic_id = "synthetic-id-12345"
+        with self.assertRaises(KeyError) as ctx:
+            store.get(synthetic_id)
+        self.assertIn(synthetic_id, str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

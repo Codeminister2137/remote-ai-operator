@@ -61,7 +61,7 @@ class Store:
         with self.connect() as db:
             row = db.execute("SELECT record FROM tasks WHERE id=?", (task_id,)).fetchone()
         if row is None:
-            raise KeyError("Unknown task")
+            raise KeyError(f"Unknown task: {task_id}")
         return json.loads(row[0])
 
     def recent_tasks(self, limit: int = 20) -> list[dict]:
