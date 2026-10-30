@@ -191,7 +191,9 @@ class SessionKeys:
             if not secrets.compare_digest(entry.subject, subject):
                 raise SessionUnavailable()
             if entry.key is None:
-                raise SessionUnavailable("No visitor model key is attached to this session")
+                raise SessionUnavailable(
+                    f"No visitor model key is attached to this session for subject '{subject}'"
+                )
             return entry.key
 
     def revoke(self, token):
