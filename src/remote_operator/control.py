@@ -3,6 +3,7 @@
 import difflib
 import hashlib
 import json
+import logging
 import os
 import secrets
 import tempfile
@@ -14,6 +15,8 @@ from typing import Protocol
 
 from remote_operator.locking import ProcessLock
 from remote_operator.store import Store
+
+logger = logging.getLogger(__name__)
 
 SOURCE = "issue_import.py"
 MAX_SOURCE_BYTES = 32_768
@@ -310,6 +313,7 @@ class Operator:
                 task["approval"] = None
                 self.store.save(task, "approval_invalidated")
                 raise ValueError("Reviewed source, target or evidence changed")
+            logger.debug("approval consumed for task %s", task_id)
             task["status"] = "applying"
             self.store.save(task, "apply_started")
             write_source(target, source)

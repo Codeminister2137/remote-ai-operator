@@ -1,5 +1,6 @@
 """Independent regression checks for task effects, recovery and approval boundaries."""
 
+import logging
 import tempfile
 import unittest
 from pathlib import Path
@@ -57,6 +58,16 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(read_source(target), REFERENCE)
         with self.assertRaises(ValueError):
             self.operator.approve(self.task_id, task["approval"]["nonce"])
+
+    def test_approval_consumed_emits_debug_log(self):
+        task = self.ready()
+        with self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured:
+            result = self.operator.approve(self.task_id, task["approval"]["nonce"])
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelname, "DEBUG")
+        self.assertIn(self.task_id, record.getMessage())
 
     def test_candidate_change_invalidates_approval(self):
         task = self.ready()
