@@ -190,6 +190,16 @@ def _base_app(*, public_origin, sessions):
     async def unknown_task(request, exc):
         return JSONResponse({"detail": "Unknown task"}, status_code=404)
 
+    @app.exception_handler(404)
+    async def not_found(request, exc):
+        return JSONResponse({"detail": f"Not Found: {request.url.path}"}, status_code=404)
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request, exc):
+        if exc.status_code == 404:
+            return JSONResponse({"detail": f"Not Found: {request.url.path}"}, status_code=404)
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+
     @app.get("/", response_class=HTMLResponse)
     def index():
         return Path(__file__).with_name("index.html").read_text(encoding="utf-8")

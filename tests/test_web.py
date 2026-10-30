@@ -330,3 +330,14 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["status"], "completed")
         self.assertEqual(response.json()["applied_digest"], digest(REFERENCE))
         self.assertIsNone(response.json()["approval"])
+
+    async def test_unknown_path_returns_404_with_path_and_no_internal_leak(self):
+        missing = "/api/does-not-exist-404-regression"
+        response = await self.client.get(missing, headers=self.auth)
+        self.assertEqual(response.status_code, 404)
+        body = response.json()
+        self.assertIn(missing, body.get("detail", ""))
+        text = response.text.lower()
+        for leak in ("traceback", "stack", "internal", "exception"):
+            self.assertNotIn(leak, text)
+
