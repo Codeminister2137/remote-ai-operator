@@ -291,3 +291,65 @@ def test_non_meta_credential_violations_have_stable_order_across_hash_seeds(
         assert failures == [f"- [FAIL] {message}" for message in expected]
         outputs.append(failures)
     assert all(report == outputs[0] for report in outputs[1:])
+
+
+# --- Export normalization regressions ---
+#
+# `str.splitlines` already splits on vertical tab and form feed, so those inputs
+# were refused before this change. A non-breaking space after `export`, and a BOM
+# before `export` on a later line, were not.
+
+
+@pytest.mark.parametrize("ws_char", [" ", "\t", "   ", "\x0b", "\x0c", "\xa0"])
+def test_export_with_any_whitespace_cannot_hide_credential(tmp_path: Path, ws_char: str) -> None:
+    env_file = tmp_path / ".env"
+    _write(env_file, f"export{ws_char}OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO\n")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == 1
+    assert "OPENAI_API_KEY" in result.stdout
+    assert "SYNTHETIC_DO_NOT_ECHO" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "\ufeffexport OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO",
+        "\ufeff export\tOPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO",
+    ],
+)
+def test_mid_file_bom_before_export_cannot_hide_credential(tmp_path: Path, line: str) -> None:
+    env_file = tmp_path / ".env"
+    _write(env_file, "META_API_KEY=ok\n" + line + "\n")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == 1
+    assert "OPENAI_API_KEY" in result.stdout
+    assert "SYNTHETIC_DO_NOT_ECHO" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "assignment,expected",
+    [
+        ("export  OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("export\tOPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("export OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 1),
+        ("export OPENAI_API_KEY=''", 0),
+        ("export OPENAI_API_KEY=", 0),
+        ("export META_API_KEY=SYNTHETIC_DO_NOT_ECHO", 0),
+        ("exported_OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 0),
+        ("# export OPENAI_API_KEY=SYNTHETIC_DO_NOT_ECHO", 0),
+        ("export", 0),
+    ],
+)
+def test_dotenv_edge_cases_preserve_behavior(
+    tmp_path: Path, assignment: str, expected: int
+) -> None:
+    env_file = tmp_path / ".env"
+    _write(env_file, assignment + "\n")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == expected
+    assert "SYNTHETIC_DO_NOT_ECHO" not in result.stdout + result.stderr
+    if expected:
+        assert "OPENAI_API_KEY" in result.stdout
+    else:
+        assert "ELIGIBLE" in result.stdout

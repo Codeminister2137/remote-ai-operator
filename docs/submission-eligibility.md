@@ -16,7 +16,10 @@ uv run --locked python scripts/check_submission_eligibility.py --env-file .env -
 The check makes no provider calls. It validates the explicit mode and supplied
 file, refuses its listed non-Meta credentials, and applies the same grant checks
 as the runtime: model, expiry, verified flags, finite allowance and positive
-prices. Invalid configuration exits nonzero. Keep actual keys and grants private.
+prices. Assignment lines may use an optional \export\ prefix; leading and
+trailing whitespace and BOM characters are normalized before the key is compared, so
+unusual whitespace cannot disguise a refused credential. Invalid configuration
+exits nonzero. Keep actual keys and grants private.
 
 The check reads only the supplied dotenv file as UTF-8, including a UTF-8 BOM if present, and accepts an optional `export` prefix followed by one or more spaces or tabs. It refuses a file containing a non-empty value for any credential on the checker's non-Meta credential list; credential violations report key names without echoing values. This file-only scope is unchanged: the check does not inspect inherited environment variables or the deployed runtime.
 

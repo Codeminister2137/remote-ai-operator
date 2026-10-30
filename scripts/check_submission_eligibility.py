@@ -22,12 +22,24 @@ from pathlib import Path
 from remote_operator.meta import InferenceGrant
 
 
+def _strip_ws_bom(s: str) -> str:
+    # Remove leading/trailing whitespace and BOM characters iteratively
+    # so interleaved whitespace/BOM is fully normalized.
+    prev = None
+    cur = s
+    while prev != cur:
+        prev = cur
+        cur = cur.strip()
+        cur = cur.strip("\ufeff")
+    return cur
+
+
 def _parse_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = line.strip()
-        if line.startswith("export") and len(line) > 6 and line[6] in (" ", "\t"):
-            line = line[6:].lstrip(" \t")
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = _strip_ws_bom(raw_line)
+        if line.startswith("export") and len(line) > 6 and line[6].isspace():
+            line = _strip_ws_bom(line[6:])
         if not line or line.startswith("#"):
             continue
         if "=" not in line:

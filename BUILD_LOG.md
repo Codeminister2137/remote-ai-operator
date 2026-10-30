@@ -423,3 +423,17 @@ is temporary developer tooling; live workflow acceptance is NOT yet achieved.
 2026-10-30: Meta supervisor and Meta implementer authored reusable JSON role adapters and regressions through the actual foreground development loop. Independent Modal feedback drove candidate repairs without Codex continuations. Host review requested direct controller imports instead of unsafe class discovery; fresh Meta repair and independent regression completed. Final protected suite:236 passed,8 skipped,132 subtests, cleanup verified. Host removed an unused import and formatted files. Original failed phases preserved; no production approval change or private runtime dependency.
 
 2026-10-30: The reusable foreground launcher connected actual Meta supervisor/implementer for a public development guide and a cancellation fix. Meta added the missing stop poll after file application before isolated validation; host supplied the regression and corrected documentation overclaims. Final full suite237passed8skip132subtests; protected guide example executes only in Modal and verifies feedback/repair/acceptance. No Codex continuations between role calls, no daemon or public release.
+
+## Eligibility checker dotenv normalization - 2026-10-30
+
+Baseten-hosted `meta-models/muse-spark-open-1026` proposed the parser change
+through a bounded single-request local implementer over the existing adapter.
+Host review found the task premise partly wrong: `str.splitlines` already splits
+on vertical tab and form feed, so those inputs were refused before this change.
+The real defects were a non-breaking space after `export` and a BOM before
+`export` on a later line; both previously parsed the key as
+`export<ws>OPENAI_API_KEY` and reported the file eligible. Host corrected the
+regression labels and parametrization before accepting the change. Validation:
+55 checker tests and the full suite 202passed,8skips,69subtests on Windows with
+the existing virtual environment; Ruff clean. No eligibility policy, CLI, grant
+or dependency change; no deployment.
