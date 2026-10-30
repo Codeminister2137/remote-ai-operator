@@ -67,6 +67,18 @@ class RunnerTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 DockerValidator(Path("."), timeout=value)
 
+    def test_invalid_timeout_error_mentions_offending_value(self):
+        # Regression: error message must include the specific invalid timeout value
+        for value in (0, -1, 121):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError) as cm:
+                    DockerValidator(Path("."), timeout=value)
+                self.assertIn(str(value), str(cm.exception))
+        # Check non-numeric edge case still mentions type/value
+        with self.assertRaises(ValueError) as cm:
+            DockerValidator(Path("."), timeout=float("nan"))
+        self.assertIn("nan", str(cm.exception).lower())
+
     def test_deadline_policy_changes_invalidate_old_approval_policy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

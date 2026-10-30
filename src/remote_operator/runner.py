@@ -36,7 +36,7 @@ class SourceValidator:
             or not math.isfinite(timeout)
             or not 0 < timeout <= 120
         ):
-            raise ValueError("Runner timeout must be finite,positive and at most120 seconds")
+            raise ValueError(f"Runner timeout must be finite,positive and at most120 seconds: {timeout!r}")
         self.checks = checks.resolve()
         self.image = image
         self.timeout = float(timeout)
