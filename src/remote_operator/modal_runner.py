@@ -47,7 +47,7 @@ class ModalValidator(SourceValidator):
 
     def request(self, workspace, entry, payload):
         if entry not in {"run_checks.py", "preview.py"}:
-            raise ValueError("Unknown protected runner entry")
+            raise ValueError(f"Unknown protected runner entry: {entry}")
         files = {"/workspace/issue_import.py": read_source(workspace)}
         for name in ("run_checks.py", "test_import.py", "preview.py"):
             path = self.checks / name
