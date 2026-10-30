@@ -45,6 +45,23 @@ class SupervisorView:
 
 @dataclass(frozen=True)
 class SupervisorDecision:
+    """Decision emitted by the supervisor for the development loop.
+
+    Represents the untrusted model/supervisor's chosen next action.
+    The host validates the action and binds execution to the reviewed
+    bytes; changed workspace state invalidates any pending approval.
+
+    Attributes:
+        action: Next control action ("task", "accept", "stop",
+            "decision_needed").
+        task: Task description when action is "task"; bounded non-empty
+            string.
+        targets: Allowlist subset the implementer may write in this turn;
+            must be subset of immutable allowlist.
+        reason: Human-readable reason for the decision, truncated by host.
+        provenance: Source marker; always "model" for supervisor output.
+    """
+
     action: SupervisorAction
     task: str = ""
     targets: tuple[str, ...] = ()
@@ -62,6 +79,19 @@ class ImplementerView:
 
 @dataclass(frozen=True)
 class ValidationResult:
+    """Outcome of the host-trusted isolated validator.
+
+    Produced only by the injected trusted validator (never by a model)
+    after executing candidate bytes in the approved isolated runner.
+    Records whether the candidate satisfies acceptance checks.
+
+    Attributes:
+        passed: True if validation succeeded and candidate may be accepted.
+        output: Bounded diagnostic output / logs from the validator.
+        provenance: Source marker; always "host" to distinguish from
+            untrusted model output.
+    """
+
     passed: bool
     output: str
     provenance: Literal["host"] = "host"
@@ -289,6 +319,41 @@ def run_development_loop(
     receipt_sink: ReceiptSink | None = None,
     should_stop: ShouldStop | None = None,
 ) -> FinalState:
+    """Run the host-controlled supervisor/implementer development loop.
+
+    The host drives the loop, enforcing path/resource/tool boundaries,
+    workspace hashing, and approval binding. The supervisor (untrusted)
+    proposes tasks or acceptance; the implementer produces candidate file
+    batches; the trusted validator (host provenance) checks them in
+    isolation.
+
+    Args:
+        workspace: Root directory for allowlisted file effects.
+        objective: Bounded task objective shown to supervisor/implementer.
+        allowlist: Immutable tuple of POSIX-relative file paths that may
+            be read/written; entries must be unique and within workspace.
+        supervisor: Callable receiving a SupervisorView and returning a
+            SupervisorDecision (provenance "model").
+        implementer: Callable receiving an ImplementerView and returning
+            a mapping of path->utf-8 string content for the candidate
+            batch.
+        validator: Trusted host callable receiving exact candidate bytes
+            and returning a ValidationResult with provenance "host".
+        request_budget: Total supervisor+implementer calls allowed.
+        max_tasks: Maximum task iterations.
+        max_repairs: Maximum repair iterations after failures.
+        max_no_progress: Bound on consecutive non-progress turns before
+            stopping.
+        receipt_sink: Optional callback for host receipts as they are
+            emitted.
+        should_stop: Optional host poll that, when True, stops the loop
+            promptly while preserving receipts/effects.
+
+    Returns:
+        FinalState with status, workspace hash, usage counters, and host
+        receipts. Provenance: all receipts are host-generated; acceptance
+        binds to exact reviewed bytes and validation output.
+    """
     receipts: list[Receipt] = []
     workspace = Path(workspace)
     allowlist = tuple(allowlist)

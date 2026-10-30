@@ -435,3 +435,18 @@ def test_stop_arriving_during_write_prevents_validator_launch(tmp_path, monkeypa
     assert (tmp_path / "notes.md").read_bytes() == b"preserved candidate"
     assert validations == []
     assert result.requests_used == 2
+
+
+def test_docstrings_exist():
+    assert run_development_loop.__doc__ and run_development_loop.__doc__.strip()
+    assert ValidationResult.__doc__ and ValidationResult.__doc__.strip()
+    assert SupervisorDecision.__doc__ and SupervisorDecision.__doc__.strip()
+
+
+def test_docstrings_are_meaningful():
+    # Ensure docstrings describe purpose/contract, not just whitespace
+    for obj in (run_development_loop, ValidationResult, SupervisorDecision):
+        doc = obj.__doc__ or ""
+        assert len(doc.strip()) > 20
+        # At least a few words
+        assert len(doc.split()) >= 5
