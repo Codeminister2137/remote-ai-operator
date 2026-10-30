@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from remote_operator.control import SOURCE, Operator, Validation, digest, read_source, write_source
+from remote_operator.control import SOURCE, Operation, Operator, Validation, digest, read_source, write_source
 from remote_operator.scripted import REFERENCE, ScriptedModel
 
 
@@ -276,6 +276,17 @@ class ControllerTests(unittest.TestCase):
         for prompt in ("", " ", "a" * 4001):
             with self.assertRaises(ValueError):
                 self.operator.submit(prompt)
+
+    def test_unknown_tool_error_includes_action_name(self):
+        class BadToolModel:
+            name = "bad-tool-model"
+            def next_operation(self, history, *, prompt):
+                return Operation("evil_tool", {})
+        with self.assertRaises(ValueError) as ctx:
+            self.operator.run(self.task_id, BadToolModel())
+        msg = str(ctx.exception)
+        self.assertIn("evil_tool", msg)
+        self.assertIn("Unknown or invalid tool", msg)
 
 
 if __name__ == "__main__":

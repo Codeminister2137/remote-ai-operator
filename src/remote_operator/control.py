@@ -258,7 +258,7 @@ class Operator:
             task["evidence"] = asdict(evidence)
             self._check_control(task["id"], deadline)
             return task["evidence"]
-        raise ValueError("Unknown or invalid tool")
+        raise ValueError(f"Unknown or invalid tool: {operation.name}")
 
     def _prepare_approval(self, task: dict) -> None:
         candidate = digest(read_source(self.folder(task["id"], "candidate")))
