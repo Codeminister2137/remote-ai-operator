@@ -6,6 +6,7 @@ with mocked HTTP only until an account grant and finite allowance are approved.
 
 import copy
 import json
+import logging
 import math
 import re
 import time
@@ -16,6 +17,8 @@ import httpx
 
 from remote_operator.control import Operation, TransportFailure, digest
 from remote_operator.store import Store
+
+logger = logging.getLogger(__name__)
 
 ENDPOINT = "https://api.meta.ai/v1/responses"
 INSTRUCTIONS = (
@@ -433,6 +436,7 @@ class MetaModel:
                 # A cold actor starts a new transient continuation over visible history.
                 self._turns = [None] * len(history)
             self._turns.append(retained)
+            logger.debug("approval granted: %s %s", call["name"], call["call_id"])
             return Operation(call["name"], arguments, call_id=call["call_id"], summary=summary)
         except (ValueError, KeyError, TypeError, AttributeError):
             raise MetaFailure(

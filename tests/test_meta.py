@@ -2,6 +2,7 @@
 
 import ast
 import json
+import logging
 import tempfile
 import time
 import unittest
@@ -658,3 +659,16 @@ class MetaContracts(unittest.TestCase):
         self.assertEqual(len(receipts), 1)
         self.assertEqual(receipts[0]["payload"]["local_allowance"]["requests_used"], 1)
         self.assertEqual(failing.last_receipt["local_allowance"]["requests_used"], 1)
+
+    def test_approval_granted_emits_debug_log_without_changing_semantics(self):
+        op = self.actor().next_operation([], prompt="task")
+        self.assertEqual(op.name, "read_file")
+        with self.assertLogs("remote_operator.meta", level="DEBUG") as captured:
+            logged = self.actor(grant=replace(self.grant, grant_id="approval-log-check")).next_operation([], prompt="task")
+        self.assertEqual(logged.name, "read_file")
+        self.assertTrue(any("approval granted" in msg.lower() for msg in captured.output))
+        # failure path must not emit approval log
+        failing = self.actor(lambda request: httpx.Response(503, json={"error": {"message": "x"}}), replace(self.grant, grant_id="approval-log-fail"))
+        with self.assertRaises(MetaFailure):
+            with self.assertNoLogs("remote_operator.meta", level="DEBUG"):
+                failing.next_operation([], prompt="task")
