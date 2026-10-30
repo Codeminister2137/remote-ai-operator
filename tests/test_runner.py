@@ -1,5 +1,7 @@
 """Runner security configuration and fail-closed availability checks."""
 
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -88,6 +90,28 @@ class RunnerTests(unittest.TestCase):
                 DockerValidator(root, timeout=2).policy_digest(),
                 DockerValidator(root, timeout=3).policy_digest(),
             )
+
+    def test_sandbox_bootstrap_help_exits_zero_and_preserves_normal_behavior(self):
+        # --help should print usage and exit 0 without requiring stdin JSON
+        for flag in ("--help", "-h"):
+            result = subprocess.run(
+                [sys.executable, "-I", "-B", "src/remote_operator/sandbox_bootstrap.py", flag],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0)
+            combined = result.stdout.lower() + result.stderr.lower()
+            self.assertIn("usage", combined)
+        # Normal invocation without --help must still attempt JSON bootstrap path
+        # (no help text, non-zero or JSON error, not a silent success)
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", "src/remote_operator/sandbox_bootstrap.py"],
+            input="",
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("Usage: sandbox_bootstrap.py", result.stdout)
 
 
 if __name__ == "__main__":
