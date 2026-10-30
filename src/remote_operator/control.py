@@ -3,6 +3,7 @@
 import difflib
 import hashlib
 import json
+import logging
 import os
 import secrets
 import tempfile
@@ -14,6 +15,8 @@ from typing import Protocol
 
 from remote_operator.locking import ProcessLock
 from remote_operator.store import Store
+
+logger = logging.getLogger(__name__)
 
 SOURCE = "issue_import.py"
 MAX_SOURCE_BYTES = 32_768
@@ -255,7 +258,7 @@ class Operator:
             task["evidence"] = asdict(evidence)
             self._check_control(task["id"], deadline)
             return task["evidence"]
-        raise ValueError("Unknown or invalid tool")
+        raise ValueError(f"Unknown or invalid tool: {operation.name}")
 
     def _prepare_approval(self, task: dict) -> None:
         candidate = digest(read_source(self.folder(task["id"], "candidate")))
@@ -283,6 +286,12 @@ class Operator:
             approval = task["approval"]
             if task["status"] != "awaiting_approval" or not approval:
                 raise ValueError("No pending approval")
+            if not isinstance(nonce, str):
+                raise ValueError("Invalid or expired approval")  # noqa: TRY004
+            try:
+                nonce.encode("ascii")
+            except UnicodeEncodeError:
+                raise ValueError("Invalid or expired approval")
             if (
                 not secrets.compare_digest(approval["nonce"], nonce)
                 or (time.time() if now is None else now) >= approval["expires"]
@@ -304,6 +313,7 @@ class Operator:
                 task["approval"] = None
                 self.store.save(task, "approval_invalidated")
                 raise ValueError("Reviewed source, target or evidence changed")
+            logger.debug("approval consumed for task %s", task_id)
             task["status"] = "applying"
             self.store.save(task, "apply_started")
             write_source(target, source)

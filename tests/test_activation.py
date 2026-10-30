@@ -111,3 +111,25 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(actor.grant, grant)
         self.assertEqual(status["limit_usd"], "1")
         http.assert_not_called()
+
+    def test_missing_key_error_names_slot_without_echoing_value(self):
+        from remote_operator.credentials import SessionKeys
+
+        raw_key = "sk-test-fake-key-1234567890abcdef"
+        subject = "test-user"
+        store = SessionKeys(lifetime=60, capacity=4, clock=time.monotonic)
+        # Create a session without a key to trigger empty slot path
+        token = store.open(subject)
+        # Also verify dropped-key path does not leak value
+        token_with_key = store.open(subject, raw_key)
+        store.drop_key(token_with_key, subject=subject)
+        for tok in (token, token_with_key):
+            with self.subTest(token=tok):
+                with self.assertRaises(Exception) as ctx:
+                    store.key_for(tok, subject=subject)
+                msg = str(ctx.exception)
+                # Must name the slot / subject identifier
+                self.assertIn(subject, msg)
+                self.assertIn("subject", msg.lower())
+                # Must not echo credential value
+                self.assertNotIn(raw_key, msg)

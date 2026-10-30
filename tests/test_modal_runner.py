@@ -157,6 +157,13 @@ class ModalRunnerTests(unittest.TestCase):
             self.runner._run(self.workspace, entry="arbitrary.py")
         self.sdk.Sandbox.create.assert_not_called()
 
+    def test_unknown_entry_message_includes_check_name(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.runner.request(self.workspace, "arbitrary.py", b"")
+        self.assertIn("arbitrary.py", str(ctx.exception))
+        self.assertIn("Unknown protected runner entry", str(ctx.exception))
+        self.sdk.Sandbox.create.assert_not_called()
+
     def test_local_backend_does_not_require_modal_installed(self):
         self.assertIsInstance(DockerValidator(CHECKS).policy_digest(), str)
         if importlib.util.find_spec("modal") is None:
@@ -165,6 +172,21 @@ class ModalRunnerTests(unittest.TestCase):
             )
             self.assertFalse(result.passed)
             self.assertIn("load optional SDK", result.output)
+
+    def test_docstrings_present_for_public_api(self):
+        targets = [
+            ModalValidator,
+            ModalValidator.__init__,
+            ModalValidator.bootstrap,
+            ModalValidator.policy_settings,
+            ModalValidator.request,
+            ModalValidator._run,
+        ]
+        for obj in targets:
+            with self.subTest(obj=obj):
+                doc = obj.__doc__
+                self.assertIsNotNone(doc)
+                self.assertGreater(len(doc.strip()), 20)
 
 
 @unittest.skipUnless(os.environ.get("OPERATOR_DOCKER_TESTS") == "1", "Docker opt-in required")

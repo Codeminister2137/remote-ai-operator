@@ -22,6 +22,10 @@ establish that a service is running now.
       scale-to-zero and a real-browser UI run). Access code and signing secret stay
       outside both repositories.
 - [ ] Record and review three-minute video; identify event-built features explicitly.
+- [ ] Verify Meta-only runtime configuration with the offline
+      [eligibility check](submission-eligibility.md), then inspect deployed routes,
+      image contents and the recorded demo separately. The script alone does not
+      establish submission eligibility.
 - [ ] Decide judge access delivery: the hosted app is live and the access code exists;
       only out-of-band delivery to judges is open (submission text or event channel
       assumed; organizers have not answered). Do not publish the owner token or invite

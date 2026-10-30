@@ -18,6 +18,7 @@ import hmac
 import json
 import re
 import secrets
+import threading
 import time
 
 from remote_operator.credentials import SessionKeys, SessionUnavailable, valid_subject
@@ -71,6 +72,7 @@ class HostedSessions:
             sessions = SessionKeys(lifetime=lifetime, capacity=capacity, clock=clock or time.time)
         self._clock = clock or sessions.clock
         self._revoked = {}
+        self._lock = threading.RLock()
         self.sessions = sessions
 
     def __repr__(self):
@@ -122,13 +124,15 @@ class HostedSessions:
             raise SessionUnavailable()
         valid_subject(claims["s"])
         if claims["e"] <= self._clock():
-            raise SessionUnavailable("Session expired;reconnect to continue")
+            sid = self._identity(token).hex()[:8]
+            raise SessionUnavailable(f"Session {sid} expired;reconnect to continue")
         identity = self._identity(token)
-        revoked = self._revoked.get(identity)
-        if revoked is not None:
-            if revoked > self._clock():
-                raise SessionUnavailable()
-            self._revoked.pop(identity, None)
+        with self._lock:
+            revoked = self._revoked.get(identity)
+            if revoked is not None:
+                if revoked > self._clock():
+                    raise SessionUnavailable()
+                self._revoked.pop(identity, None)
         return claims["s"], claims["e"], identity
 
     @staticmethod
@@ -137,7 +141,9 @@ class HostedSessions:
 
     def open(self, code):
         """Exchange the shared code for a signed session token and server subject."""
-        if not isinstance(code, str) or not secrets.compare_digest(code, self._code):
+        if not isinstance(code, str) or not code.isascii():
+            raise AccessRefused()
+        if not secrets.compare_digest(code, self._code):
             raise AccessRefused()
         token, _ = self._issue("visitor-" + secrets.token_hex(8))
         return token
@@ -146,8 +152,9 @@ class HostedSessions:
         return self._claims(token)[0]
 
     def attach_key(self, token, api_key):
-        subject, expires, _ = self._claims(token)
-        self.sessions.attach(token, api_key, subject=subject, expires_at=expires)
+        with self._lock:
+            subject, expires, _ = self._claims(token)
+            self.sessions.attach(token, api_key, subject=subject, expires_at=expires)
 
     def drop_key(self, token, subject):
         self.sessions.drop_key(token, subject=subject)
@@ -165,18 +172,21 @@ class HostedSessions:
         deployment secret is the only server-side revocation lever across a
         restart. Browsers remove the cookie immediately.
         """
-        try:
-            _, expires, identity = self._claims(token)
-        except SessionUnavailable:
-            return
-        self._revoked[identity] = expires
-        self.sessions.revoke(token)
+        with self._lock:
+            try:
+                _, expires, identity = self._claims(token)
+            except SessionUnavailable:
+                return
+            self._revoked[identity] = expires
+            self.sessions.revoke(token)
 
     def purge_expired(self):
-        now = self._clock()
-        self._revoked = {token: end for token, end in self._revoked.items() if end > now}
-        return self.sessions.purge_expired()
+        with self._lock:
+            now = self._clock()
+            self._revoked = {token: end for token, end in self._revoked.items() if end > now}
+            return self.sessions.purge_expired()
 
     def clear(self):
-        self._revoked.clear()
-        self.sessions.clear()
+        with self._lock:
+            self._revoked.clear()
+            self.sessions.clear()

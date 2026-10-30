@@ -1,4 +1,12 @@
-"""Trusted Linux supervisor,run only inside an explicitly isolated code sandbox."""
+"""Trusted Linux supervisor for isolated code sandbox execution.
+
+Runs only inside an explicitly isolated, locked-down Linux sandbox
+(container/VM with no-new-privileges, read-only mounts, dropped
+capabilities). Validates a JSON request from stdin describing allowed
+files/entry/timeout, materializes the sandbox filesystem, and executes the
+requested entry as an unprivileged, resource-limited child process with
+strict CPU/memory/output/timeout limits. Not for use on a host system.
+"""
 
 import json
 import math
@@ -104,4 +112,11 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print("Usage: sandbox_bootstrap.py < request.json")
+        print("Trusted Linux supervisor - runs only inside an explicitly isolated code sandbox.")
+        print(
+            "Reads JSON request from stdin with files/entry/timeout/payload; --help shows this message."
+        )
+        sys.exit(0)
     main()

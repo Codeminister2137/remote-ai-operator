@@ -222,3 +222,218 @@ Owner-approved documentation update: continue engineering and acceptance work;
 recording/upload and judge-access activation are final milestones near submission.
 Recorded the completed source publication in PR #1 and its 147-test validation.
 No runtime or deployment change is part of this documentation update.
+## 2026-10-29 - Submission configuration validation
+
+Host-authored correction: reuse the existing runtime grant validator, reject
+malformed/unreadable files cleanly, and read UTF-8 BOM-prefixed env files without
+hiding the first credential key. Added malformed-value and BOM regressions, plus
+standalone instructions describing exactly what the offline check can establish.
+Final local suite:158passed,8skipped,69subtests; Ruff check/format passed.
+A separate isolated Modal fixture passed23protected checks, including nonroot and
+read-only source enforcement; exact sandbox termination/poll verified. This is
+checker evidence, not full deployed-configuration or submission acceptance.
+
+A Meta review hit its output limit, and a completed Baseten proposal was rejected
+by host patch validation. Neither produced an accepted source change. Their local
+receipts remain separate; implementation and tests here are attributed to the host.
+No private development infrastructure is required by these changes. No deployment,
+public release, judge credential delivery, video or submission performed.
+
+## 2026-10-29 - Invalid-model report disclosure correction
+
+Baseten's event Meta model authored a narrow public-checker proposal removing raw
+invalid model values from diagnostics and reporting a model only after runtime
+validation. Host review restored the existing fixed runtime error messages, which
+the proposal had replaced and an existing expired-grant test requires. Original
+proposal and this one-line host recovery are retained separately in local evidence.
+Host-authored sentinel regressions cover invalid string and object values.
+
+The combined change passed26protected checks in an isolated Modal sandbox;
+termination/poll verified exact cleanup. Final local suite160passed,8skipped,
+69subtests; Ruff check/format clean. Host formatting followed remote validation.
+This is one bounded source task with declared host recovery, not a general model
+quality claim. No private infrastructure source, real grants or credentials were
+sent. No public push, deployment, judge access, video or submission performed.
+
+Packaging follow-up: wheel and sdist built offline from cached declared build dependencies. Archive checks found83sdist entries and25wheel members, required source checker/docs present and no private runtime/venv/handoff paths. Extracted sdist suite passed160tests with8skips/69subtests using existing dependencies; no fresh dependency-install claim.
+
+## 2026-10-29 - Current published-base integration
+
+The first checker branch had used an older local main. Prepared this candidate
+from the current published main instead, preserving its external-action API/UI,
+release boundaries and build history. Only documentation conflicts needed manual
+resolution. One inherited long condition was mechanically formatted to pass the current formatter; application behavior and the held action-resolution fix are unchanged.
+The earlier158/160test results above describe that earlier branch, not this tree.
+Current candidate suite:176passed,8skipped,69subtests. Hosted/deployed/phone evidence
+was not rerun, and no publication or deployment is implied by this local candidate.
+
+Current-base packaging: offline wheel/sdist build exited0. Archive audit verified87sdist/26wheel entries, exact application/checker/doc bytes, no private runtime/venv/handoff paths and no named provider credential values. Extracted sdist passed176tests,8skips,69subtests using existing dependencies; no fresh install or deployed-service claim.
+# Meta CLI dotenv export repair — 2026-10-29
+
+Meta Muse Spark1.3 authored the two-line checker parser fix through Workbench's
+existing native-tool CLI (three calls,18136tokens). Host reviewed the exact diff
+and authored eight regression cases. Independent network-blocked Modal checks
+passed184tests,8skipped,69subtests plus8protected export cases; exact cleanup
+verified. Initial full-suite fixture failures were preserved and corrected in
+the development harness only. No product runner-limit change or public deployment.
+# Supervised AI-to-AI documentation trial — 2026-10-29
+
+Meta authored the dotenv/BOM eligibility note after Codex reviewed its proposal
+and sent specific corrective feedback through the existing coding-chat controller.
+Host independently checked the actual doc diff and tool receipts (7checks passed).
+Four Meta calls hit the fixed cap after the edit; no worker final report was
+captured. That incomplete worker outcome is preserved separately from host
+acceptance of the doc effect. No runtime behavior or human approval policy changed,
+no commands executed by the worker, and no runtime test run claimed for this note.
+
+# Hands-off supervised Meta report-order fix — 2026-10-29
+
+Meta authored stable alphabetical credential diagnostics and a cross-hash-seed
+regression. Codex caught a misplaced existing test decorator in the first draft;
+Meta corrected it under the original six-call bound. Independent network-blocked
+Modal validation passed185tests8skips69subtests plus4protected hash-seed cases;
+cleanup verified. Host formatting preserved both ASTs. The worker hit the cap
+before its repair-turn final report; that original incomplete outcome is retained
+separately from host acceptance of the independently verified code. File edits
+used upfront hands-off authority; shell/custom tools denied and no human approval
+simulated. No publication/deployment or product approval-policy change.
+
+# Meta session-key deadline guard — 2026-10-29
+
+Meta authored validation for malformed/non-finite external session-key deadlines
+and regressions, preserving finite/default expiry and APIs. Host independently
+validated8invalid and3normal cases plus188tests8skips86subtests in a nonroot,
+network-blocked Modal sandbox; exact cleanup verified. Meta correctly attributed
+those results to the supervisor in its final report. No actual keys sent to a
+worker/runner, no host execution of generated code, no new storage/auth format
+or production approval-policy change. No deployment/publication.
+
+## 2026-10-29 — Concurrent external-action resolution
+
+Meta Muse Spark 1.3 Standard proposed a compare-and-swap fix after independent checks reproduced multiple successful resolutions of one action. Two model requests included one expiry-regression repair; host review corrected an expiry transaction rollback and formatted the result. Final protected Modal validation passed 17 checks with network/credential isolation and verified sandbox cleanup. Model proposals and host recovery are distinct contributions. No hosted release or submission was performed.
+
+Local full-suite validation: 152 passed, 8 skipped, 77 subtests passed; final loop-capture lint correction rechecked with 5 focused tests and 8 subtests. Ruff check/format passed. Sandbox-approved source bytes match the applied module.
+
+
+## 2026-10-29 — Malformed external-action inputs
+
+Meta Muse Spark 1.3 Standard authored a narrow Unicode nonce refusal and a
+delegated nonstring identifier check. Real child validation and independent Modal
+validation both passed 19 protected checks with sandbox cleanup. The original
+delegation wrapper still marked a recovered tool error as failure; that report
+is preserved, and these checks do not establish general model quality. Host
+review accepted the source and added public regression tests. No hosted release.
+
+# Integrated local candidate and exact expiry — 2026-10-29
+
+Host combined existing reviewed eligibility/session fixes with the prepared one-use
+action-resolution branch, retaining both provenance histories. Meta reviewed the
+integrated public module/tests and found expiry equality inconsistent across read
+and resolution paths; Meta authored five comparison corrections. Host supplied
+the durable equality regression and independent protected checks. Final isolated
+Modal validation passed196tests8skips112subtests, including concurrency/nonce and
+all five equality operations; original defect reproduced separately, cleanup
+verified. Meta final report accurately stated its requested tests were not added;
+host completed that test work. Existing APIs/schema/approval policy retained.
+No private Workbench payload, generated host execution, publication or deployment.
+
+## Hosted invalid access codes ? 2026-10-29
+
+Meta authored a narrow ASCII input guard and unit/HTTP regressions after the host
+reproduced a TypeError for Unicode wrong codes. Those inputs now receive the
+existing fixed refusal; valid login and timing-safe ASCII comparison remain.
+Independent isolated Modal validation passed198tests8skips115subtests and six
+protected invalid-input cases; exact sandbox cleanup verified. The two-turn Meta
+conversation completed in six requests and correctly attributed test execution
+to the supervisor. No new auth mechanism, schema, dependency or deployment.
+
+## Hosted logout/cleanup synchronization ? 2026-10-29
+
+An isolated baseline reproduced cleanup discarding a concurrent logout revocation,
+allowing the logged-out token again. Meta authored standard-library reentrant
+locking around existing revocation state, close, cleanup and clear, plus two
+regressions. Existing process-local logout/restart behavior and APIs remain.
+Independent host validation proved the new race regression fails against immutable
+original source, passes the fix, and passed the complete Modal suite:
+200tests8skips115subtests. Exact sandbox cleanup verified; Ruff clean.
+Two finite eight-request Meta runs exhausted their iteration bounds: first left
+only an import, fresh repair produced source/tests but no final report. Those
+failed runs remain preserved; code acceptance is the host's separate review and
+validation, not a claim that the worker completed its conversation. No release.
+
+## Logout versus key attachment ? 2026-10-29
+
+Meta serialized existing claims/key attachment with the hosted RLock after an
+isolated baseline proved an in-flight attachment could restore a logged-out key.
+Meta added a threaded regression; host review caught a scheduling weakness and
+Meta corrected it before acceptance. Protected validation proved failure against
+immutable original source and success with the fix. Full isolated Modal suite:
+201tests8skips115subtests; exact cleanup verified, Ruff clean. Both conversation
+turns completed. Existing session/key/restart contracts and lock order retained.
+
+## Invalid task approval nonces ? 2026-10-29
+
+Meta added nonce type/ASCII refusal before timing-safe comparison and unit/HTTP
+regressions after a protected baseline reproduced Unicode TypeError. Wrong
+values now receive the existing fixed refusal without state/event/source changes;
+exact valid approval still applies once. Independent immutable-original regression
+fails, fixed candidate passes. Full isolated Modal203tests8skips123subtests; exact
+cleanup verified, Ruff clean. Meta supplied source/tests and first-turn report;
+second-turn optional simplification exhausted shared12request cap without further
+edits/final response. Original failed receipt preserved; host code acceptance is
+separate from conversational completion. No API/policy/storage/dependency change.
+
+## Decoded credential echo protection - 2026-10-29
+
+Meta replaced a serialized-JSON key check with an iterative decoded argument
+traversal, including dictionary keys and nested values. Synthetic quotes and
+backslashes had hidden echoes through JSON escaping. Host review prompted
+nonrecursive traversal and decoded receipt checks; Meta added a400-level nested
+regression. Independent original-source red check and candidate protected/full
+Modal suite passed206tests8skips129subtests, exact cleanup verified, Ruff clean.
+Both supervised turns completed. Existing refusal, reservation and retention
+policy preserved; no real credentials used by tests or release performed.
+
+## Credential-safe provider diagnostics - 2026-10-29
+
+Meta moved credential redaction before diagnostic serialization/stringification,
+fixing recoverable quote/backslash keys in incomplete and HTTP error details.
+Meta added parsed-detail, durable-event, reservation and session-key cleanup
+regressions; host review corrected paused-return expectations through a fresh
+Meta repair and supplied a decoded saved-event assertion. Independent original
+red check and fixed full isolated Modal suite passed208tests8skips132subtests;
+exact cleanup verified, Ruff clean. Both original and repair workers exhausted
+finite request/iteration bounds without final reports; failures preserved and
+code acceptance recorded separately by host. Existing categories/status/detail
+bounds/credit reservations retained. No real credentials used by test fixtures.
+
+## Foreground model-supervised development controller - 2026-10-30
+
+Owner requested a hackathon model supervising another implementation model,
+without an owner-return deadline or sleep. Meta authored the provider-neutral
+controller and tests, then repaired concrete host-review findings. Host completed
+validator-output propagation and independent regressions for real evidence/diff,
+missing-vs-empty candidate identity, stop-before-write and Windows path safety.
+Full isolated Modal224tests8skips132subtests passed with exact cleanup; Ruff clean.
+Initial Meta run completed; repair iteration failure preserved separately.
+The controller has no network/shell/storage dependency and uses trusted injected
+validation. Production human approvals remain separate. Live Meta-to-Meta wiring
+is temporary developer tooling; live workflow acceptance is NOT yet achieved.
+
+2026-10-30: Meta supervisor and Meta implementer authored reusable JSON role adapters and regressions through the actual foreground development loop. Independent Modal feedback drove candidate repairs without Codex continuations. Host review requested direct controller imports instead of unsafe class discovery; fresh Meta repair and independent regression completed. Final protected suite:236 passed,8 skipped,132 subtests, cleanup verified. Host removed an unused import and formatted files. Original failed phases preserved; no production approval change or private runtime dependency.
+
+2026-10-30: The reusable foreground launcher connected actual Meta supervisor/implementer for a public development guide and a cancellation fix. Meta added the missing stop poll after file application before isolated validation; host supplied the regression and corrected documentation overclaims. Final full suite237passed8skip132subtests; protected guide example executes only in Modal and verifies feedback/repair/acceptance. No Codex continuations between role calls, no daemon or public release.
+
+## Eligibility checker dotenv normalization - 2026-10-30
+
+Baseten-hosted `meta-models/muse-spark-open-1026` proposed the parser change
+through a bounded single-request local implementer over the existing adapter.
+Host review found the task premise partly wrong: `str.splitlines` already splits
+on vertical tab and form feed, so those inputs were refused before this change.
+The real defects were a non-breaking space after `export` and a BOM before
+`export` on a later line; both previously parsed the key as
+`export<ws>OPENAI_API_KEY` and reported the file eligible. Host corrected the
+regression labels and parametrization before accepting the change. Validation:
+55 checker tests and the full suite 202passed,8skips,69subtests on Windows with
+the existing virtual environment; Ruff clean. No eligibility policy, CLI, grant
+or dependency change; no deployment.

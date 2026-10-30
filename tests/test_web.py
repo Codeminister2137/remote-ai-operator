@@ -61,6 +61,27 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         replay = await self.client.post(path + "/approve", headers=self.auth, json={"nonce": nonce})
         self.assertEqual(replay.status_code, 409)
 
+    async def test_unicode_nonce_refused_without_echo_and_valid_still_applies(self):
+        response = await self.client.post(
+            "/api/tasks", headers=self.auth, json={"prompt": "Implement sample"}
+        )
+        path = "/api/tasks/" + response.json()["id"]
+        result = await self.client.post(path + "/run", headers=self.auth, json={})
+        self.assertEqual(result.status_code, 200, result.text)
+        review = (await self.client.get(path, headers=self.auth)).json()
+        nonce = review["task"]["approval"]["nonce"]
+        bad = "é" * len(nonce)
+        refused = await self.client.post(path + "/approve", headers=self.auth, json={"nonce": bad})
+        self.assertEqual(refused.status_code, 409, refused.text)
+        self.assertNotIn(bad, refused.text)
+        pending = (await self.client.get(path, headers=self.auth)).json()
+        self.assertEqual(pending["task"]["status"], "awaiting_approval")
+        self.assertEqual(pending["task"]["approval"]["nonce"], nonce)
+        applied = await self.client.post(
+            path + "/approve", headers=self.auth, json={"nonce": nonce}
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+
     async def test_request_limits_unknown_tasks_and_extra_arguments(self):
         response = await self.client.post(
             "/api/tasks", headers=self.auth, json={"prompt": "task", "provider": "paid"}
@@ -309,3 +330,65 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["status"], "completed")
         self.assertEqual(response.json()["applied_digest"], digest(REFERENCE))
         self.assertIsNone(response.json()["approval"])
+
+    async def test_unknown_path_returns_404_with_path_and_no_internal_leak(self):
+        missing = "/api/does-not-exist-404-regression"
+        response = await self.client.get(missing, headers=self.auth)
+        self.assertEqual(response.status_code, 404)
+        body = response.json()
+        self.assertIn(missing, body.get("detail", ""))
+        text = response.text.lower()
+        for leak in ("traceback", "stack", "internal", "exception"):
+            self.assertNotIn(leak, text)
+
+    def test_public_handlers_have_docstrings(self):
+        """Regression: public handlers must retain descriptive docstrings."""
+        import ast
+        import pathlib
+
+        source = pathlib.Path("src/remote_operator/web.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        required = {"_origin", "create_app", "create_hosted_app"}
+        found = {}
+        handlers = {
+            "index",
+            "javascript",
+            "stylesheet",
+            "submit",
+            "list_tasks",
+            "review",
+            "events",
+            "run",
+            "approve",
+            "reject",
+            "reconcile",
+            "cancel",
+            "sample",
+            "revalidate",
+            "allowance",
+            "submit_external",
+            "list_external",
+            "review_external",
+            "approve_external",
+            "reject_external",
+            "cancel_external",
+            "configuration",
+            "open_session",
+            "close_session",
+            "attach_key",
+            "detach_key",
+            "owner",
+            "visitor",
+        }
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                node.name in required or node.name in handlers
+            ):
+                doc = ast.get_docstring(node)
+                found[node.name] = doc
+        for name in required:
+            self.assertIn(name, found, f"missing handler {name}")
+            self.assertTrue(found[name], f"{name} missing docstring")
+        # Ensure at least 10 handlers documented
+        documented = [k for k, v in found.items() if v]
+        self.assertGreaterEqual(len(documented), 10, f"only {documented} documented")

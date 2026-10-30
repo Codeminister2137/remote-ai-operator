@@ -1,10 +1,19 @@
 """Independent regression checks for task effects, recovery and approval boundaries."""
 
+import logging
 import tempfile
 import unittest
 from pathlib import Path
 
-from remote_operator.control import SOURCE, Operator, Validation, digest, read_source, write_source
+from remote_operator.control import (
+    SOURCE,
+    Operation,
+    Operator,
+    Validation,
+    digest,
+    read_source,
+    write_source,
+)
 from remote_operator.scripted import REFERENCE, ScriptedModel
 
 
@@ -58,6 +67,16 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.operator.approve(self.task_id, task["approval"]["nonce"])
 
+    def test_approval_consumed_emits_debug_log(self):
+        task = self.ready()
+        with self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured:
+            result = self.operator.approve(self.task_id, task["approval"]["nonce"])
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelname, "DEBUG")
+        self.assertIn(self.task_id, record.getMessage())
+
     def test_candidate_change_invalidates_approval(self):
         task = self.ready()
         write_source(self.operator.folder(self.task_id, "candidate"), "# changed\n")
@@ -106,6 +125,45 @@ class ControllerTests(unittest.TestCase):
         other = self.operator.run(other["id"], ScriptedModel())
         with self.assertRaises(ValueError):
             self.operator.approve(other["id"], task["approval"]["nonce"])
+
+    def test_non_ascii_and_non_string_nonces_refused_without_mutation(self):
+        from remote_operator.scripted import REFERENCE as _REFERENCE
+
+        task = self.ready()
+        valid = task["approval"]["nonce"]
+        before_events = self.operator.store.events(self.task_id)
+        before_candidate = read_source(self.operator.folder(self.task_id, "candidate"))
+        before_target = read_source(self.operator.folder(self.task_id, "target"))
+        bad_nonces = [
+            "é" * len(valid),
+            "a" * (len(valid) - 1) + "é",
+            "\ud800" * len(valid),
+            "x" * len(valid),
+            None,
+            12345,
+            b"x" * len(valid),
+            ["x" * len(valid)],
+        ]
+        for bad in bad_nonces:
+            with self.subTest(nonce=repr(bad)):
+                try:
+                    self.operator.approve(self.task_id, bad)
+                except ValueError as exc:
+                    self.assertEqual(str(exc), "Invalid or expired approval")
+                    self.assertNotIn(repr(bad)[:20].strip("'[]"), str(exc))
+                else:
+                    self.fail("bad nonce must raise ValueError")
+                current = self.operator.store.get(self.task_id)
+                self.assertEqual(current["status"], "awaiting_approval")
+                self.assertEqual(current["approval"]["nonce"], valid)
+        self.assertEqual(
+            read_source(self.operator.folder(self.task_id, "candidate")), before_candidate
+        )
+        self.assertEqual(read_source(self.operator.folder(self.task_id, "target")), before_target)
+        self.assertEqual(self.operator.store.events(self.task_id), before_events)
+        result = self.operator.approve(self.task_id, valid)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(read_source(self.operator.folder(self.task_id, "target")), _REFERENCE)
 
     def test_failed_validation_cannot_request_approval(self):
         self.operator.validator = FakeValidator(False)
@@ -226,6 +284,19 @@ class ControllerTests(unittest.TestCase):
         for prompt in ("", " ", "a" * 4001):
             with self.assertRaises(ValueError):
                 self.operator.submit(prompt)
+
+    def test_unknown_tool_error_includes_action_name(self):
+        class BadToolModel:
+            name = "bad-tool-model"
+
+            def next_operation(self, history, *, prompt):
+                return Operation("evil_tool", {})
+
+        with self.assertRaises(ValueError) as ctx:
+            self.operator.run(self.task_id, BadToolModel())
+        msg = str(ctx.exception)
+        self.assertIn("evil_tool", msg)
+        self.assertIn("Unknown or invalid tool", msg)
 
 
 if __name__ == "__main__":

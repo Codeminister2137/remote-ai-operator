@@ -6,6 +6,7 @@ with mocked HTTP only until an account grant and finite allowance are approved.
 
 import copy
 import json
+import logging
 import math
 import re
 import time
@@ -16,6 +17,8 @@ import httpx
 
 from remote_operator.control import Operation, TransportFailure, digest
 from remote_operator.store import Store
+
+logger = logging.getLogger(__name__)
 
 ENDPOINT = "https://api.meta.ai/v1/responses"
 INSTRUCTIONS = (
@@ -204,6 +207,23 @@ class MetaModel:
             return {self._redact(key): self._redact(item) for key, item in value.items()}
         return value
 
+    def _echoes_credential(self, value):
+        if not self._key:
+            return False
+        stack = [value]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, str):
+                if self._key in current:
+                    return True
+            elif isinstance(current, dict):
+                for key, item in current.items():
+                    stack.append(key)
+                    stack.append(item)
+            elif isinstance(current, (list, tuple)):
+                stack.extend(current)
+        return False
+
     def _input(self, history, prompt):
         prompt_digest = digest(prompt)
         if self._prompt_digest not in (None, prompt_digest):
@@ -333,7 +353,7 @@ class MetaModel:
                     )
                     raise MetaFailure(
                         category,
-                        str(detail).replace(self._key, "[redacted]")[:700],
+                        str(self._redact(detail))[:700],
                         response.status_code,
                     )
         except httpx.TimeoutException as exc:
@@ -373,9 +393,7 @@ class MetaModel:
             if data.get("status") != "completed":
                 raise MetaFailure(
                     "incomplete",
-                    json.dumps(data.get("incomplete_details", {})).replace(self._key, "[redacted]")[
-                        :500
-                    ],
+                    json.dumps(self._redact(data.get("incomplete_details", {})))[:500],
                 )
             output = data["output"]
             if not isinstance(output, list):
@@ -405,7 +423,7 @@ class MetaModel:
                 tool["name"] for tool in TOOLS
             }:
                 raise ValueError("Unknown tool or malformed arguments")
-            if self._key in json.dumps(arguments):
+            if self._echoes_credential(arguments):
                 raise ValueError("Credential echoed in generated arguments")
             retained = []
             for item in output:
@@ -418,6 +436,7 @@ class MetaModel:
                 # A cold actor starts a new transient continuation over visible history.
                 self._turns = [None] * len(history)
             self._turns.append(retained)
+            logger.debug("approval granted: %s %s", call["name"], call["call_id"])
             return Operation(call["name"], arguments, call_id=call["call_id"], summary=summary)
         except (ValueError, KeyError, TypeError, AttributeError):
             raise MetaFailure(

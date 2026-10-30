@@ -1,5 +1,7 @@
 """Runner security configuration and fail-closed availability checks."""
 
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -67,6 +69,18 @@ class RunnerTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 DockerValidator(Path("."), timeout=value)
 
+    def test_invalid_timeout_error_mentions_offending_value(self):
+        # Regression: error message must include the specific invalid timeout value
+        for value in (0, -1, 121):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError) as cm:
+                    DockerValidator(Path("."), timeout=value)
+                self.assertIn(str(value), str(cm.exception))
+        # Check non-numeric edge case still mentions type/value
+        with self.assertRaises(ValueError) as cm:
+            DockerValidator(Path("."), timeout=float("nan"))
+        self.assertIn("nan", str(cm.exception).lower())
+
     def test_deadline_policy_changes_invalidate_old_approval_policy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -76,6 +90,55 @@ class RunnerTests(unittest.TestCase):
                 DockerValidator(root, timeout=2).policy_digest(),
                 DockerValidator(root, timeout=3).policy_digest(),
             )
+
+    def test_sandbox_bootstrap_help_exits_zero_and_preserves_normal_behavior(self):
+        # --help should print usage and exit 0 without requiring stdin JSON
+        for flag in ("--help", "-h"):
+            result = subprocess.run(
+                [sys.executable, "-I", "-B", "src/remote_operator/sandbox_bootstrap.py", flag],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0)
+            combined = result.stdout.lower() + result.stderr.lower()
+            self.assertIn("usage", combined)
+        # Normal invocation without --help must still attempt JSON bootstrap path
+        # (no help text, non-zero or JSON error, not a silent success)
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", "src/remote_operator/sandbox_bootstrap.py"],
+            input="",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("Usage: sandbox_bootstrap.py", result.stdout)
+
+    def test_public_api_docstrings_exist_and_behavior_unchanged(self):
+        """Regression: docstring-only change preserves public API and behavior."""
+        import inspect
+
+        from remote_operator.runner import DockerValidator, Execution, SourceValidator
+
+        # Public classes and methods remain exposed with docstrings
+        for cls in (Execution, SourceValidator, DockerValidator):
+            self.assertIsNotNone(cls.__doc__)
+            self.assertGreater(len(cls.__doc__.strip()), 0)
+        for name in ("policy_digest", "validate", "preview", "policy_settings", "command"):
+            obj = getattr(SourceValidator, name, None) or getattr(DockerValidator, name, None)
+            self.assertIsNotNone(obj)
+            self.assertIsNotNone(obj.__doc__)
+            self.assertGreater(len(obj.__doc__.strip()), 0)
+        # Signatures unchanged
+        self.assertEqual(
+            inspect.signature(DockerValidator.command).parameters["entry"].default, "run_checks.py"
+        )
+        # Behavior unchanged: invalid entry still raises
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(ValueError):
+                DockerValidator(root).command(root, "n", entry="evil.py")
 
 
 if __name__ == "__main__":

@@ -28,6 +28,11 @@ their own licenses; the original repository is Apache-2.0. See BUILD_LOG.md and 
 
 ## Meaningful use of Meta tooling
 
+The submission's runtime must call only Meta models. Remote Operator offers
+scripted mode with no model call, or Meta mode with a validated `muse-*` grant
+and a fixed Meta Responses endpoint. See [runtime eligibility](submission-eligibility.md)
+for offline checks and the separate deployment/video review required before submission.
+
 muse-spark-1.3 inspects the registered source, authors the implementation and calls
 protected validation tools. The adapter uses structured Responses function tools
 and transient encrypted continuation. A cold continuation uses recorded visible

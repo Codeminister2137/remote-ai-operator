@@ -133,6 +133,15 @@ class SessionKeys:
         valid_key(api_key)
         if subject is not None:
             valid_subject(subject)
+        if expires_at is not None:
+            if type(expires_at) not in (int, float):
+                raise SessionUnavailable("Invalid session deadline;reconnect to continue")
+            try:
+                finite = math.isfinite(expires_at)
+            except OverflowError:
+                raise SessionUnavailable("Invalid session deadline;reconnect to continue")
+            if not finite:
+                raise SessionUnavailable("Invalid session deadline;reconnect to continue")
         deadline = self._clock() + self.lifetime if expires_at is None else expires_at
         if deadline <= self._clock():
             raise SessionUnavailable("Session expired;reconnect to continue")
@@ -182,7 +191,9 @@ class SessionKeys:
             if not secrets.compare_digest(entry.subject, subject):
                 raise SessionUnavailable()
             if entry.key is None:
-                raise SessionUnavailable("No visitor model key is attached to this session")
+                raise SessionUnavailable(
+                    f"No visitor model key is attached to this session for subject '{subject}'"
+                )
             return entry.key
 
     def revoke(self, token):
