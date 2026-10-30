@@ -390,3 +390,50 @@ def test_grant_check_unexpected_exception_reports_not_eligible_without_traceback
     assert result.returncode == 1
     assert "NOT ELIGIBLE" in result.stdout
     assert "Traceback" not in result.stderr
+
+# --- Focused regression tests for uncovered branches ---
+
+def test_env_line_without_equals_is_ignored(tmp_path: Path) -> None:
+    # Line with no '=' should be ignored and not crash; scripted mode remains ELIGIBLE.
+    env_file = tmp_path / ".env"
+    _write(env_file, "NOEQUALS\n")
+    result = _run("--env-file", str(env_file), "--model-mode", "scripted")
+    assert result.returncode == 0
+    assert "ELIGIBLE" in result.stdout
+    assert "Traceback" not in result.stderr
+    assert "NOEQUALS" not in result.stdout + result.stderr
+
+def test_grant_json_list_is_not_eligible_without_traceback_or_echo(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    grant_file = tmp_path / "grant.json"
+    _write(env_file, "")
+    _write(grant_file, '[]')
+    result = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    assert result.returncode == 1
+    assert "NOT ELIGIBLE" in result.stdout
+    assert "Traceback" not in result.stderr
+    assert "Traceback" not in result.stdout
+
+def test_grant_duplicate_keys_handled_deterministically(tmp_path: Path) -> None:
+    # JSON with duplicate keys - last occurrence wins per stdlib; must not echo payload or traceback.
+    env_file = tmp_path / ".env"
+    grant_file = tmp_path / "grant.json"
+    _write(env_file, "")
+    # Construct grant JSON with duplicate 'model' key containing sensitive value first, valid second
+    # and also test reverse determinism. Payload value must not be echoed.
+    grant = _valid_grant()
+    # Build raw JSON string with duplicate key manually
+    dup_payload = '{"grant_id":"fixture-123","model":"DO_NOT_ECHO_ME","model":"muse-spark-fixture",'\
+                  f'"expires_at":{grant["expires_at"]},"max_requests":10,"max_input_bytes":100000,'\
+                  '"max_output_tokens":1000,"approved_usd":"1.00","input_usd_per_million":"0.50",'\
+                  '"output_usd_per_million":"0.50","credits_verified":true,"local_spending_limit_accepted":true}'
+    _write(grant_file, dup_payload)
+    result = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    # Deterministic handling: no traceback, no echo of duplicate payload
+    assert "Traceback" not in result.stderr
+    assert "Traceback" not in result.stdout
+    assert "DO_NOT_ECHO_ME" not in result.stdout + result.stderr
+    # Run again to verify deterministic result
+    result2 = _run("--env-file", str(env_file), "--grant-file", str(grant_file), "--model-mode", "meta")
+    assert result.returncode == result2.returncode
+    assert result.stdout == result2.stdout
