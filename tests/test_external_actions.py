@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from remote_operator.external_actions import ExternalActionBridge
+from remote_operator.scripted import ScriptedModel
 from remote_operator.store import Store
 
 
@@ -119,6 +120,16 @@ class TestExternalActionBridge(unittest.TestCase):
         )
         recent = self.bridge.recent(limit=10)
         self.assertEqual([a.id for a in recent], [a2.id, a1.id])
+
+
+class TestScriptedActionErrorMessage(unittest.TestCase):
+    def test_unknown_action_error_includes_action_name(self):
+        model = ScriptedModel()
+        bad_action = "unsupported_action_xyz"
+        history = [{"name": bad_action}]
+        with self.assertRaises(ValueError) as ctx:
+            model.next_operation(history, prompt="test")
+        self.assertIn(bad_action, str(ctx.exception))
 
 
 if __name__ == "__main__":

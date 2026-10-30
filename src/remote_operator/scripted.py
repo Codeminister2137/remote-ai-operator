@@ -32,6 +32,15 @@ def import_issues(text, existing=()):
     return {"issues": issues, "errors": errors}
 '''
 
+ALLOWED_ACTIONS = {"read_file", "write_file", "validate", "finish"}
+
+
+def _validate_history_actions(history):
+    for entry in history:
+        name = entry.get("name") if isinstance(entry, dict) else getattr(entry, "name", None)
+        if name is not None and name not in ALLOWED_ACTIONS:
+            raise ValueError(f"unknown action: {name}")
+
 
 class ScriptedModel:
     """Exercise actual controller/tools using a transparent fixed reference."""
@@ -39,6 +48,7 @@ class ScriptedModel:
     name = "SCRIPTED OFFLINE REFERENCE (not Meta inference)"
 
     def next_operation(self, history, *, prompt):
+        _validate_history_actions(history)
         names = [entry["name"] for entry in history]
         if not names:
             return Operation("read_file", {"path": SOURCE})
