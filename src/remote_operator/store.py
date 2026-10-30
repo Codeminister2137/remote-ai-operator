@@ -54,6 +54,10 @@ class Store:
             db.close()
 
     def get(self, task_id: str) -> dict:
+        """Return the task record for ``task_id``.
+
+        Raises ``KeyError`` when the task is unknown.
+        """
         with self.connect() as db:
             row = db.execute("SELECT record FROM tasks WHERE id=?", (task_id,)).fetchone()
         if row is None:
@@ -61,6 +65,11 @@ class Store:
         return json.loads(row[0])
 
     def recent_tasks(self, limit: int = 20) -> list[dict]:
+        """Return summaries for the most recent tasks.
+
+        ``limit`` is clamped to the inclusive range 1..50. Each summary
+        contains ``id``, a truncated ``prompt`` preview and ``status``.
+        """
         if type(limit) is not int or not 1 <= limit <= 50:
             raise ValueError("limit must be an integer between 1 and 50")
         with self.connect() as db:
@@ -76,6 +85,11 @@ class Store:
         return summaries
 
     def save(self, task: dict, kind: str, payload: dict | None = None) -> None:
+        """Persist ``task`` and append an ordered event of ``kind``.
+
+        Enforces the cancellation boundary for ``apply_started`` inside a
+        single transaction so a raced cancellation invalidates the approval.
+        """
         with self.connect() as db:
             if kind == "apply_started":
                 db.execute("BEGIN IMMEDIATE")
@@ -95,6 +109,10 @@ class Store:
         self._durable()
 
     def events(self, task_id: str, after: int = 0) -> list[dict]:
+        """Return ordered events for ``task_id`` after ``after`` sequence.
+
+        Validates that the task exists before querying its event log.
+        """
         self.get(task_id)
         with self.connect() as db:
             rows = db.execute(
@@ -135,6 +153,7 @@ class Store:
         return status
 
     def allowance_status(self, grant_id, fingerprint, maximum, approved):
+        """Return current allowance usage without consuming a request."""
         with self.connect() as db:
             row = db.execute(
                 "SELECT fingerprint,requests,reserved_usd FROM allowances WHERE id=?", (grant_id,)
@@ -157,6 +176,10 @@ class Store:
         }
 
     def request_cancel(self, task_id):
+        """Record a cancellation request for ``task_id``.
+
+        Rejects cancellation when the task is already applying or terminal.
+        """
         self.get(task_id)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -176,6 +199,7 @@ class Store:
         self._durable()
 
     def cancelled(self, task_id):
+        """Return whether ``task_id`` has been marked for cancellation."""
         with self.connect() as db:
             row = db.execute(
                 "SELECT cancelled FROM controls WHERE task_id=?", (task_id,)

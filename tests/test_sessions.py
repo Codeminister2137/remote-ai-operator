@@ -348,5 +348,15 @@ class ScopedOperatorTests(unittest.TestCase):
         self.factory.assert_not_called()
 
 
+class StoreModuleDocstringTests(unittest.TestCase):
+    def test_module_docstring(self):
+        import remote_operator.store as store_module
+
+        expected = "Transactional local task records with ordered, host-owned events."
+        self.assertIsNotNone(store_module.__doc__)
+        self.assertTrue(store_module.__doc__.strip())
+        self.assertEqual(store_module.__doc__, expected)
+
+
 if __name__ == "__main__":
     unittest.main()
