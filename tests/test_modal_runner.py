@@ -173,6 +173,21 @@ class ModalRunnerTests(unittest.TestCase):
             self.assertFalse(result.passed)
             self.assertIn("load optional SDK", result.output)
 
+    def test_docstrings_present_for_public_api(self):
+        targets = [
+            ModalValidator,
+            ModalValidator.__init__,
+            ModalValidator.bootstrap,
+            ModalValidator.policy_settings,
+            ModalValidator.request,
+            ModalValidator._run,
+        ]
+        for obj in targets:
+            with self.subTest(obj=obj):
+                doc = obj.__doc__
+                self.assertIsNotNone(doc)
+                self.assertGreater(len(doc.strip()), 20)
+
 
 @unittest.skipUnless(os.environ.get("OPERATOR_DOCKER_TESTS") == "1", "Docker opt-in required")
 class SupervisorDockerTests(unittest.TestCase):
