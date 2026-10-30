@@ -450,3 +450,19 @@ def test_docstrings_are_meaningful():
         assert len(doc.strip()) > 20
         # At least a few words
         assert len(doc.split()) >= 5
+
+
+def test_receipt_sink_exception_propagates(tmp_path):
+    def failing_sink(_receipt):
+        raise RuntimeError("sink boom")
+
+    with pytest.raises(RuntimeError, match="sink boom"):
+        run_development_loop(
+            workspace=tmp_path,
+            objective="obj",
+            allowlist=("notes.md",),
+            supervisor=lambda v: SupervisorDecision("task", task="go"),
+            implementer=lambda v: {"notes.md": "v1"},
+            validator=lambda f: ValidationResult(True, "ok"),
+            receipt_sink=failing_sink,
+        )
