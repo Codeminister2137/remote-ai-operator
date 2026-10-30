@@ -99,6 +99,8 @@ class JsonRoles:
             for item in targets:
                 if not _is_strict_str(item):
                     raise TypeError("targets must be list[str]")
+                if item == "":
+                    raise ValueError("targets must be non-empty strings")
             targets_tuple = tuple(targets)
         return SupervisorDecision(action=action, task=task, targets=targets_tuple, reason=reason)
 

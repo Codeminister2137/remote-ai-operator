@@ -166,6 +166,34 @@ def test_malformed_refused_no_send():
         JsonRoles(123)  # type: ignore[arg-type]
 
 
+def test_empty_targets_rejected():
+    """Regression: empty string in targets must be rejected, not silently accepted."""
+    for bad_targets in [
+        [""],
+        ["a.txt", ""],
+        ["", "b.txt"],
+        ["a.txt", "", "c.txt"],
+    ]:
+        def send(role: str, payload: dict[str, Any], _bad_targets: Any = bad_targets) -> dict[str, Any]:
+            return {"action": "task", "task": "do", "targets": _bad_targets}
+
+        with pytest.raises(ValueError):
+            JsonRoles(send).supervisor(_sup_view())
+
+    # Empty list is allowed (no targets), but list with empty string is not
+    def send_ok(role: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return {"action": "task", "task": "do", "targets": []}
+
+    decision = JsonRoles(send_ok).supervisor(_sup_view())
+    assert decision.targets == ()
+
+    def send_valid(role: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return {"action": "task", "task": "do", "targets": ["a.txt"]}
+
+    decision2 = JsonRoles(send_valid).supervisor(_sup_view())
+    assert decision2.targets == ("a.txt",)
+
+
 def test_send_called_once_and_propagates():
     calls: list[str] = []
 
