@@ -15,12 +15,35 @@ class ScopedOperators:
     """
 
     def __init__(self, root: Path, seed: Path, validator_factory, *, durable=None):
+        """Initialize scoped operator resolver.
+
+        Args:
+            root: Base directory under which per-subject workspaces are created.
+            seed: Path to seed material used to initialize new operator stores.
+            validator_factory: Callable returning a validator for operator actions.
+            durable: Optional durable storage handle forwarded to Operator.
+        """
         self.root = root.absolute()
         self.seed = seed
         self.validator_factory = validator_factory
         self.durable = durable
 
     def for_subject(self, subject):
+        """Return an isolated Operator for the given authenticated subject.
+
+        Validates the subject identifier, derives a deterministic workspace
+        directory from its hash, rejects symlinked workspaces, and returns
+        an Operator bound to that directory.
+
+        Args:
+            subject: Opaque authenticated subject identifier (non-empty string).
+
+        Returns:
+            An Operator instance scoped to the subject's isolated directory.
+
+        Raises:
+            ValueError: If subject is invalid or workspace path is a symlink/junction.
+        """
         valid_subject(subject)
         directory = self.root / hashlib.sha256(subject.encode()).hexdigest()
         # The deployment may mount a volume through a symlink (Modal does), so only

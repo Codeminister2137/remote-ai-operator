@@ -33,3 +33,11 @@ class NonceContract(unittest.TestCase):
                 with self.subTest(value_type=type(value).__name__):
                     with self.assertRaises(ValueError):
                         bridge.get(value)
+
+
+class ScopedModuleDocstring(unittest.TestCase):
+    def test_scoped_module_has_docstring(self):
+        import remote_operator.scoped as scoped
+
+        self.assertTrue(scoped.__doc__)
+        self.assertTrue(scoped.__doc__.strip())
