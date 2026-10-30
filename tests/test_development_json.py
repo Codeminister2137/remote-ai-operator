@@ -340,3 +340,73 @@ def test_integration_failed_then_repair_accept(tmp_path: Any) -> None:
     assert (tmp_path / "a.txt").read_bytes() == b"fixed"
     assert "failed" in [item[0] for item in observed]
     assert observed[-1][1] is True
+
+
+def test_rejects_unknown_top_level_keys():
+    """Regression: JsonRoles must reject responses with unknown top-level keys."""
+    # supervisor: unknown key alongside valid stop
+    for bad in [
+        {"action": "stop", "unknown": 1},
+        {"action": "stop", "extra": 1},
+        {"action": "stop", "reason": "ok", "unknown": 1},
+        {"action": "task", "task": "do", "targets": ["a.txt"], "extra": 1},
+        {"action": "task", "task": "do", "targets": ["a.txt"], "unknown": 1},
+        {"action": "accept", "reason": "ok", "extra": 1},
+    ]:
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(lambda r, p, _b=bad: _b).supervisor(_sup_view())
+
+    # implementer: unknown key alongside valid changes
+    for bad in [
+        {"changes": {}, "extra": 1},
+        {"changes": {"a.txt": "x"}, "extra": 1},
+        {"changes": {}, "unknown": 1},
+        {"changes": {}, "extra": None},
+    ]:
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(lambda r, p, _b=bad: _b).implementer(_impl_view())
+
+    # ensure send is not mutated when rejecting unknown keys
+    for bad in [
+        {"action": "stop", "unknown": 1},
+        {"action": "task", "task": "do", "targets": ["a.txt"], "extra": 1},
+    ]:
+        original = dict(bad)
+
+        def send(role: str, payload: dict[str, Any], _b=bad) -> dict[str, Any]:
+            return _b
+
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(send).supervisor(_sup_view())
+        assert bad == original
+
+    for bad in [{"changes": {}, "extra": 1}]:
+        original = dict(bad)
+
+        def send2(role: str, payload: dict[str, Any], _b=bad) -> dict[str, Any]:
+            return _b
+
+        with pytest.raises((ValueError, TypeError)):
+            JsonRoles(send2).implementer(_impl_view())
+        assert bad == original
+
+    # valid payloads without extra keys still pass
+    valid_supervisor_payloads = [
+        {"action": "stop"},
+        {"action": "stop", "reason": "done"},
+        {"action": "task", "task": "do", "targets": ["a.txt"]},
+        {"action": "task", "task": "do", "targets": []},
+        {"action": "accept"},
+        {"action": "accept", "reason": "good"},
+    ]
+    for valid in valid_supervisor_payloads:
+        result = JsonRoles(lambda r, p, _v=valid: _v).supervisor(_sup_view())
+        assert type(result) is SupervisorDecision
+
+    valid_implementer_payloads = [
+        {"changes": {}},
+        {"changes": {"a.txt": "hello"}},
+    ]
+    for valid in valid_implementer_payloads:
+        out = JsonRoles(lambda r, p, _v=valid: _v).implementer(_impl_view())
+        assert isinstance(out, dict)
