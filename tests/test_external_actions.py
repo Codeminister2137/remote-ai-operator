@@ -152,6 +152,13 @@ class TestExternalActionBridge(unittest.TestCase):
         self.assertTrue(any("retry" in m.lower() or "concurrent" in m.lower() for m in cm.output))
         self.assertEqual(expired.status, "approved")
 
+    def test_timeout_debug_log_emitted_on_expiry(self):
+        action = self.bridge.submit("Write greeting", _digest("hello"), _digest("base"), _digest("evidence"), expires_seconds=30, now=time.time())
+        with self.assertLogs("remote_operator.external_actions", level="DEBUG") as cm:
+            expired = self.bridge.get(action.id, now=action.expires + 1)
+        self.assertEqual(expired.status, "expired")
+        self.assertTrue(any(("expired" in m.lower() or "timeout" in m.lower()) and action.id in m for m in cm.output))
+
 
 class TestScriptedActionErrorMessage(unittest.TestCase):
     def test_unknown_action_error_includes_action_name(self):

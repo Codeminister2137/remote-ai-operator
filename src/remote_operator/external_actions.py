@@ -9,6 +9,7 @@ owner approves through the operator phone/web UI.
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import time
 import uuid
@@ -445,4 +446,5 @@ class ExternalActionBridge:
                     raise KeyError("Unknown external action")
                 return ExternalAction(**json.loads(row[0]))
         self._store._durable()
+        logging.getLogger(__name__).debug("external action %s expired", action.id)
         return expired
