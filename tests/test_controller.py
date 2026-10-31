@@ -177,6 +177,16 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.operator.approve(self.task_id, task["approval"]["nonce"])
 
+    def test_reject_emits_debug_log(self):
+        self.ready()
+        with self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured:
+            result = self.operator.reject(self.task_id)
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelname, "DEBUG")
+        self.assertIn(self.task_id, record.getMessage())
+
     def test_restart_cannot_blindly_replay_running_edit(self):
         task = self.operator.store.get(self.task_id)
         task["status"] = "running"
