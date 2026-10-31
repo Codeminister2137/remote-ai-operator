@@ -126,6 +126,7 @@ class HostedSessions:
         valid_subject(claims["s"])
         if claims["e"] <= self._clock():
             sid = self._identity(token).hex()[:8]
+            logging.getLogger(__name__).debug("expired hosted session %s", sid)
             raise SessionUnavailable(f"Session {sid} expired;reconnect to continue")
         identity = self._identity(token)
         with self._lock:
