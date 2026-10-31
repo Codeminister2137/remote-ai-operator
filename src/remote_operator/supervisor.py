@@ -63,6 +63,24 @@ class Supervisor:
         thread = self._thread(thread_id)
         return {"thread": thread, "events": self.operator.store.events(thread_id)}
 
+    def list_threads(self, limit: int = 20) -> list[dict]:
+        """Return id/topic/status summaries for planning threads, newest first."""
+        if type(limit) is not int or not 1 <= limit <= 50:
+            raise ValueError(f"limit must be an integer between 1 and 50: got {limit!r}")
+        summaries = []
+        for item in self.operator.store.recent_tasks(50):
+            if len(summaries) >= limit:
+                break
+            try:
+                task = self.operator.store.get(item["id"])
+            except KeyError:
+                continue
+            if task.get("supervisor_thread"):
+                summaries.append(
+                    {"id": task["id"], "topic": task["prompt"][:160], "status": task["status"]}
+                )
+        return summaries
+
     def post_message(self, model, thread_id: str, text: str) -> dict:
         """Append a user message and generate the assistant planning reply."""
         if not isinstance(text, str) or not text.strip() or len(text) > 4000:
