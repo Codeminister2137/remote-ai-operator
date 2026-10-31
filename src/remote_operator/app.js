@@ -18,6 +18,7 @@ let sessionRevision = 0;
 let selectionRevision = 0;
 let progressTimer = null;
 let pollBusy = false;
+const defaultPrompt = element("prompt").value;
 if (/^[a-f0-9]{32}$/.test(location.hash.slice(1))) element("taskId").value = location.hash.slice(1);
 const eventNames = {
   submitted:"Task submitted", started:"Actor started", inference_requested:"Actor turn requested",
@@ -202,6 +203,7 @@ function newTask() {
   stopPolling(); selectionRevision++;
   element("taskId").value = ""; element("recentTasks").value = "";
   history.replaceState(null, "", location.pathname + location.search);
+  element("prompt").value = defaultPrompt;
   clearTaskView();
   message("New task draft. Review the request, then choose Create and run new task. Saved work is unchanged.");
   element("prompt").focus();
@@ -215,6 +217,7 @@ async function chooseTask(id) {
   element("issues").replaceChildren(); element("import-errors").replaceChildren();
   clearTaskView();
   await refresh();
+  if (task && typeof task.prompt === "string") element("prompt").value = task.prompt;
 }
 async function refresh() {
   const id = element("taskId").value.trim();
@@ -240,6 +243,8 @@ async function refresh() {
   else stopPolling();
   const status = task.status;
   if (previousStatus !== status && !["running", "applying"].includes(status)) await recentTasks();
+  if (status === "awaiting_approval" && previousStatus !== status)
+    message("Change ready for review: check the diff below, then press Approve this verified change.");
   const receipts = events.filter(event => event.kind === "inference_receipt");
   const cursor = id + ":" + (receipts.length ? receipts[receipts.length - 1].sequence : 0) + ":" + status;
   if (stillSelected(id, selection, session) && cursor !== allowanceCursor) {
@@ -295,7 +300,8 @@ element("refreshAllowance").onclick = () => guarded(refreshAllowance);
 element("reconcile").onclick = () => guarded(() => taskAction("/reconcile", {}, "Saved result inspected. Review the new status before resuming."));
 element("load").onclick = () => guarded(() => chooseTask(element("taskId").value.trim()));
 element("approve").onclick = () => guarded(async () => {
-  if (!task || !task.approval) return;
+  if (!task) return;
+  if (!task.approval) { message("No approval nonce for this task. Run fresh validation first."); return; }
   await taskAction("/approve", {nonce: task.approval.nonce}, "Verified change applied to the local demo target.");
 });
 element("reject").onclick = () => guarded(() => taskAction("/reject", {}, "Change rejected; target not updated."));
