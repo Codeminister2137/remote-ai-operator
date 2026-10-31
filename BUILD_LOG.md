@@ -1,5 +1,11 @@
 # Event-built contributions
 
+2026-10-31: added judge accounts with self-funded evaluation for hosted demos:
+code-gated signup, password login bound to stable `judge-` subjects, per-judge
+finite self-grants against the judge's own Meta key (model server-pinned, owner
+never billed), login throttling, and matching UI. Eight new tests; full suite
+322 passed with 9 skips plus 143 subtests; Ruff check and format clean.
+
 2026-10-31: added the supervisor run worker: bounded `supervisor-drain`
 consumes approved run jobs oldest-first, reconciles interrupted runs without
 replay, propagates thread cancellation, and stops at the human approval

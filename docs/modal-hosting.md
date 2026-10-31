@@ -123,6 +123,21 @@ Run it locally with `remote-ai-operator serve --hosted` and a set
 session flow, not the public deployment. `scripts/hosted_browser_smoke.py` drives the
 same flow in an owned browser with two synthetic visitors.
 
+## Judge accounts and self-funded evaluation
+
+Judges register with the shared access code plus their own username/password
+(`POST /api/judges/signup`), then log in (`POST /api/judges/login`) for a
+session bound to the stable subject `judge-<username>`: a returning judge keeps
+the same isolated tasks. Passwords are salted pbkdf2-sha256 hashes in
+`visitors/judge_accounts.sqlite3`; login attempts throttle after ten failures.
+A judge sets their own finite limits (`PUT /api/judges/grant`: request count
+and USD cap) and attaches their own Meta key; inference is billed to the
+judge's key within the judge's limits, and the owner pays nothing. The model
+stays server-pinned via `OPERATOR_JUDGE_MODEL` (a non-contributor `muse-*`
+name); without it, judge grants are refused. An owner grant, when deployed,
+takes precedence over self-grants. Anonymous visitors are unchanged: scripted
+reference unless an owner grant plus key applies.
+
 ## Durable hosted state and deploy protocol (ADR-0005)
 
 State lives on the `remote-operator-state` Modal Volume v2 at `/data/runtime`.
@@ -135,14 +150,16 @@ The design is deliberately single-writer:
   secret mounted. To rotate the access code or signing secret, run
   `modal app stop -y remote-operator-hosted` first, then deploy again.
 - Startup reloads the volume, then runs `PRAGMA quick_check` over every visitor
-  store. A corrupt store refuses startup; nothing is deleted automatically.
+  store plus `visitors/judge_accounts.sqlite3` when present. A corrupt store
+  refuses startup; nothing is deleted automatically.
 - `Store(after_commit=volume.commit)` flushes after schema creation and each
   committed task save, allowance reservation and cancellation. Reads do not commit.
   Shutdown also commits pending writes.
 - The `remote-operator-hosted` Modal secret supplies `OPERATOR_VISITOR_CODE`,
   `OPERATOR_PUBLIC_ORIGIN` and `OPERATOR_SESSION_SECRET`. Values stay private and
   outside the repository. `OPERATOR_PUBLIC_ORIGIN` must be the final HTTPS origin so
-  the cookie is `Secure`.
+  the cookie is `Secure`. Judge evaluation additionally needs `OPERATOR_JUDGE_MODEL`
+  set to the entitled non-contributor Meta model.
 - The image contains only `src/remote_operator`, the synthetic `sample` and
   `tests/acceptance`, never the checkout, runtime directory or private plans.
 

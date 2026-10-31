@@ -139,13 +139,30 @@ class HostedSessions:
     def _identity(token):
         return hashlib.sha256(token.encode()).digest()
 
+    def verify_code(self, code):
+        """Check the shared access code without issuing a session."""
+        if (
+            not isinstance(code, str)
+            or not code.isascii()
+            or not secrets.compare_digest(code, self._code)
+        ):
+            raise AccessRefused()
+
     def open(self, code):
         """Exchange the shared code for a signed session token and server subject."""
-        if not isinstance(code, str) or not code.isascii():
-            raise AccessRefused()
-        if not secrets.compare_digest(code, self._code):
-            raise AccessRefused()
+        self.verify_code(code)
         token, _ = self._issue("visitor-" + secrets.token_hex(8))
+        return token
+
+    def open_judge(self, username):
+        """Issue a session bound to a verified judge's stable subject.
+
+        The caller must have verified the password first; this method only
+        binds the authenticated username to its workspace subject.
+        """
+        from remote_operator.judge_accounts import JudgeAccounts
+
+        token, _ = self._issue(JudgeAccounts.subject(username))
         return token
 
     def subject(self, token):

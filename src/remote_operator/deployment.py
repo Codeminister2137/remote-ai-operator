@@ -19,7 +19,11 @@ from remote_operator.web import create_hosted_app
 
 def verify_stores(root):
     """Refuse a corrupt task store instead of silently discarding recorded effects."""
-    for path in sorted(root.glob("*/tasks.sqlite3")):
+    candidates = sorted(root.glob("*/tasks.sqlite3"))
+    judges = root / "visitors" / "judge_accounts.sqlite3"
+    if judges.is_file():
+        candidates.append(judges)
+    for path in candidates:
         try:
             db = sqlite3.connect(path, timeout=5)
             try:
@@ -27,9 +31,9 @@ def verify_stores(root):
             finally:
                 db.close()
         except sqlite3.DatabaseError as exc:
-            raise ValueError("Hosted task store is unreadable") from exc
+            raise ValueError(f"Hosted store is unreadable: {path.name}") from exc
         if not result or result[0] != "ok":
-            raise ValueError("Hosted task store failed its integrity check")
+            raise ValueError(f"Hosted store failed its integrity check: {path.name}")
 
 
 def prepare_runtime(root, volume=None):
@@ -67,6 +71,7 @@ def build_hosted_application(
     volume=None,
     grant=None,
     validator_factory,
+    judge_model=None,
 ):
     """Build the hosted app over one single-writer runtime root.
 
@@ -74,8 +79,10 @@ def build_hosted_application(
     subject after a container restart. ``validator_factory`` builds a validator per
     subject; the Modal entry passes a Modal Sandbox validator, local previews pass
     Docker. Without a ``grant`` the hosted app stays on the labelled scripted
-    reference and refuses key attachment.
+    reference and refuses key attachment unless a judge configured self-limits.
     """
+    from remote_operator.judge_accounts import JudgeAccounts
+
     runtime_root = prepare_runtime(runtime_root, volume)
     seed = project_root / "sample" / "issue_import.py"
     checks = project_root / "tests" / "acceptance"
@@ -88,6 +95,10 @@ def build_hosted_application(
         HostedSessions(access_code, secret=session_secret),
         grant,
         public_origin=public_origin,
+        judge_accounts=JudgeAccounts(
+            runtime_root / "visitors" / "judge_accounts.sqlite3", after_commit=durable
+        ),
+        judge_model=judge_model,
     )
     if volume is not None:
         commit_on_shutdown(application, volume.commit)
