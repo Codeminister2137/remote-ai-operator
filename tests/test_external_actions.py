@@ -137,6 +137,21 @@ class TestExternalActionBridge(unittest.TestCase):
         self.assertIn(action.id, msg)
         self.assertIn(approved.status, msg)
 
+    def test_retry_debug_log_emitted_on_concurrent_update(self):
+        import logging
+        action = self.bridge.submit("Write greeting", _digest("hello"), _digest("base"), _digest("evidence"), expires_seconds=30, now=time.time())
+        # Simulate concurrent update by changing the stored record before expiry handling
+        import json
+        with self.bridge._store.connect() as db:
+            row = db.execute("SELECT record FROM external_actions WHERE id=?", (action.id,)).fetchone()
+            data = json.loads(row[0])
+            data["status"] = "approved"
+            db.execute("UPDATE external_actions SET record=? WHERE id=?", (json.dumps(data, sort_keys=True), action.id))
+        with self.assertLogs("remote_operator.external_actions", level="DEBUG") as cm:
+            expired = self.bridge._expire(action, now_val=action.expires + 5)
+        self.assertTrue(any("retry" in m.lower() or "concurrent" in m.lower() for m in cm.output))
+        self.assertEqual(expired.status, "approved")
+
 
 class TestScriptedActionErrorMessage(unittest.TestCase):
     def test_unknown_action_error_includes_action_name(self):
