@@ -157,7 +157,7 @@ class ModalValidator(SourceValidator):
               unbounded upload. No network access beyond preparing bytes.
         """
         if entry not in {"run_checks.py", "preview.py"}:
-            raise ValueError(f"Unknown protected runner entry: {entry}")
+            raise ValueError(f"Unknown protected runner entry: {entry} (operation: request)")
         files = {"/workspace/issue_import.py": read_source(workspace)}
         for name in ("run_checks.py", "test_import.py", "preview.py"):
             path = self.checks / name
