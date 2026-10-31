@@ -5,6 +5,7 @@ a task ID,workspace path or browser field never selects another principal.
 """
 
 import asyncio
+import logging
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -25,6 +26,8 @@ from remote_operator.scripted import ScriptedModel
 
 SESSION_COOKIE = "operator_session"
 SESSION_HEADER = "x-operator-request"
+
+logger = logging.getLogger(__name__)
 
 
 class BufferedBodies:
@@ -197,6 +200,7 @@ def _base_app(*, public_origin, sessions):
 
     @app.middleware("http")
     async def local_boundary(request: Request, call_next):
+        logger.debug("request started: %s %s", request.method, request.url.path)
         is_local = request.url.hostname in {"localhost", "127.0.0.1"}
         is_remote = (
             remote
@@ -226,7 +230,7 @@ def _base_app(*, public_origin, sessions):
 
     @app.exception_handler(KeyError)
     async def unknown_task(request, exc):
-        return JSONResponse({"detail": "Unknown task"}, status_code=404)
+        return JSONResponse({"detail": f"Unknown task: {request.url.path}"}, status_code=404)
 
     @app.exception_handler(404)
     async def not_found(request, exc):

@@ -4,6 +4,7 @@ import logging
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from remote_operator.control import (
     SOURCE,
@@ -177,6 +178,16 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.operator.approve(self.task_id, task["approval"]["nonce"])
 
+    def test_reject_emits_debug_log(self):
+        self.ready()
+        with self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured:
+            result = self.operator.reject(self.task_id)
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelname, "DEBUG")
+        self.assertIn(self.task_id, record.getMessage())
+
     def test_restart_cannot_blindly_replay_running_edit(self):
         task = self.operator.store.get(self.task_id)
         task["status"] = "running"
@@ -297,6 +308,18 @@ class ControllerTests(unittest.TestCase):
         msg = str(ctx.exception)
         self.assertIn("evil_tool", msg)
         self.assertIn("Unknown or invalid tool", msg)
+
+    def test_control_timeout_emits_debug_log(self):
+        with (
+            mock.patch("remote_operator.control.time.monotonic", return_value=9999),
+            self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured,
+            self.assertRaises(TimeoutError),
+        ):
+            self.operator._check_control(self.task_id, deadline=0)
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelname, "DEBUG")
+        self.assertIn(self.task_id, record.getMessage())
 
 
 if __name__ == "__main__":

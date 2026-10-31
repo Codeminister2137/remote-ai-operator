@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import math
 import os
 import subprocess
@@ -12,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from remote_operator.control import Validation, digest, read_source
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_IMAGE = (
     "python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704"
@@ -223,6 +226,7 @@ class DockerValidator(SourceValidator):
         ]
 
     def _run(self, workspace, *, entry="run_checks.py", payload=b"", cancelled=None):
+        logger.debug("runner starting entry=%s", entry)
         name = "remote-operator-" + uuid.uuid4().hex
         failure, code, process = None, None, None
         with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as input_file:
@@ -277,4 +281,5 @@ class DockerValidator(SourceValidator):
                 failure = ((failure + "; ") if failure else "") + "Runner output allowance reached"
             output.seek(0)
             text = output.read(65_536).decode("utf-8", errors="replace")
+        logger.debug("runner stopped entry=%s code=%s failure=%s", entry, code, failure)
         return Execution(code, text, failure)

@@ -355,6 +355,7 @@ def run_development_loop(
         receipts. Provenance: all receipts are host-generated; acceptance
         binds to exact reviewed bytes and validation output.
     """
+    print("[debug] run_development_loop start")
     receipts: list[Receipt] = []
     workspace = Path(workspace)
     allowlist = tuple(allowlist)
@@ -371,7 +372,7 @@ def run_development_loop(
     if len(set(allowlist)) != len(allowlist):
         raise ValueError("allowlist entries must be unique")
     if not isinstance(objective, str) or not objective or len(objective) > MAX_TASK_CHARS:
-        raise ValueError("objective must be a bounded nonempty string")
+        raise ValueError(f"objective must be a bounded nonempty string: {str(objective)[:200]!r}")
     if request_budget <= 0 or max_tasks <= 0 or max_repairs < 0 or max_no_progress <= 0:
         raise ValueError("budgets must be positive")
 

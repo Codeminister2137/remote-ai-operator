@@ -233,6 +233,7 @@ class Operator:
         if self.store.cancelled(task_id):
             raise RunCancelled()
         if time.monotonic() >= deadline:
+            logger.debug("control timeout for task %s", task_id)
             raise TimeoutError("Task deadline reached; late output cannot authorize effects")
 
     def _execute(self, task: dict, operation: Operation, *, deadline=float("inf")):
@@ -353,6 +354,7 @@ class Operator:
                 raise ValueError("Task cannot be rejected in this state")
             task["status"] = "rejected"
             task["approval"] = None
+            logger.debug("rejected task %s", task_id)
             self.store.save(task, "rejected")
             return task
 

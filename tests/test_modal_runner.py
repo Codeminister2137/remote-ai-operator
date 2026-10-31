@@ -164,6 +164,14 @@ class ModalRunnerTests(unittest.TestCase):
         self.assertIn("Unknown protected runner entry", str(ctx.exception))
         self.sdk.Sandbox.create.assert_not_called()
 
+    def test_unknown_entry_message_includes_operation_step_context(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.runner.request(self.workspace, "arbitrary.py", b"")
+        msg = str(ctx.exception)
+        self.assertIsInstance(ctx.exception, ValueError)
+        self.assertIn("arbitrary.py", msg)
+        self.assertIn("operation", msg.lower())
+
     def test_local_backend_does_not_require_modal_installed(self):
         self.assertIsInstance(DockerValidator(CHECKS).policy_digest(), str)
         if importlib.util.find_spec("modal") is None:

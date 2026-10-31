@@ -16,6 +16,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import threading
@@ -125,6 +126,7 @@ class HostedSessions:
         valid_subject(claims["s"])
         if claims["e"] <= self._clock():
             sid = self._identity(token).hex()[:8]
+            logging.getLogger(__name__).debug("expired hosted session %s", sid)
             raise SessionUnavailable(f"Session {sid} expired;reconnect to continue")
         identity = self._identity(token)
         with self._lock:
@@ -151,7 +153,9 @@ class HostedSessions:
     def open(self, code):
         """Exchange the shared code for a signed session token and server subject."""
         self.verify_code(code)
-        token, _ = self._issue("visitor-" + secrets.token_hex(8))
+        subject = "visitor-" + secrets.token_hex(8)
+        token, _ = self._issue(subject)
+        logging.getLogger(__name__).debug("created hosted session %s", subject)
         return token
 
     def open_judge(self, username):
@@ -191,11 +195,12 @@ class HostedSessions:
         """
         with self._lock:
             try:
-                _, expires, identity = self._claims(token)
+                subject, expires, identity = self._claims(token)
             except SessionUnavailable:
                 return
             self._revoked[identity] = expires
             self.sessions.revoke(token)
+            logging.getLogger(__name__).debug("closed hosted session %s", subject)
 
     def purge_expired(self):
         with self._lock:

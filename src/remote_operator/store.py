@@ -1,6 +1,7 @@
 """Transactional local task records with ordered, host-owned events."""
 
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from decimal import Decimal
@@ -39,6 +40,7 @@ class Store:
                 );
             """)
         self._durable()
+        logging.getLogger(__name__).debug("session store loaded: %s", path)
 
     def _durable(self):
         if self._after_commit is not None:
@@ -71,7 +73,7 @@ class Store:
         contains ``id``, a truncated ``prompt`` preview and ``status``.
         """
         if type(limit) is not int or not 1 <= limit <= 50:
-            raise ValueError("limit must be an integer between 1 and 50")
+            raise ValueError(f"limit must be an integer between 1 and 50: got {limit!r}")
         with self.connect() as db:
             rows = db.execute(
                 "SELECT record FROM tasks ORDER BY rowid DESC LIMIT ?", (limit,)

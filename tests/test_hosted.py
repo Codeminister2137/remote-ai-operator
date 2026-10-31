@@ -165,6 +165,16 @@ class HostedSessionUnitTests(unittest.TestCase):
         self.assertNotIn(CODE, msg)
         self.assertNotIn(token, msg)
 
+    def test_expired_session_emits_debug_log(self):
+        token = self.sessions.open(CODE)
+        self.now = 130
+        with (
+            self.assertLogs("remote_operator.hosted", level="DEBUG") as cm,
+            self.assertRaises(SessionUnavailable),
+        ):
+            self.sessions.subject(token)
+        self.assertTrue(any("expired hosted session" in m for m in cm.output))
+
     def test_keyless_sessions_do_not_consume_the_attached_key_capacity(self):
         small = HostedSessions(
             CODE,
@@ -331,6 +341,25 @@ class HostedSessionUnitTests(unittest.TestCase):
         for value in ("short", "x" * 257, "code with\nnewline" + "x" * 20, None):
             with self.subTest(value=type(value)), self.assertRaises(ValueError):
                 HostedSessions(value)
+
+    def test_open_emits_debug_log_with_session_id(self):
+        with self.assertLogs("remote_operator.hosted", level="DEBUG") as cm:
+            token = self.sessions.open(CODE)
+        self.assertEqual(len(cm.records), 1)
+        self.assertEqual(cm.records[0].levelname, "DEBUG")
+        subject = self.sessions.subject(token)
+        msg = cm.records[0].getMessage()
+        self.assertIn(subject, msg)
+
+    def test_close_emits_debug_log_with_session_context(self):
+        token = self.sessions.open(CODE)
+        subject = self.sessions.subject(token)
+        with self.assertLogs("remote_operator.hosted", level="DEBUG") as cm:
+            self.sessions.close(token)
+        self.assertEqual(len(cm.records), 1)
+        self.assertEqual(cm.records[0].levelname, "DEBUG")
+        msg = cm.records[0].getMessage()
+        self.assertIn(subject, msg)
 
 
 class HostedAppTests(unittest.IsolatedAsyncioTestCase):

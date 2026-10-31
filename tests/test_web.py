@@ -92,6 +92,15 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/api/tasks/missing", headers=self.auth)
         self.assertEqual(response.status_code, 404)
 
+    async def test_unknown_task_error_includes_route(self):
+        path = "/api/tasks/nonexistent-task-id-xyz"
+        response = await self.client.get(path, headers=self.auth)
+        self.assertEqual(response.status_code, 404)
+        body = response.json()
+        self.assertIn("detail", body)
+        self.assertIn("Unknown task", body["detail"])
+        self.assertIn(path, body["detail"])
+
     async def test_static_ui_is_safe_and_no_store(self):
         response = await self.client.get("/")
         self.assertEqual(response.status_code, 200)
@@ -392,3 +401,10 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         # Ensure at least 10 handlers documented
         documented = [k for k, v in found.items() if v]
         self.assertGreaterEqual(len(documented), 10, f"only {documented} documented")
+
+    async def test_web_request_entry_emits_debug_log(self):
+        """Regression: web request entry emits debug log."""
+        with self.assertLogs("remote_operator.web", level="DEBUG") as captured:
+            response = await self.client.get("/", headers=self.auth)
+            self.assertEqual(response.status_code, 200)
+        self.assertTrue(any("request started" in msg.lower() for msg in captured.output))

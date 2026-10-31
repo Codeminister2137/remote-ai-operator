@@ -9,6 +9,7 @@ owner approves through the operator phone/web UI.
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import time
 import uuid
@@ -435,6 +436,11 @@ class ExternalActionBridge:
                 (new_raw, expired.id, old_raw),
             )
             if cur.rowcount != 1:
+                __import__("logging").getLogger(__name__).debug(
+                    "retry/concurrent-update detected for action %s rowcount=%s",
+                    action.id,
+                    cur.rowcount,
+                )
                 # Stale read: another writer already resolved this action.
                 # Never overwrite the terminal state; return the current record.
                 row = db.execute(
@@ -444,4 +450,5 @@ class ExternalActionBridge:
                     raise KeyError("Unknown external action")
                 return ExternalAction(**json.loads(row[0]))
         self._store._durable()
+        logging.getLogger(__name__).debug("external action %s expired", action.id)
         return expired
