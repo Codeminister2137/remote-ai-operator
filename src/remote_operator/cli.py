@@ -155,7 +155,10 @@ def main():
             from remote_operator.web import create_app, create_hosted_app
 
             if args.hosted:
+                import re
+
                 from remote_operator.hosted import HostedSessions
+                from remote_operator.judge_accounts import JudgeAccounts
                 from remote_operator.scoped import ScopedOperators
 
                 access_code = os.environ.get("OPERATOR_VISITOR_CODE", "")
@@ -166,6 +169,12 @@ def main():
                         "A hosted grant requires --allow-live-inference; otherwise visitors "
                         "only run the labelled offline reference"
                     )
+                judge_model = os.environ.get("OPERATOR_JUDGE_MODEL") or None
+                if judge_model is not None and (
+                    not re.fullmatch(r"muse-[a-z0-9.-]+", judge_model)
+                    or "contributor" in judge_model
+                ):
+                    raise ValueError("OPERATOR_JUDGE_MODEL must name a non-contributor Muse model")
                 seed, checks = project_paths(args.project_root.resolve())
                 scoped = ScopedOperators(
                     operator.root / "visitors", seed, lambda: DockerValidator(checks)
@@ -175,6 +184,10 @@ def main():
                     HostedSessions(access_code, secret=session_secret),
                     grant,
                     public_origin=args.public_origin,
+                    judge_accounts=JudgeAccounts(
+                        operator.root / "visitors" / "judge_accounts.sqlite3"
+                    ),
+                    judge_model=judge_model,
                 )
             else:
                 token = os.environ.get("OPERATOR_ACCESS_TOKEN", "")

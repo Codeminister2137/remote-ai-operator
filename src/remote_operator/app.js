@@ -12,6 +12,8 @@ let hosted = false;
 let modelRouteConfigured = true;
 let authenticated = false;
 let sessionKeyAttached = false;
+let judgeLoginOffered = false;
+let judgeSession = false;
 let sessionRevision = 0;
 let selectionRevision = 0;
 let progressTimer = null;
@@ -97,6 +99,9 @@ function actions() {
   const active = selectedMode !== null && !connecting && task && task.id === element("taskId").value.trim();
   element("connect").disabled = connecting || hosted;
   element("enterSession").disabled = connecting || !hosted;
+  element("judgeSignup").disabled = connecting || busy;
+  element("judgeLogin").disabled = connecting || busy;
+  element("grantSave").disabled = connecting || busy || !judgeSession;
   element("attachKey").disabled = busy || connecting || !authenticated || sessionKeyAttached;
   element("detachKey").disabled = busy || connecting || !sessionKeyAttached;
   element("newTask").disabled = busy || connecting || selectedMode === null;
@@ -356,10 +361,13 @@ async function loadMode(session) {
   authenticated = true;
   selectedMode = configuration; displayMode(configuration);
   sessionKeyAttached = !!configuration.session_key_attached;
+  judgeSession = !!configuration.judge;
   if (hosted) {
     modelRouteConfigured = configuration.model_route_configured !== false;
     element("key-controls").hidden = !modelRouteConfigured;
+    element("judge-grant").hidden = !judgeSession;
     keyNote();
+    if (judgeSession) await refreshJudgeGrant(session);
   }
   await refreshAllowance();
   if (session !== sessionRevision) return;
@@ -419,6 +427,51 @@ element("leaveSession").onclick = () => guarded(async () => {
   await api("/api/session", "DELETE");
   location.reload();
 });
+async function refreshJudgeGrant(session) {
+  const stored = await api("/api/judges/grant");
+  if (session !== sessionRevision) return;
+  if (stored.grant) {
+    element("grantRequests").value = stored.grant.max_requests;
+    element("grantUsd").value = stored.grant.approved_usd;
+    element("grant-note").textContent = "Limits saved. Attach your key below to run real inference on your account.";
+  } else {
+    element("grant-note").textContent = "No spending limits yet. Save limits before attaching a key.";
+  }
+}
+element("judgeSignup").onclick = () => guarded(async () => {
+  if (busy) return;
+  busy = true; actions();
+  try {
+    await api("/api/judges/signup", "POST", {code: element("accessCode").value,
+      username: element("judgeName").value.trim(), password: element("judgePassword").value});
+    element("judgePassword").value = "";
+    message("Judge account registered. Log in to open your private workspace.");
+  } finally { busy = false; actions(); }
+});
+element("judgeLogin").onclick = () => guarded(async () => {
+  stopPolling(); const session = ++sessionRevision;
+  selectedMode = null; allowance = null; allowanceCursor = ""; connecting = true; actions();
+  try {
+    await api("/api/judges/login", "POST", {username: element("judgeName").value.trim(),
+      password: element("judgePassword").value});
+    element("judgePassword").value = "";
+    await loadMode(session);
+    if (session === sessionRevision) message("Judge session started. Set spending limits, then attach your key.");
+  } finally {
+    if (session === sessionRevision) { connecting = false; actions(); }
+  }
+});
+element("grantSave").onclick = () => guarded(async () => {
+  if (busy || !judgeSession) return;
+  busy = true; actions();
+  try {
+    await api("/api/judges/grant", "PUT", {max_requests: Number(element("grantRequests").value),
+      approved_usd: element("grantUsd").value.trim()});
+    const session = ++sessionRevision;
+    await loadMode(session);
+    if (session === sessionRevision) message("Spending limits saved. Attach your key to run real inference.");
+  } finally { busy = false; actions(); }
+});
 element("token").addEventListener("input", () => {
   sessionRevision++; selectionRevision++; stopPolling(); selectedMode = null; task = null; connecting = false;
   allowance = null; allowanceCursor = "";
@@ -436,8 +489,10 @@ element("taskId").addEventListener("input", () => {
     if (!configuration.hosted) return;
     hosted = true;
     modelRouteConfigured = configuration.model_route_configured !== false;
+    judgeLoginOffered = configuration.judge_login === true;
     element("owner-access").hidden = true;
     element("visitor-access").hidden = false;
+    element("judge-access").hidden = !judgeLoginOffered;
     element("key-section").hidden = false;
     element("key-controls").hidden = !modelRouteConfigured;
     element("access-note").textContent = "Private demo: enter the access code to open your own session.";
