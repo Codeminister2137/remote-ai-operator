@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -28,6 +29,73 @@ class Execution:
     code: int | None
     output: str
     failure: str | None
+
+
+DOCKER_DESKTOP_WINDOWS = "C:/Program Files/Docker/Docker/Docker Desktop.exe"
+DAEMON_DOWN_MARKERS = (
+    "failed to connect to the docker api",
+    "cannot connect to the docker daemon",
+    "error during connect",
+    "dockerdesktoplinuxengine",
+)
+DAEMON_START_TIMEOUT = 180.0
+
+
+def daemon_ready() -> bool:
+    """Check whether the Docker daemon answers without starting anything."""
+    try:
+        probe = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
+
+
+def ensure_docker_daemon(timeout: float = DAEMON_START_TIMEOUT) -> bool:
+    """Start Docker Desktop on Windows when the daemon is down, then wait.
+
+    Keeps phone-driven validation working after boot, sleep/wake, or a quit
+    Docker Desktop without owner intervention. Returns True once the daemon
+    answers, False when it cannot be started (non-Windows, missing binary,
+    or still down after the timeout).
+    """
+    if daemon_ready():
+        return True
+    if sys.platform != "win32":
+        return False
+    try:
+        subprocess.Popen(
+            [DOCKER_DESKTOP_WINDOWS],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+        )
+    except OSError:
+        return False
+    logger.info("docker daemon down; started Docker Desktop, waiting up to %.0fs", timeout)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(5)
+        if daemon_ready():
+            return True
+    return False
+
+
+def daemon_down_failure(text: str) -> str | None:
+    """Actionable failure when CLI output shows an unreachable daemon."""
+    lowered = text.lower()
+    if any(marker in lowered for marker in DAEMON_DOWN_MARKERS):
+        return (
+            "Docker daemon unreachable during validation. Start Docker Desktop "
+            "on the PC (it auto-starts at sign-in), then run fresh validation."
+        )
+    return None
 
 
 class SourceValidator:
@@ -225,7 +293,7 @@ class DockerValidator(SourceValidator):
             "/checks/" + entry,
         ]
 
-    def _run(self, workspace, *, entry="run_checks.py", payload=b"", cancelled=None):
+    def _execute_once(self, workspace, *, entry="run_checks.py", payload=b"", cancelled=None):
         logger.debug("runner starting entry=%s", entry)
         name = "remote-operator-" + uuid.uuid4().hex
         failure, code, process = None, None, None
@@ -281,5 +349,22 @@ class DockerValidator(SourceValidator):
                 failure = ((failure + "; ") if failure else "") + "Runner output allowance reached"
             output.seek(0)
             text = output.read(65_536).decode("utf-8", errors="replace")
+        if code and not failure:
+            failure = daemon_down_failure(text)
         logger.debug("runner stopped entry=%s code=%s failure=%s", entry, code, failure)
         return Execution(code, text, failure)
+
+    def _run(self, workspace, *, entry="run_checks.py", payload=b"", cancelled=None):
+        """Run once; heal a down daemon and retry once on daemon-down evidence."""
+        first = self._execute_once(workspace, entry=entry, payload=payload, cancelled=cancelled)
+        stale = daemon_down_failure((first.output or "") + "\n" + (first.failure or ""))
+        if not stale or (cancelled and cancelled()):
+            return first
+        if not ensure_docker_daemon():
+            return Execution(
+                first.code,
+                first.output,
+                "Docker Desktop is not running and could not be started "
+                "automatically. Start Docker Desktop on the PC, then run again.",
+            )
+        return self._execute_once(workspace, entry=entry, payload=payload, cancelled=cancelled)
