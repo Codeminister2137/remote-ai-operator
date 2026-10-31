@@ -281,4 +281,5 @@ class DockerValidator(SourceValidator):
                 failure = ((failure + "; ") if failure else "") + "Runner output allowance reached"
             output.seek(0)
             text = output.read(65_536).decode("utf-8", errors="replace")
+        logger.debug("runner stopped entry=%s code=%s failure=%s", entry, code, failure)
         return Execution(code, text, failure)
