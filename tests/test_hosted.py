@@ -332,6 +332,15 @@ class HostedSessionUnitTests(unittest.TestCase):
             with self.subTest(value=type(value)), self.assertRaises(ValueError):
                 HostedSessions(value)
 
+    def test_open_emits_debug_log_with_session_id(self):
+        with self.assertLogs("remote_operator.hosted", level="DEBUG") as cm:
+            token = self.sessions.open(CODE)
+        self.assertEqual(len(cm.records), 1)
+        self.assertEqual(cm.records[0].levelname, "DEBUG")
+        subject = self.sessions.subject(token)
+        msg = cm.records[0].getMessage()
+        self.assertIn(subject, msg)
+
 
 class HostedAppTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

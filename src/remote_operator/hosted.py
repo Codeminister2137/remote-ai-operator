@@ -16,6 +16,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import threading
@@ -145,7 +146,9 @@ class HostedSessions:
             raise AccessRefused()
         if not secrets.compare_digest(code, self._code):
             raise AccessRefused()
-        token, _ = self._issue("visitor-" + secrets.token_hex(8))
+        subject = "visitor-" + secrets.token_hex(8)
+        token, _ = self._issue(subject)
+        logging.getLogger(__name__).debug("created hosted session %s", subject)
         return token
 
     def subject(self, token):
