@@ -8,6 +8,7 @@ fresh network-blocked Modal Sandbox. It is never selected implicitly.
 import hashlib
 import importlib
 import json
+import logging
 import math
 import time
 import uuid
@@ -26,8 +27,7 @@ class ModalValidator(SourceValidator):
         Security boundaries:
             * Only files registered via :meth:`request` (workspace issue source and
               known protected checks) are transferred to the sandbox.
-            * The sandbox is created fresh per run with ``block_network=True``,
-              no secrets/env/volumes forwarded, and capped CPU/memory.
+            * The sandbox is created fresh per run with ``block_network=True``,\n              no secrets/env/volumes forwarded, and capped CPU/memory.
             * Remote execution requires explicit opt-in via
               ``allow_remote_execution=True``; otherwise no SDK call is made.
             * Execution is bounded by timeout/deadline policies and bounded
@@ -104,8 +104,7 @@ class ModalValidator(SourceValidator):
             None.
 
         Returns:
-            dict: Mapping containing ``backend``, ``image``, ``timeout_seconds``,
-            ``deadline_policy``, ``bootstrap_sha256`` (hash of
+            dict: Mapping containing ``backend``, ``image``, ``timeout_seconds``,\n            ``deadline_policy``, ``bootstrap_sha256`` (hash of
             :meth:`bootstrap`), ``network`` (``"blocked"``), CPU/memory
             limits, uid, and output byte limits.
 
@@ -144,8 +143,7 @@ class ModalValidator(SourceValidator):
                 by caller); decoded as UTF-8 for inclusion in the request.
 
         Returns:
-            bytes: JSON-encoded request containing ``files``, ``entry``,
-            ``payload`` (as string), and ``timeout`` suitable for writing to
+            bytes: JSON-encoded request containing ``files``, ``entry``,\n            ``payload`` (as string), and ``timeout`` suitable for writing to
             the sandbox stdin.
 
         Security boundaries:
@@ -193,24 +191,21 @@ class ModalValidator(SourceValidator):
                 is requested; checked before launch and during wait.
 
         Returns:
-            Execution: Result with ``code``, ``output``, and ``failure``
-            fields. Failures include authorization missing, cancellation,
-            deadline, invalid receipt, supervisor non-zero exit, or SDK
+            Execution: Result with ``code``, ``output``, and ``failure``\n            fields. Failures include authorization missing, cancellation,\n            deadline, invalid receipt, supervisor non-zero exit, or SDK
             errors (reported by phase without leaking raw SDK messages).
 
         Security boundaries:
             * Requires ``allow_remote_execution is True`` (explicit
               authorization); otherwise returns immediately without SDK use.
             * Only registered files via :meth:`request` are sent; network is
-              blocked (``block_network=True``), env/secrets/volumes empty,
-              and OIDC/ports disabled.
-            * Supervisor output is treated as untrusted: size-capped,
-              JSON-validated (exact keys/types), and output-capped before
+              blocked (``block_network=True``), env/secrets/volumes empty,\n              and OIDC/ports disabled.
+            * Supervisor output is treated as untrusted: size-capped,\n              JSON-validated (exact keys/types), and output-capped before
               acceptance. Child output is bounded by the supervisor.
             * Diagnostics are isolated; user-visible errors expose only phase
               and exception type, not raw SDK messages that may contain
               account data. Sandbox is always terminated and verified.
         """
+        logging.getLogger(__name__).debug("Modal runner starting")
         if self.allow_remote_execution is not True:
             return Execution(
                 None, "", "Modal execution requires explicit finite compute authorization"
