@@ -104,6 +104,55 @@ class SupervisorFlowTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get(f"/api/supervisor/threads/{task_id}", headers=self.auth)
         self.assertEqual(response.status_code, 409)
 
+    async def test_thread_list_route_needs_auth_and_lists_newest_first(self):
+        denied = await self.client.get("/api/supervisor/threads")
+        self.assertEqual(denied.status_code, 401)
+        empty = await self.client.get("/api/supervisor/threads", headers=self.auth)
+        self.assertEqual(empty.json(), [])
+        first = await self.client.post(
+            "/api/supervisor/threads", headers=self.auth, json={"topic": "first"}
+        )
+        await self.client.post("/api/tasks", headers=self.auth, json={"prompt": "plain"})
+        second = await self.client.post(
+            "/api/supervisor/threads", headers=self.auth, json={"topic": "second"}
+        )
+        listed = await self.client.get("/api/supervisor/threads", headers=self.auth)
+        self.assertEqual(
+            [item["id"] for item in listed.json()],
+            [second.json()["id"], first.json()["id"]],
+        )
+        self.assertEqual(listed.json()[0]["topic"], "second")
+        bad = await self.client.get("/api/supervisor/threads?limit=99", headers=self.auth)
+        self.assertEqual(bad.status_code, 422)
+
+    async def test_served_ui_exposes_supervisor_section(self):
+        page = await self.client.get("/")
+        for element_id in (
+            "supervisorThreads",
+            "supervisorNewTopic",
+            "supervisorOpen",
+            "supervisorTranscript",
+            "supervisorInput",
+            "supervisorSend",
+            "supervisorPlan",
+            "supervisorWritePlan",
+            "supervisorApprovePlan",
+            "supervisorRuns",
+            "supervisorNote",
+        ):
+            self.assertIn(f'id="{element_id}"', page.text)
+
+    async def test_served_script_calls_supervisor_endpoints(self):
+        script = await self.client.get("/app.js")
+        for path in (
+            "/api/supervisor/threads",
+            "/messages",
+            "/plan",
+            "/approve",
+            "/api/supervisor/runs",
+        ):
+            self.assertIn(path, script.text)
+
 
 class SupervisorUnitTests(unittest.TestCase):
     def setUp(self):
@@ -160,3 +209,19 @@ class SupervisorUnitTests(unittest.TestCase):
             self.supervisor.get_thread("../escape")
         with self.assertRaises(ValueError):
             self.supervisor.run_status("short")
+
+    def test_list_threads_covers_empty_filter_and_limit(self):
+        self.assertEqual(self.supervisor.list_threads(), [])
+        first = self.supervisor.open_thread("first topic")
+        self.operator = self.supervisor.operator
+        self.operator.submit("plain task prompt")
+        second = self.supervisor.open_thread("second topic")
+        listed = self.supervisor.list_threads()
+        self.assertEqual([item["id"] for item in listed], [second["id"], first["id"]])
+        self.assertEqual(listed[0]["topic"], "second topic")
+        self.assertEqual(listed[0]["status"], "open")
+        self.assertEqual(len(self.supervisor.list_threads(1)), 1)
+        with self.assertRaises(ValueError):
+            self.supervisor.list_threads(0)
+        with self.assertRaises(ValueError):
+            self.supervisor.list_threads(99)

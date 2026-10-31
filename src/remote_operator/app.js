@@ -122,6 +122,7 @@ function actions() {
   element("revalidate").disabled = !active || busy || !["awaiting_approval", "review_required", "paused"].includes(task.status);
   element("preview").disabled = !active || busy || task.status !== "completed";
   element("cancel").disabled = !active || ["completed", "applying", "rejected", "cancelled"].includes(task.status);
+  if (typeof supervisorActions === "function") supervisorActions();
 }
 async function recentTasks() {
   const session = sessionRevision;
@@ -175,6 +176,114 @@ async function refreshExternalActions() {
   }));
 }
 element("refreshExternal").onclick = () => guarded(refreshExternalActions);
+let supervisorThreadId = "";
+let supervisorBusy = false;
+let supervisorPlanNonce = "";
+function supervisorNote(text) { element("supervisorNote").textContent = text; }
+function supervisorActions() {
+  const ready = selectedMode !== null && !connecting && !supervisorBusy;
+  for (const id of ["supervisorThreads", "refreshSupervisor", "supervisorNewTopic", "supervisorOpen"]) element(id).disabled = !ready;
+  const open = ready && !!supervisorThreadId;
+  element("supervisorInput").disabled = !open;
+  element("supervisorSend").disabled = !open;
+  element("supervisorWritePlan").disabled = !open;
+  element("supervisorApprovePlan").disabled = !open || !supervisorPlanNonce;
+}
+function renderSupervisorTranscript(history) {
+  element("supervisorTranscript").replaceChildren(...history.map((turn) => {
+    const item = document.createElement("li");
+    item.textContent = turn.role + ": " + turn.text;
+    return item;
+  }));
+}
+async function loadSupervisorThreads() {
+  const session = sessionRevision;
+  const threads = await api("/api/supervisor/threads");
+  if (session !== sessionRevision || selectedMode === null) return;
+  const chooser = element("supervisorThreads");
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = threads.length ? "Choose a thread" : "No threads yet";
+  chooser.replaceChildren(placeholder, ...threads.map((item) => {
+    const option = document.createElement("option");
+    option.value = item.id; option.textContent = item.status + " · " + item.topic;
+    return option;
+  }));
+  chooser.value = supervisorThreadId;
+}
+async function openSupervisorThread(id) {
+  if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Choose a thread first.");
+  const detail = await api("/api/supervisor/threads/" + encodeURIComponent(id));
+  supervisorThreadId = id;
+  const approval = detail.thread.status === "planned" ? detail.thread.approval : null;
+  supervisorPlanNonce = approval && approval.nonce ? approval.nonce : "";
+  element("supervisorThreads").value = id;
+  renderSupervisorTranscript(detail.thread.history || []);
+  element("supervisorPlan").textContent = detail.thread.plan ? detail.thread.plan.markdown : "No plan written.";
+  supervisorNote("Thread open. Chat to refine requirements, then write the plan.");
+  supervisorActions();
+}
+async function loadSupervisorRuns() {
+  const session = sessionRevision;
+  const runs = await api("/api/supervisor/runs");
+  if (session !== sessionRevision || selectedMode === null) return;
+  const list = element("supervisorRuns");
+  if (!runs.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No runs yet.";
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...runs.map((run) => {
+    const item = document.createElement("li");
+    item.textContent = run.status + " · " + run.run_id.slice(0, 12);
+    return item;
+  }));
+}
+async function supervisorStep(work) {
+  if (supervisorBusy) return;
+  supervisorBusy = true; supervisorActions();
+  try { await work(); }
+  finally { supervisorBusy = false; supervisorActions(); }
+}
+element("refreshSupervisor").onclick = () => guarded(() => supervisorStep(async () => {
+  await loadSupervisorThreads(); await loadSupervisorRuns();
+}));
+element("supervisorThreads").onchange = () => guarded(() => supervisorStep(async () => {
+  if (element("supervisorThreads").value) await openSupervisorThread(element("supervisorThreads").value);
+}));
+element("supervisorOpen").onclick = () => guarded(() => supervisorStep(async () => {
+  const topic = element("supervisorNewTopic").value.trim();
+  if (!topic) { supervisorNote("Enter a topic first."); return; }
+  const opened = await api("/api/supervisor/threads", "POST", {topic});
+  element("supervisorNewTopic").value = "";
+  await loadSupervisorThreads();
+  await openSupervisorThread(opened.id);
+}));
+element("supervisorSend").onclick = () => guarded(() => supervisorStep(async () => {
+  if (!supervisorThreadId) return;
+  const text = element("supervisorInput").value.trim();
+  if (!text) return;
+  await api("/api/supervisor/threads/" + supervisorThreadId + "/messages", "POST", {text});
+  element("supervisorInput").value = "";
+  await openSupervisorThread(supervisorThreadId);
+}));
+element("supervisorWritePlan").onclick = () => guarded(() => supervisorStep(async () => {
+  if (!supervisorThreadId) return;
+  const plan = await api("/api/supervisor/threads/" + supervisorThreadId + "/plan", "POST");
+  supervisorPlanNonce = plan.nonce;
+  element("supervisorPlan").textContent = plan.markdown;
+  supervisorNote("Plan written. Review it above, then approve to queue a run.");
+  supervisorActions();
+}));
+element("supervisorApprovePlan").onclick = () => guarded(() => supervisorStep(async () => {
+  if (!supervisorThreadId || !supervisorPlanNonce) return;
+  const queued = await api("/api/supervisor/threads/" + supervisorThreadId + "/approve", "POST", {nonce: supervisorPlanNonce});
+  supervisorPlanNonce = "";
+  await loadSupervisorRuns();
+  await openSupervisorThread(supervisorThreadId);
+  supervisorNote("Plan approved. Run queued: " + queued.run_id.slice(0, 12) + ".");
+}));
 function renderEvents() {
   const start = showAllEvents ? 0 : Math.max(0, taskEvents.length - 20);
   element("events").replaceChildren(...taskEvents.slice(start).map((event, offset) => {
@@ -380,6 +489,10 @@ async function loadMode(session) {
   const summaries = await recentTasks();
   if (session !== sessionRevision) return;
   await refreshExternalActions();
+  if (session !== sessionRevision) return;
+  await loadSupervisorThreads();
+  if (session !== sessionRevision) return;
+  await loadSupervisorRuns();
   if (session !== sessionRevision) return;
   const saved = element("taskId").value.trim();
   if (saved || summaries.length) {

@@ -30,6 +30,20 @@
 <button id="refreshAllowance" class="secondary" disabled>Refresh spending</button></section>
 <section><h2>Tasks</h2><button id="newTask" class="secondary" disabled>New task</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
 <button id="refreshTasks" class="secondary" disabled>Refresh tasks</button><p>Choose a task to review its progress or result. Selecting a task never starts work or approves a change.</p></section>
+<section><h2>Supervisor planning</h2>
+<p>Chat with the supervisor to plan work, then review the written plan. Planning never starts implementation or approves a change.</p>
+<label>Threads<select id="supervisorThreads" disabled><option value="">Connect to load threads</option></select></label>
+<label>New topic<input id="supervisorNewTopic" autocomplete="off" placeholder="What should we plan?"></label>
+<button id="supervisorOpen" class="secondary" disabled>Open thread</button>
+<button id="refreshSupervisor" class="secondary" disabled>Refresh threads</button>
+<ol id="supervisorTranscript"></ol>
+<label>Message<textarea id="supervisorInput" rows="3"></textarea></label>
+<button id="supervisorSend" disabled>Send message</button>
+<h3>Plan</h3><pre id="supervisorPlan">No plan written.</pre>
+<button id="supervisorWritePlan" class="secondary" disabled>Write plan</button>
+<button id="supervisorApprovePlan" disabled>Approve plan</button>
+<h3>Runs</h3><ul id="supervisorRuns"><li>No runs yet.</li></ul>
+<p id="supervisorNote" role="status" aria-live="polite"></p></section>
 <section><h2>Workbench pending actions</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
 <p>External actions from AI Workbench or other connected tools appear here. Approve or reject the exact pending change.</p>
 <ul id="externalActions"><li>Connect to load pending actions.</li></ul></section>

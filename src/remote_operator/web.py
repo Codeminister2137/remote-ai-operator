@@ -347,6 +347,13 @@ def _supervisor_routes(app, principal):
         """Open a supervisor planning thread."""
         return Supervisor(who.operator).open_thread(body.topic)
 
+    @app.get("/api/supervisor/threads")
+    def list_threads(
+        who: Annotated[Principal, Depends(principal)], limit: int = Query(20, ge=1, le=50)
+    ):
+        """List planning thread summaries, newest first."""
+        return Supervisor(who.operator).list_threads(limit)
+
     @app.get("/api/supervisor/threads/{thread_id}")
     def get_thread(thread_id: str, who: Annotated[Principal, Depends(principal)]):
         """Return a planning thread with its events."""
