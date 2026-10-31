@@ -1,6 +1,7 @@
 """Transactional local task records with ordered, host-owned events."""
 
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from decimal import Decimal
@@ -39,6 +40,7 @@ class Store:
                 );
             """)
         self._durable()
+        logging.getLogger(__name__).debug("session store loaded: %s", path)
 
     def _durable(self):
         if self._after_commit is not None:

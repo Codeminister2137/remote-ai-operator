@@ -365,5 +365,16 @@ class StoreModuleDocstringTests(unittest.TestCase):
         self.assertIn(synthetic_id, str(ctx.exception))
 
 
+class StoreLoggingTests(unittest.TestCase):
+    def test_store_creation_emits_debug_log(self):
+        import remote_operator.store as store_module
+
+        path = Path(tempfile.mkdtemp()) / "tasks.sqlite3"
+        with self.assertLogs(store_module.__name__, level="DEBUG") as logs:
+            Store(path)
+        self.assertTrue(any("session store loaded" in m for m in logs.output))
+        self.assertTrue(any(str(path) in m for m in logs.output))
+
+
 if __name__ == "__main__":
     unittest.main()
