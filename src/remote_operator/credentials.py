@@ -27,7 +27,7 @@ class SessionCapacity(ValueError):
 def valid_subject(subject):
     """Subjects must come from trusted authentication,not request workspace paths."""
     if not isinstance(subject, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", subject):
-        raise ValueError("Invalid authenticated subject")
+        raise ValueError('Invalid authenticated subject; expected format "[A-Za-z0-9_-]{1,128}"')
     return subject
 
 

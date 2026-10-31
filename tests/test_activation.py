@@ -149,3 +149,11 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(captured.records[0].levelname, "DEBUG")
         log_msg = captured.records[0].getMessage()
         self.assertNotIn(raw_key, log_msg)
+
+    def test_invalid_subject_error_includes_expected_format(self):
+        from remote_operator.credentials import valid_subject
+
+        with self.assertRaises(ValueError) as ctx:
+            valid_subject("invalid subject!")
+        msg = str(ctx.exception)
+        self.assertIn("[A-Za-z0-9_-]{1,128}", msg)
