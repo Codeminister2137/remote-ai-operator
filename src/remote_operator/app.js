@@ -235,8 +235,9 @@ async function openSupervisorThread(id) {
 }
 async function loadSupervisorRuns() {
   const session = sessionRevision;
-  const runs = await api("/api/supervisor/runs");
+  const payload = await api("/api/supervisor/runs");
   if (session !== sessionRevision || selectedMode === null) return;
+  const runs = Array.isArray(payload) ? payload : (payload.runs || []);
   const list = element("supervisorRuns");
   if (!runs.length) {
     const empty = document.createElement("li");
@@ -509,10 +510,14 @@ async function loadMode(session) {
   if (session !== sessionRevision) return;
   await refreshExternalActions();
   if (session !== sessionRevision) return;
-  await loadSupervisorThreads();
-  if (session !== sessionRevision) return;
-  await loadSupervisorRuns();
-  if (session !== sessionRevision) return;
+  try {
+    await loadSupervisorThreads();
+    if (session !== sessionRevision) return;
+    await loadSupervisorRuns();
+    if (session !== sessionRevision) return;
+  } catch (error) {
+    supervisorNote("Supervisor data unavailable: " + error.message);
+  }
   const saved = element("taskId").value.trim();
   if (saved || summaries.length) {
     await chooseTask(saved || summaries[0].id);

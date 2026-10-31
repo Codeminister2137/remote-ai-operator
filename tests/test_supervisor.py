@@ -125,6 +125,35 @@ class SupervisorFlowTests(unittest.IsolatedAsyncioTestCase):
         bad = await self.client.get("/api/supervisor/threads?limit=99", headers=self.auth)
         self.assertEqual(bad.status_code, 422)
 
+    async def test_runs_route_returns_wrapped_list(self):
+        opened = await self.client.post(
+            "/api/supervisor/threads", headers=self.auth, json={"topic": "t"}
+        )
+        thread_id = opened.json()["id"]
+        await self.client.post(
+            f"/api/supervisor/threads/{thread_id}/messages",
+            headers=self.auth,
+            json={"text": "do it"},
+        )
+        await self.client.post(
+            f"/api/supervisor/threads/{thread_id}/plan", headers=self.auth
+        )
+        before = await self.client.get("/api/supervisor/runs", headers=self.auth)
+        self.assertIn("runs", before.json())
+        plan = await self.client.get(
+            f"/api/supervisor/threads/{thread_id}", headers=self.auth
+        )
+        nonce = plan.json()["thread"]["approval"]["nonce"]
+        queued = await self.client.post(
+            f"/api/supervisor/threads/{thread_id}/approve",
+            headers=self.auth,
+            json={"nonce": nonce},
+        )
+        after = await self.client.get("/api/supervisor/runs", headers=self.auth)
+        self.assertEqual(
+            [run["run_id"] for run in after.json()["runs"]], [queued.json()["run_id"]]
+        )
+
     async def test_served_ui_exposes_supervisor_section(self):
         page = await self.client.get("/")
         for element_id in (
