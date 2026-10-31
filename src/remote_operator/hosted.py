@@ -177,11 +177,12 @@ class HostedSessions:
         """
         with self._lock:
             try:
-                _, expires, identity = self._claims(token)
+                subject, expires, identity = self._claims(token)
             except SessionUnavailable:
                 return
             self._revoked[identity] = expires
             self.sessions.revoke(token)
+            logging.getLogger(__name__).debug("closed hosted session %s", subject)
 
     def purge_expired(self):
         with self._lock:

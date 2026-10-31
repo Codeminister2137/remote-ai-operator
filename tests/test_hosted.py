@@ -341,6 +341,16 @@ class HostedSessionUnitTests(unittest.TestCase):
         msg = cm.records[0].getMessage()
         self.assertIn(subject, msg)
 
+    def test_close_emits_debug_log_with_session_context(self):
+        token = self.sessions.open(CODE)
+        subject = self.sessions.subject(token)
+        with self.assertLogs("remote_operator.hosted", level="DEBUG") as cm:
+            self.sessions.close(token)
+        self.assertEqual(len(cm.records), 1)
+        self.assertEqual(cm.records[0].levelname, "DEBUG")
+        msg = cm.records[0].getMessage()
+        self.assertIn(subject, msg)
+
 
 class HostedAppTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
