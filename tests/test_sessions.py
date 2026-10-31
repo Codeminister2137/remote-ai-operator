@@ -364,6 +364,13 @@ class StoreModuleDocstringTests(unittest.TestCase):
             store.get(synthetic_id)
         self.assertIn(synthetic_id, str(ctx.exception))
 
+    def test_recent_tasks_limit_error_includes_value(self):
+        store = Store(Path(tempfile.mkdtemp()) / "tasks.sqlite3")
+        bad_limit = 999
+        with self.assertRaises(ValueError) as ctx:
+            store.recent_tasks(limit=bad_limit)
+        self.assertIn(str(bad_limit), str(ctx.exception))
+
 
 class StoreLoggingTests(unittest.TestCase):
     def test_store_creation_emits_debug_log(self):

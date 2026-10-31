@@ -73,7 +73,7 @@ class Store:
         contains ``id``, a truncated ``prompt`` preview and ``status``.
         """
         if type(limit) is not int or not 1 <= limit <= 50:
-            raise ValueError("limit must be an integer between 1 and 50")
+            raise ValueError(f"limit must be an integer between 1 and 50: got {limit!r}")
         with self.connect() as db:
             rows = db.execute(
                 "SELECT record FROM tasks ORDER BY rowid DESC LIMIT ?", (limit,)
