@@ -73,6 +73,16 @@ class Approval(BaseModel):
     nonce: str = Field(min_length=1, max_length=128)
 
 
+class ThreadTopic(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic: str = Field(min_length=1, max_length=4000)
+
+
+class ThreadMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class ExternalActionSubmission(BaseModel):
     model_config = ConfigDict(extra="forbid")
     description: str = Field(min_length=1, max_length=4000)
@@ -302,6 +312,49 @@ def _task_routes(app, principal):
         return who.allowance_status() if who.allowance_status is not None else {"enabled": False}
 
 
+def _supervisor_routes(app, principal):
+    """Register supervisor planning-thread routes."""
+    from remote_operator.supervisor import Supervisor
+
+    @app.post("/api/supervisor/threads")
+    def open_thread(body: ThreadTopic, who: Annotated[Principal, Depends(principal)]):
+        """Open a supervisor planning thread."""
+        return Supervisor(who.operator).open_thread(body.topic)
+
+    @app.get("/api/supervisor/threads/{thread_id}")
+    def get_thread(thread_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Return a planning thread with its events."""
+        return Supervisor(who.operator).get_thread(thread_id)
+
+    @app.post("/api/supervisor/threads/{thread_id}/messages")
+    def post_message(
+        thread_id: str, body: ThreadMessage, who: Annotated[Principal, Depends(principal)]
+    ):
+        """Append a chat message and generate the planning reply."""
+        supervisor = Supervisor(who.operator)
+        return supervisor.post_message(who.model_factory(), thread_id, body.text)
+
+    @app.post("/api/supervisor/threads/{thread_id}/plan")
+    def write_plan(thread_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Render the plan artifact from the transcript."""
+        return Supervisor(who.operator).write_plan(thread_id)
+
+    @app.post("/api/supervisor/threads/{thread_id}/approve")
+    def approve_plan(thread_id: str, body: Approval, who: Annotated[Principal, Depends(principal)]):
+        """Approve the exact reviewed plan and enqueue a run."""
+        return Supervisor(who.operator).approve_plan(thread_id, body.nonce)
+
+    @app.get("/api/supervisor/runs")
+    def list_runs(who: Annotated[Principal, Depends(principal)]):
+        """List queued supervisor runs."""
+        return {"runs": Supervisor(who.operator).list_runs()}
+
+    @app.get("/api/supervisor/runs/{run_id}")
+    def run_status(run_id: str, who: Annotated[Principal, Depends(principal)]):
+        """Return one queued supervisor run."""
+        return Supervisor(who.operator).run_status(run_id)
+
+
 def _external_action_routes(app, principal):
     """Register neutral external pending-action routes."""
 
@@ -405,6 +458,7 @@ def create_app(
 
     _task_routes(app, owner)
     _external_action_routes(app, owner)
+    _supervisor_routes(app, owner)
 
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
@@ -479,6 +533,7 @@ def create_hosted_app(
 
     _task_routes(app, visitor)
     _external_action_routes(app, visitor)
+    _supervisor_routes(app, visitor)
 
     @app.get("/api/config")
     def configuration(request: Request):
