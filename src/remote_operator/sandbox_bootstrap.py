@@ -9,6 +9,7 @@ strict CPU/memory/output/timeout limits. Not for use on a host system.
 """
 
 import json
+import logging
 import math
 import os
 import selectors
@@ -18,6 +19,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 CHILD_SETUP = r"""
 import ctypes, math, os, resource, sys
@@ -34,6 +37,7 @@ os.execv(sys.executable, [sys.executable, "-I", "-B", "/checks/" + sys.argv[1]])
 
 
 def main():
+    logger.debug("sandbox starting")
     request = json.loads(sys.stdin.buffer.read(524_289))
     files = request["files"]
     expected = {

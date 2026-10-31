@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import math
 from collections.abc import Callable
 from typing import Any
@@ -13,6 +14,8 @@ SendFn = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 _ALLOWED_ACTIONS = ("task", "accept", "stop", "decision_needed")
 _SUPERVISOR_KEYS = frozenset(("action", "task", "targets", "reason"))
+
+logger = logging.getLogger(__name__)
 
 
 def _is_strict_str(value: Any) -> bool:
@@ -58,6 +61,11 @@ def _payload_for_view(view: Any, expected: type) -> dict[str, Any]:
     return converted
 
 
+def _reject(exc: Exception) -> None:
+    logger.debug("JsonRoles rejected malformed response: %s", exc)
+    raise exc
+
+
 class JsonRoles:
     """Adapt controller views to JSON dicts via injected send(role, payload)."""
 
@@ -69,52 +77,62 @@ class JsonRoles:
     def supervisor(self, view: SupervisorView) -> SupervisorDecision:
         payload = _payload_for_view(view, SupervisorView)
         result = self._send("supervisor", payload)
-        if not isinstance(result, dict):
-            raise TypeError("supervisor response must be a dict")
-        unknown = set(result.keys()) - set(_SUPERVISOR_KEYS)
-        if unknown:
-            raise ValueError(f"unknown supervisor fields: {sorted(unknown)}")
-        if "action" not in result:
-            raise ValueError("supervisor response missing action")
-        action = result["action"]
-        if not _is_strict_str(action):
-            raise TypeError("action must be a string")
-        if action not in _ALLOWED_ACTIONS:
-            raise ValueError(f"unsupported action: {action!r}")
-        task: Any = ""
-        reason: Any = ""
-        if "task" in result:
-            task = result["task"]
-            if not _is_strict_str(task):
-                raise TypeError("task must be a string")
-        if "reason" in result:
-            reason = result["reason"]
-            if not _is_strict_str(reason):
-                raise TypeError("reason must be a string")
-        targets_tuple: tuple[str, ...] = ()
-        if "targets" in result:
-            targets = result["targets"]
-            if type(targets) is not list:
-                raise TypeError("targets must be list[str]")
-            for item in targets:
-                if not _is_strict_str(item):
+        try:
+            if not isinstance(result, dict):
+                raise TypeError("supervisor response must be a dict")
+            unknown = set(result.keys()) - set(_SUPERVISOR_KEYS)
+            if unknown:
+                raise ValueError(f"unknown supervisor fields: {sorted(unknown)}")
+            if "action" not in result:
+                raise ValueError("supervisor response missing action")
+            action = result["action"]
+            if not _is_strict_str(action):
+                raise TypeError("action must be a string")
+            if action not in _ALLOWED_ACTIONS:
+                raise ValueError(f"unsupported action: {action!r}")
+            task: Any = ""
+            reason: Any = ""
+            if "task" in result:
+                task = result["task"]
+                if not _is_strict_str(task):
+                    raise TypeError("task must be a string")
+            if "reason" in result:
+                reason = result["reason"]
+                if not _is_strict_str(reason):
+                    raise TypeError("reason must be a string")
+            targets_tuple: tuple[str, ...] = ()
+            if "targets" in result:
+                targets = result["targets"]
+                if type(targets) is not list:
                     raise TypeError("targets must be list[str]")
-                if item == "":
-                    raise ValueError("targets must be non-empty strings")
-            targets_tuple = tuple(targets)
-        return SupervisorDecision(action=action, task=task, targets=targets_tuple, reason=reason)
+                for item in targets:
+                    if not _is_strict_str(item):
+                        raise TypeError("targets must be list[str]")
+                    if item == "":
+                        raise ValueError("targets must be non-empty strings")
+                targets_tuple = tuple(targets)
+            return SupervisorDecision(
+                action=action, task=task, targets=targets_tuple, reason=reason
+            )
+        except (ValueError, TypeError) as exc:
+            _reject(exc)
+            raise  # unreachable, _reject always raises
 
     def implementer(self, view: ImplementerView) -> dict[str, str]:
         payload = _payload_for_view(view, ImplementerView)
         result = self._send("implementer", payload)
-        if not isinstance(result, dict):
-            raise TypeError("implementer response must be a dict")
-        if set(result.keys()) != {"changes"}:
-            raise ValueError("implementer response must contain exactly 'changes'")
-        changes = result["changes"]
-        if not isinstance(changes, dict):
-            raise TypeError("changes must be dict[str,str]")
-        for key, val in changes.items():
-            if not _is_strict_str(key) or not _is_strict_str(val):
+        try:
+            if not isinstance(result, dict):
+                raise TypeError("implementer response must be a dict")
+            if set(result.keys()) != {"changes"}:
+                raise ValueError("implementer response must contain exactly 'changes'")
+            changes = result["changes"]
+            if not isinstance(changes, dict):
                 raise TypeError("changes must be dict[str,str]")
-        return dict(changes)
+            for key, val in changes.items():
+                if not _is_strict_str(key) or not _is_strict_str(val):
+                    raise TypeError("changes must be dict[str,str]")
+            return dict(changes)
+        except (ValueError, TypeError) as exc:
+            _reject(exc)
+            raise

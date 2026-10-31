@@ -186,6 +186,39 @@ class RunnerTests(unittest.TestCase):
                     self.assertFalse(result.passed)
                     self.assertIn("original validation output", result.output)
 
+    def test_sandbox_start_emits_debug_log_without_changing_behavior(self):
+        """Regression: sandbox bootstrap emits exactly one debug log on start, semantics intact."""
+        source = Path("src/remote_operator/sandbox_bootstrap.py").read_text(encoding="utf-8")
+        # Exactly one debug log line on the module logger (root logging is
+        # forbidden by LOG015)
+        debug_lines = [
+            l
+            for l in source.splitlines()
+            if "logger.debug" in l and "sandbox starting" in l.lower()
+        ]
+        self.assertEqual(
+            len(debug_lines),
+            1,
+            f"expected exactly one sandbox starting debug line, got {debug_lines}",
+        )
+        self.assertEqual(source.count("logger.debug"), 1)
+        self.assertIn("getLogger(__name__)", source)
+        # Isolated runner semantics, resource limits and path boundaries intact
+        self.assertIn("RLIMIT_CPU", source)
+        self.assertIn("RLIMIT_AS", source)
+        self.assertIn("no-new-privileges", source)
+        self.assertIn('"/workspace/issue_import.py"', source)
+        self.assertIn('request["entry"]', source)
+        # Help flag still works and normal entry still fails without valid stdin
+        result_help = subprocess.run(
+            [sys.executable, "-I", "-B", "src/remote_operator/sandbox_bootstrap.py", "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result_help.returncode, 0)
+        self.assertIn("usage", (result_help.stdout + result_help.stderr).lower())
+
 
 class DaemonHealTests(unittest.TestCase):
     def test_healthy_daemon_never_launches_desktop(self):

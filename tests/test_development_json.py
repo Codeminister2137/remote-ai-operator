@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import sys
 import types
 from typing import Any
@@ -475,3 +476,16 @@ def test_rejects_unknown_top_level_keys():
     for valid in valid_implementer_payloads:
         out = JsonRoles(lambda r, p, _v=valid: _v).implementer(_impl_view())
         assert isinstance(out, dict)
+
+
+def test_malformed_response_logs_debug_and_rejects(caplog: Any) -> None:
+    """Regression: malformed supervisor response is rejected and logged at DEBUG."""
+    caplog.set_level(logging.DEBUG)
+
+    def send(role: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return {"action": "bogus"}
+
+    with pytest.raises((ValueError, TypeError)):
+        JsonRoles(send).supervisor(_sup_view())
+    assert any("rejected malformed response" in r.message.lower() for r in caplog.records)
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)

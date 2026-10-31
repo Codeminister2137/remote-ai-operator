@@ -196,6 +196,11 @@ class ModalRunnerTests(unittest.TestCase):
                 self.assertIsNotNone(doc)
                 self.assertGreater(len(doc.strip()), 20)
 
+    def test_modal_runner_start_emits_debug_log(self):
+        with self.assertLogs("remote_operator.modal_runner", level="DEBUG") as cm:
+            self.runner._run(self.workspace)
+        self.assertTrue(any("Modal runner starting" in msg for msg in cm.output))
+
 
 @unittest.skipUnless(os.environ.get("OPERATOR_DOCKER_TESTS") == "1", "Docker opt-in required")
 class SupervisorDockerTests(unittest.TestCase):
@@ -269,19 +274,7 @@ class SupervisorDockerTests(unittest.TestCase):
         self.assertIn('"id": "x"', preview["output"])
 
     def test_generated_child_nonroot_cannot_change_checks_or_read_inherited_secrets(self):
-        source = """import os
-assert os.getuid() == 65534
-assert os.environ.get("META_API_KEY") is None
-assert os.environ.get("MODAL_TOKEN_SECRET") is None
-for target in ("/checks/run_checks.py", "/workspace/issue_import.py"):
-    try:
-        open(target,"w")
-    except PermissionError:
-        continue
-    raise AssertionError("protected source writable")
-print("CONTAINMENT_CONFIRMED")
-raise RuntimeError("probe intentionally stops before fixture tests")
-"""
+        source = """import os\nassert os.getuid() == 65534\nassert os.environ.get("META_API_KEY") is None\nassert os.environ.get("MODAL_TOKEN_SECRET") is None\nfor target in ("/checks/run_checks.py", "/workspace/issue_import.py"):\n    try:\n        open(target,"w")\n    except PermissionError:\n        continue\n    raise AssertionError("protected source writable")\nprint("CONTAINMENT_CONFIRMED")\nraise RuntimeError("probe intentionally stops before fixture tests")\n"""
         result = self.supervisor(source)
         self.assertNotEqual(result["code"], 0)
         self.assertIn("CONTAINMENT_CONFIRMED", result["output"])
