@@ -483,3 +483,15 @@ def test_debug_log_line_at_start_of_run_development_loop(tmp_path, capsys):
     assert final.status == "stopped"
     out = capsys.readouterr().out
     assert "[debug] run_development_loop start" in out
+
+def test_objective_validation_message_contains_objective(tmp_path):
+    with pytest.raises(ValueError) as exc:
+        run_development_loop(
+            workspace=tmp_path,
+            objective="",
+            allowlist=("notes.md",),
+            supervisor=lambda v: SupervisorDecision("stop"),
+            implementer=lambda v: {"notes.md": "x"},
+            validator=lambda f: ValidationResult(True, "ok"),
+        )
+    assert "objective" in str(exc.value).lower()
