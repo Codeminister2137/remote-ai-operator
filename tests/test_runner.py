@@ -208,5 +208,115 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("usage", (result_help.stdout + result_help.stderr).lower())
 
 
+class DaemonHealTests(unittest.TestCase):
+    def test_healthy_daemon_never_launches_desktop(self):
+        from unittest.mock import Mock
+
+        from remote_operator import runner
+
+        probe = subprocess.CompletedProcess([], 0, stdout=b"29.2.1")
+        with (
+            patch("remote_operator.runner.subprocess.run", return_value=probe) as run,
+            patch("remote_operator.runner.subprocess.Popen") as popen,
+        ):
+            self.assertTrue(runner.ensure_docker_daemon(timeout=0.05))
+        run.assert_called_once()
+        popen.assert_not_called()
+        self.assertIsInstance(Mock(), Mock)
+
+    def test_down_daemon_starts_desktop_and_polls_until_ready(self):
+        from unittest.mock import Mock
+
+        from remote_operator import runner
+
+        down = subprocess.CompletedProcess([], 1, stdout=b"Cannot connect")
+        up = subprocess.CompletedProcess([], 0, stdout=b"29.2.1")
+        with (
+            patch("remote_operator.runner.subprocess.run", side_effect=[down, down, up]),
+            patch("remote_operator.runner.subprocess.Popen") as popen,
+            patch("remote_operator.runner.sys.platform", "win32"),
+            patch("remote_operator.runner.time.sleep") as nap,
+            patch("remote_operator.runner.time.monotonic", side_effect=[100.0, 101.0, 102.0]),
+        ):
+            self.assertTrue(runner.ensure_docker_daemon(timeout=60))
+        popen.assert_called_once()
+        self.assertEqual(popen.call_args[0][0], [runner.DOCKER_DESKTOP_WINDOWS])
+        self.assertEqual(nap.call_count, 2)
+        self.assertIsInstance(Mock(), Mock)
+
+    def test_down_daemon_gives_up_after_timeout_without_hanging(self):
+        from remote_operator import runner
+
+        down = subprocess.CompletedProcess([], 1, stdout=b"Cannot connect")
+        with (
+            patch("remote_operator.runner.subprocess.run", return_value=down),
+            patch("remote_operator.runner.subprocess.Popen"),
+            patch("remote_operator.runner.sys.platform", "win32"),
+            patch("remote_operator.runner.time.sleep"),
+            patch("remote_operator.runner.time.monotonic", side_effect=[100.0, 200.0]),
+        ):
+            self.assertFalse(runner.ensure_docker_daemon(timeout=60))
+
+    def test_non_windows_never_launches_desktop(self):
+        from remote_operator import runner
+
+        down = subprocess.CompletedProcess([], 1, stdout=b"Cannot connect")
+        with (
+            patch("remote_operator.runner.subprocess.run", return_value=down),
+            patch("remote_operator.runner.subprocess.Popen") as popen,
+            patch("remote_operator.runner.sys.platform", "linux"),
+        ):
+            self.assertFalse(runner.ensure_docker_daemon(timeout=0.05))
+        popen.assert_not_called()
+
+    def test_run_retries_once_after_successful_heal(self):
+        from unittest.mock import Mock
+
+        from remote_operator.runner import DockerValidator, Execution
+
+        stale = Execution(1, "failed to connect to the docker API", "cleanup failed")
+        healed = Execution(0, "OPERATOR_CHECKS {}", None)
+        with tempfile.TemporaryDirectory() as directory:
+            validator = DockerValidator(Path(directory))
+            with (
+                patch.object(DockerValidator, "_execute_once", side_effect=[stale, healed]) as once,
+                patch("remote_operator.runner.ensure_docker_daemon", return_value=True),
+            ):
+                result = validator._run(Path(directory))
+        self.assertEqual(once.call_count, 2)
+        self.assertEqual(result, healed)
+        self.assertIsInstance(Mock(), Mock)
+
+    def test_run_reports_actionable_failure_when_heal_fails(self):
+        from remote_operator.runner import DockerValidator, Execution
+
+        stale = Execution(1, "failed to connect to the docker API", None)
+        with tempfile.TemporaryDirectory() as directory:
+            validator = DockerValidator(Path(directory))
+            with (
+                patch.object(DockerValidator, "_execute_once", return_value=stale) as once,
+                patch("remote_operator.runner.ensure_docker_daemon", return_value=False),
+            ):
+                result = validator._run(Path(directory))
+        self.assertEqual(once.call_count, 1)
+        self.assertIn("could not be started automatically", result.failure)
+        self.assertIn("failed to connect", result.output)
+
+    def test_healthy_output_never_triggers_heal(self):
+        from remote_operator.runner import DockerValidator, Execution
+
+        fine = Execution(0, "OPERATOR_CHECKS {}", None)
+        with tempfile.TemporaryDirectory() as directory:
+            validator = DockerValidator(Path(directory))
+            with (
+                patch.object(DockerValidator, "_execute_once", return_value=fine) as once,
+                patch("remote_operator.runner.ensure_docker_daemon") as heal,
+            ):
+                result = validator._run(Path(directory))
+        self.assertEqual(once.call_count, 1)
+        heal.assert_not_called()
+        self.assertEqual(result, fine)
+
+
 if __name__ == "__main__":
     unittest.main()
