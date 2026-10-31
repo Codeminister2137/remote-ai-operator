@@ -75,6 +75,12 @@ def main():
     cancel.add_argument("task_id")
     reconcile = commands.add_parser("reconcile")
     reconcile.add_argument("task_id")
+    drain = commands.add_parser("supervisor-drain", help="Run queued supervisor jobs (bounded)")
+    drain.add_argument("--max-jobs", type=int, default=10)
+    drain.add_argument("--notify", action="store_true", help="Write owner notifications")
+    drain.add_argument(
+        "--notify-live", action="store_true", help="Actually send mail (needs SMTP env)"
+    )
     serve = commands.add_parser("serve", help="Local authenticated development UI")
     serve.add_argument("--port", type=int, default=8765)
     serve.add_argument(
@@ -85,7 +91,7 @@ def main():
         action="store_true",
         help="Serve isolated visitor sessions (shared access code) instead of the owner token",
     )
-    for command in (demo, serve):
+    for command in (demo, serve, drain):
         command.add_argument("--model-mode", choices=("scripted", "meta"), default="scripted")
         command.add_argument(
             "--grant", type=Path, help="Private owner-approved inference allowance JSON"
@@ -96,7 +102,8 @@ def main():
     try:
         factory, allowance_status = (
             configure_models(args, operator)
-            if args.command in {"demo", "serve"} and not getattr(args, "hosted", False)
+            if args.command in {"demo", "serve", "supervisor-drain"}
+            and not getattr(args, "hosted", False)
             else (None, None)
         )
         if args.command == "demo":
@@ -113,6 +120,35 @@ def main():
             result = operator.reject(args.task_id)
         elif args.command == "reconcile":
             result = operator.reconcile(args.task_id)
+        elif args.command == "supervisor-drain":
+            from remote_operator.supervisor_runner import SupervisorRunner
+
+            if args.notify_live and not args.notify:
+                raise ValueError("--notify-live requires --notify")
+            notify_send = None
+            if args.notify:
+                from remote_operator.notify import load_smtp_config, send_owner_mail
+
+                config = load_smtp_config()
+                live = args.notify_live
+                receipts = operator.root / "notify_receipts"
+
+                def notify_send(summary):
+                    return send_owner_mail(
+                        to=config["owner"],
+                        subject=f"[operator] run {summary['status']}: {summary['run_id'][:8]}",
+                        body=json.dumps(summary, indent=2),
+                        config=config,
+                        dry_run=not live,
+                        receipts_dir=receipts,
+                    )
+
+            runner = SupervisorRunner(operator, notify_send=notify_send)
+            result = {
+                "reconciled": runner.reconcile_jobs(),
+                "drained": runner.drain(factory(), max_jobs=args.max_jobs),
+                "waiting": runner.refresh_waiting(),
+            }
         else:
             import uvicorn
 

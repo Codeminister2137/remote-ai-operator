@@ -56,6 +56,12 @@ cannot be revoked. In-flight model I/O stops at its bounded request boundary;
 Docker cancellation terminates the owned container. `Run fresh validation` replaces
 a stale or expired approval nonce without accepting an old review.
 
+Supervisor planning threads (`/api/supervisor/...`, see
+docs/remote-supervisor.md) turn chat into an approved run job; `supervisor-drain`
+reconciles interrupted jobs and runs queued ones with the selected model actor,
+stopping at the same human approval boundary. `--notify` writes owner-only
+receipts; `--notify-live` sends them over stdlib SMTP.
+
 ## Local review interface
 
 Set `OPERATOR_ACCESS_TOKEN` to a unique random value of at least 32 characters in

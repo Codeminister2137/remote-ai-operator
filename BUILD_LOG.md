@@ -1,5 +1,15 @@
 # Event-built contributions
 
+2026-10-31: added the supervisor run worker: bounded `supervisor-drain`
+consumes approved run jobs oldest-first, reconciles interrupted runs without
+replay, propagates thread cancellation, and stops at the human approval
+boundary; owner-only stdlib-SMTP notifications are dry-run by default with
+persisted receipts. Sixteen new deterministic tests (11 runner, 5 notify);
+pytest 314 passed with 9 skips plus 143 subtests, unittest 224 passed with 8
+skips; Ruff check and format clean. A scripted CLI drain exercised the full
+queue-to-receipt path; Docker validation was unavailable (daemon down), which
+the job record and receipt report precisely.
+
 2026-10-30: added supervisor planning threads over the task store: chat turns,
 plan artifacts, exact plan approval into queued run jobs, and run status, on
 both owner and hosted routes. Scripted replies are labelled offline reference;
