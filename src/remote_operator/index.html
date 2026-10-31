@@ -10,6 +10,13 @@
 <button id="connect">Connect and load execution mode</button></div>
 <div id="visitor-access" hidden><label>Demo access code<input id="accessCode" type="password" autocomplete="off"></label>
 <button id="enterSession">Enter demo</button></div>
+<div id="judge-access" hidden><label>Judge username<input id="judgeName" type="text" autocomplete="username"></label>
+<label>Judge password<input id="judgePassword" type="password" autocomplete="current-password"></label>
+<button id="judgeSignup">Register judge account</button><button id="judgeLogin">Log in as judge</button>
+<p id="judge-note">Registration needs the demo access code above. Judge sessions keep their own tasks and spending.</p></div>
+<div id="judge-grant" hidden><label>Max requests<input id="grantRequests" type="number" min="1" max="100"></label>
+<label>Approved USD<input id="grantUsd" type="text" inputmode="decimal"></label>
+<button id="grantSave">Save spending limits</button><p id="grant-note"></p></div>
 <p id="access-note">The token stays in this page's memory. Remote access is not configured.</p></section>
 <section id="key-section" hidden><h2>Your model key</h2>
 <div id="key-controls">

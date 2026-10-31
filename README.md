@@ -100,7 +100,10 @@ unforgeable but sessions end with the process. Hosted sessions start on the labe
 scripted reference at zero inference cost. A visitor Meta key can be attached for
 that session only and detached at any time; it is never used as identity, never
 persisted and never falls back to another key. Real Meta work additionally requires
-an owner-configured grant; without one the key endpoint refuses.
+an owner-configured grant; without one the key endpoint refuses. Judges instead
+register with the access code, log in with their own password, and set their
+own finite limits against their own key; the server pins the model via
+`OPERATOR_JUDGE_MODEL` and the owner pays nothing (see docs/modal-hosting.md).
 
 This mode is a localhost preview of the session flow. A hosted judge deployment is
 live at `https://kubajaworski999--hosted.us-east.modal.run`; the access code is

@@ -70,6 +70,7 @@ def hosted():
         raise ValueError("OPERATOR_SESSION_SECRET must be at least 32 characters")
     grant_path = os.environ.get("OPERATOR_GRANT_PATH", "")
     grant = grant_from_file(grant_path) if grant_path else None
+    judge_model = os.environ.get("OPERATOR_JUDGE_MODEL") or None
     checks = PROJECT / "tests" / "acceptance"
     return build_hosted_application(
         runtime_root=RUNTIME,
@@ -79,5 +80,6 @@ def hosted():
         session_secret=session_secret,
         volume=volume,
         grant=grant,
+        judge_model=judge_model,
         validator_factory=lambda: ModalValidator(checks, app=app, allow_remote_execution=True),
     )

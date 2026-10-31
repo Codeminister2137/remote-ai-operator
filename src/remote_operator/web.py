@@ -102,6 +102,28 @@ class ProviderKey(BaseModel):
     api_key: str = Field(min_length=16, max_length=8192)
 
 
+class JudgeSignup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=1, max_length=256)
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=8, max_length=256)
+
+
+class JudgeLogin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class JudgeGrantLimits(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    max_requests: int = Field(ge=1, le=100)
+    approved_usd: str = Field(min_length=1, max_length=32)
+    max_output_tokens: int | None = Field(default=None, ge=1, le=16384)
+    input_usd_per_million: str | None = Field(default=None, max_length=32)
+    output_usd_per_million: str | None = Field(default=None, max_length=32)
+
+
 @dataclass(frozen=True)
 class Principal:
     """One authenticated caller:its own operator,actor factory and spending view."""
@@ -475,13 +497,16 @@ def create_hosted_app(
     *,
     actor_factory=None,
     public_origin=None,
+    judge_accounts=None,
+    judge_model=None,
 ):
     """Create the hosted multi-visitor FastAPI application.
 
     Hosted app uses a shared access code and per-visitor stores with an
     optional visitor-owned provider key. Without an attached key tasks run
     the labelled offline reference; with a key and grant they run live
-    inference paid by the visitor.
+    inference paid by the visitor. Judges log in with their own credentials
+    and configure their own allowance; the owner never pays for judge runs.
 
     Args:
         scoped: Scoped operator factory providing per-subject operators.
@@ -489,18 +514,41 @@ def create_hosted_app(
         grant: Optional budget/allowance grant for live inference.
         actor_factory: Optional factory for hosted model actors.
         public_origin: Optional explicit HTTPS origin.
+        judge_accounts: Optional judge credential store for BYOK evaluation.
+        judge_model: Server-pinned model for judge self-grants, or None.
 
     Returns:
         Configured FastAPI app with visitor authentication and task routes.
     """
+    from remote_operator.judge_grants import JudgeGrantBridge
+
     public_origin = _origin(public_origin)
 
-    def build_actor(store, key_source):
+    def effective_grant(operator, subject):
+        """Resolve the owner grant first, else the subject's judge self-grant."""
+        if grant is not None:
+            return grant
+        if judge_model is None or not subject.startswith("judge-"):
+            return None
+        return JudgeGrantBridge(operator.store).effective(subject, judge_model)
+
+    def build_actor(store, key_source, active_grant):
         if actor_factory is not None:
             return actor_factory(store, key_source)
         from remote_operator.meta import MetaModel
 
-        return MetaModel("", grant, store, key_source=key_source)
+        return MetaModel("", active_grant, store, key_source=key_source)
+
+    def set_session_cookie(response, token):
+        response.set_cookie(
+            SESSION_COOKIE,
+            token,
+            max_age=int(sessions.lifetime),
+            httponly=True,
+            samesite="strict",
+            secure=public_origin is not None,
+            path="/",
+        )
 
     app = _base_app(public_origin=public_origin, sessions=sessions)
 
@@ -518,13 +566,16 @@ def create_hosted_app(
             raise HTTPException(403, "Explicit session request header required")
         operator = scoped.for_subject(subject)
         external = ExternalActionBridge(operator.store)
-        if grant is not None and sessions.has_key(token, subject):
-            factory = lambda: build_actor(operator.store, lambda: sessions.key_for(token, subject))
+        active = effective_grant(operator, subject)
+        if active is not None and sessions.has_key(token, subject):
+            factory = lambda: build_actor(
+                operator.store, lambda: sessions.key_for(token, subject), active
+            )
             return Principal(
                 operator,
                 factory,
                 "meta",
-                lambda: grant.budget_status(operator.store),
+                lambda: active.budget_status(operator.store),
                 True,
                 True,
                 external,
@@ -541,7 +592,9 @@ def create_hosted_app(
         token = request.cookies.get(SESSION_COOKIE, "")
         try:
             subject = sessions.subject(token)
-            attached = grant is not None and sessions.has_key(token, subject)
+            operator = scoped.for_subject(subject)
+            route = effective_grant(operator, subject) is not None
+            attached = route and sessions.has_key(token, subject)
         except SessionUnavailable:
             return {
                 "hosted": True,
@@ -551,6 +604,7 @@ def create_hosted_app(
                 "https_origin": public_origin,
                 "session_key_attached": False,
                 "model_route_configured": grant is not None,
+                "judge_login": judge_accounts is not None,
             }
         return {
             "hosted": True,
@@ -559,7 +613,9 @@ def create_hosted_app(
             "live_inference": attached,
             "https_origin": public_origin,
             "session_key_attached": attached,
-            "model_route_configured": grant is not None,
+            "model_route_configured": route,
+            "judge_login": judge_accounts is not None,
+            "judge": subject.startswith("judge-"),
         }
 
     @app.post("/api/session")
@@ -569,15 +625,7 @@ def create_hosted_app(
             token = sessions.open(body.code)
         except AccessRefused:
             raise HTTPException(403, "Access code refused") from None
-        response.set_cookie(
-            SESSION_COOKIE,
-            token,
-            max_age=int(sessions.lifetime),
-            httponly=True,
-            samesite="strict",
-            secure=public_origin is not None,
-            path="/",
-        )
+        set_session_cookie(response, token)
         return {"authenticated": True, "mode": "scripted", "expires_in": sessions.lifetime}
 
     @app.delete("/api/session")
@@ -594,13 +642,77 @@ def create_hosted_app(
         body: ProviderKey, request: Request, who: Annotated[Principal, Depends(visitor)]
     ):
         """Attach a visitor-owned provider key to the session."""
-        if grant is None:
+        token = request.cookies.get(SESSION_COOKIE, "")
+        active = effective_grant(who.operator, sessions.subject(token))
+        if active is None:
+            if sessions.subject(token).startswith("judge-"):
+                raise HTTPException(409, "Set judge spending limits first")
             raise HTTPException(409, "Hosted model route is not configured")
         try:
-            sessions.attach_key(request.cookies.get(SESSION_COOKIE, ""), body.api_key)
+            sessions.attach_key(token, body.api_key)
         except SessionCapacity:
             raise HTTPException(429, "Demo is holding too many attached keys; try later") from None
         return {"key_attached": True, "mode": "meta"}
+
+    @app.post("/api/judges/signup")
+    def judge_signup(body: JudgeSignup):
+        """Register a judge account; gated by the shared access code."""
+        from remote_operator.judge_accounts import JudgeAuthError
+
+        if judge_accounts is None:
+            raise HTTPException(409, "Judge login is not configured")
+        try:
+            sessions.verify_code(body.code)
+        except AccessRefused:
+            raise HTTPException(403, "Access code refused") from None
+        try:
+            account = judge_accounts.signup(body.username, body.password)
+        except JudgeAuthError as exc:
+            raise HTTPException(409, str(exc)) from None
+        return {"username": account["username"]}
+
+    @app.post("/api/judges/login")
+    def judge_login(body: JudgeLogin, response: Response):
+        """Open a judge session bound to the judge's stable subject."""
+        from remote_operator.judge_accounts import JudgeAuthError, JudgeLockedOut
+
+        if judge_accounts is None:
+            raise HTTPException(409, "Judge login is not configured")
+        try:
+            account = judge_accounts.verify(body.username, body.password)
+        except JudgeLockedOut:
+            raise HTTPException(429, "Too many attempts; try later") from None
+        except JudgeAuthError:
+            raise HTTPException(403, "Access refused") from None
+        set_session_cookie(response, sessions.open_judge(account["username"]))
+        return {"authenticated": True, "username": account["username"]}
+
+    @app.get("/api/judges/grant")
+    def judge_grant_get(request: Request, who: Annotated[Principal, Depends(visitor)]):
+        """Return the judge's own spending limits, or null when unset."""
+        token = request.cookies.get(SESSION_COOKIE, "")
+        subject = sessions.subject(token)
+        if not subject.startswith("judge-"):
+            raise HTTPException(403, "Judge login required")
+        return {"grant": JudgeGrantBridge(who.operator.store).get()}
+
+    @app.put("/api/judges/grant")
+    def judge_grant_put(
+        body: JudgeGrantLimits, request: Request, who: Annotated[Principal, Depends(visitor)]
+    ):
+        """Set the judge's own finite spending limits for their own key."""
+        if judge_model is None:
+            raise HTTPException(409, "Judge model route is not configured")
+        token = request.cookies.get(SESSION_COOKIE, "")
+        subject = sessions.subject(token)
+        if not subject.startswith("judge-"):
+            raise HTTPException(403, "Judge login required")
+        params = {name: value for name, value in body.model_dump().items() if value is not None}
+        try:
+            record = JudgeGrantBridge(who.operator.store).set(params, model=judge_model)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(409, str(exc)) from None
+        return {"grant": record}
 
     @app.delete("/api/session/key")
     def detach_key(request: Request, who: Annotated[Principal, Depends(visitor)]):
