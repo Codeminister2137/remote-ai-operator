@@ -4,6 +4,7 @@ import logging
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from remote_operator.control import (
     SOURCE,
@@ -307,6 +308,16 @@ class ControllerTests(unittest.TestCase):
         msg = str(ctx.exception)
         self.assertIn("evil_tool", msg)
         self.assertIn("Unknown or invalid tool", msg)
+
+    def test_control_timeout_emits_debug_log(self):
+        with mock.patch("remote_operator.control.time.monotonic", return_value=9999):
+            with self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured:
+                with self.assertRaises(TimeoutError):
+                    self.operator._check_control(self.task_id, deadline=0)
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelname, "DEBUG")
+        self.assertIn(self.task_id, record.getMessage())
 
 
 if __name__ == "__main__":
