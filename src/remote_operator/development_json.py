@@ -111,7 +111,9 @@ class JsonRoles:
                     if item == "":
                         raise ValueError("targets must be non-empty strings")
                 targets_tuple = tuple(targets)
-            return SupervisorDecision(action=action, task=task, targets=targets_tuple, reason=reason)
+            return SupervisorDecision(
+                action=action, task=task, targets=targets_tuple, reason=reason
+            )
         except (ValueError, TypeError) as exc:
             _reject(exc)
             raise  # unreachable, _reject always raises

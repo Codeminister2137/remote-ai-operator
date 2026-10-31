@@ -20,6 +20,8 @@ import tempfile
 import time
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 CHILD_SETUP = r"""
 import ctypes, math, os, resource, sys
 seconds = math.ceil(float(sys.argv[2]))
@@ -35,7 +37,7 @@ os.execv(sys.executable, [sys.executable, "-I", "-B", "/checks/" + sys.argv[1]])
 
 
 def main():
-    logging.debug("sandbox starting")
+    logger.debug("sandbox starting")
     request = json.loads(sys.stdin.buffer.read(524_289))
     files = request["files"]
     expected = {
