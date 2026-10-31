@@ -392,3 +392,10 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         # Ensure at least 10 handlers documented
         documented = [k for k, v in found.items() if v]
         self.assertGreaterEqual(len(documented), 10, f"only {documented} documented")
+
+    async def test_web_request_entry_emits_debug_log(self):
+        """Regression: web request entry emits debug log."""
+        with self.assertLogs("remote_operator.web", level="DEBUG") as captured:
+            response = await self.client.get("/", headers=self.auth)
+            self.assertEqual(response.status_code, 200)
+        self.assertTrue(any("request started" in msg.lower() for msg in captured.output))
