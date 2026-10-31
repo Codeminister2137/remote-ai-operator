@@ -140,6 +140,29 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 DockerValidator(root).command(root, "n", entry="evil.py")
 
+    def test_runner_start_emits_debug_log_without_changing_behavior(self):
+        from unittest.mock import Mock
+
+        def launch(command, **kwargs):
+            kwargs["stdout"].write(b"original validation output\n")
+            kwargs["stdout"].flush()
+            return Mock(poll=Mock(return_value=0), wait=Mock(return_value=0))
+
+        with tempfile.TemporaryDirectory() as directory:
+            cleanup = subprocess.CompletedProcess([], 0, stdout=b"")
+            with (
+                patch("remote_operator.runner.subprocess.Popen", side_effect=launch),
+                patch("remote_operator.runner.subprocess.run", return_value=cleanup),
+            ):
+                validator = DockerValidator(Path(directory))
+                with patch.object(validator, "policy_digest", return_value="fixture-policy"):
+                    with self.assertLogs("remote_operator.runner", level="DEBUG") as cm:
+                        result = validator.validate(Path(directory), digest("x"))
+                    self.assertTrue(any("runner starting" in m.lower() for m in cm.output))
+                    # semantics preserved: still fails closed without matching report
+                    self.assertFalse(result.passed)
+                    self.assertIn("original validation output", result.output)
+
 
 if __name__ == "__main__":
     unittest.main()
