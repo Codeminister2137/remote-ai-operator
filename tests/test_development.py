@@ -467,10 +467,12 @@ def test_receipt_sink_exception_propagates(tmp_path):
             receipt_sink=failing_sink,
         )
 
+
 def test_debug_log_line_at_start_of_run_development_loop(tmp_path, capsys):
     import inspect
+
     src = inspect.getsource(run_development_loop)
-    assert '[debug] run_development_loop start' in src
+    assert "[debug] run_development_loop start" in src
     # verify it executes without altering semantics
     final = run_development_loop(
         workspace=tmp_path,
@@ -483,6 +485,7 @@ def test_debug_log_line_at_start_of_run_development_loop(tmp_path, capsys):
     assert final.status == "stopped"
     out = capsys.readouterr().out
     assert "[debug] run_development_loop start" in out
+
 
 def test_objective_validation_message_contains_objective(tmp_path):
     with pytest.raises(ValueError) as exc:

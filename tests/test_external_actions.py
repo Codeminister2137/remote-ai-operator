@@ -138,26 +138,50 @@ class TestExternalActionBridge(unittest.TestCase):
         self.assertIn(approved.status, msg)
 
     def test_retry_debug_log_emitted_on_concurrent_update(self):
-        import logging
-        action = self.bridge.submit("Write greeting", _digest("hello"), _digest("base"), _digest("evidence"), expires_seconds=30, now=time.time())
+        action = self.bridge.submit(
+            "Write greeting",
+            _digest("hello"),
+            _digest("base"),
+            _digest("evidence"),
+            expires_seconds=30,
+            now=time.time(),
+        )
         # Simulate concurrent update by changing the stored record before expiry handling
         import json
+
         with self.bridge._store.connect() as db:
-            row = db.execute("SELECT record FROM external_actions WHERE id=?", (action.id,)).fetchone()
+            row = db.execute(
+                "SELECT record FROM external_actions WHERE id=?", (action.id,)
+            ).fetchone()
             data = json.loads(row[0])
             data["status"] = "approved"
-            db.execute("UPDATE external_actions SET record=? WHERE id=?", (json.dumps(data, sort_keys=True), action.id))
+            db.execute(
+                "UPDATE external_actions SET record=? WHERE id=?",
+                (json.dumps(data, sort_keys=True), action.id),
+            )
         with self.assertLogs("remote_operator.external_actions", level="DEBUG") as cm:
             expired = self.bridge._expire(action, now_val=action.expires + 5)
         self.assertTrue(any("retry" in m.lower() or "concurrent" in m.lower() for m in cm.output))
         self.assertEqual(expired.status, "approved")
 
     def test_timeout_debug_log_emitted_on_expiry(self):
-        action = self.bridge.submit("Write greeting", _digest("hello"), _digest("base"), _digest("evidence"), expires_seconds=30, now=time.time())
+        action = self.bridge.submit(
+            "Write greeting",
+            _digest("hello"),
+            _digest("base"),
+            _digest("evidence"),
+            expires_seconds=30,
+            now=time.time(),
+        )
         with self.assertLogs("remote_operator.external_actions", level="DEBUG") as cm:
             expired = self.bridge.get(action.id, now=action.expires + 1)
         self.assertEqual(expired.status, "expired")
-        self.assertTrue(any(("expired" in m.lower() or "timeout" in m.lower()) and action.id in m for m in cm.output))
+        self.assertTrue(
+            any(
+                ("expired" in m.lower() or "timeout" in m.lower()) and action.id in m
+                for m in cm.output
+            )
+        )
 
 
 class TestScriptedActionErrorMessage(unittest.TestCase):

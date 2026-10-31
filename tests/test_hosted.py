@@ -168,9 +168,11 @@ class HostedSessionUnitTests(unittest.TestCase):
     def test_expired_session_emits_debug_log(self):
         token = self.sessions.open(CODE)
         self.now = 130
-        with self.assertLogs("remote_operator.hosted", level="DEBUG") as cm:
-            with self.assertRaises(SessionUnavailable):
-                self.sessions.subject(token)
+        with (
+            self.assertLogs("remote_operator.hosted", level="DEBUG") as cm,
+            self.assertRaises(SessionUnavailable),
+        ):
+            self.sessions.subject(token)
         self.assertTrue(any("expired hosted session" in m for m in cm.output))
 
     def test_keyless_sessions_do_not_consume_the_attached_key_capacity(self):

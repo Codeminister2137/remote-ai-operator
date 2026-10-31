@@ -310,10 +310,12 @@ class ControllerTests(unittest.TestCase):
         self.assertIn("Unknown or invalid tool", msg)
 
     def test_control_timeout_emits_debug_log(self):
-        with mock.patch("remote_operator.control.time.monotonic", return_value=9999):
-            with self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured:
-                with self.assertRaises(TimeoutError):
-                    self.operator._check_control(self.task_id, deadline=0)
+        with (
+            mock.patch("remote_operator.control.time.monotonic", return_value=9999),
+            self.assertLogs("remote_operator.control", level=logging.DEBUG) as captured,
+            self.assertRaises(TimeoutError),
+        ):
+            self.operator._check_control(self.task_id, deadline=0)
         self.assertEqual(len(captured.records), 1)
         record = captured.records[0]
         self.assertEqual(record.levelname, "DEBUG")

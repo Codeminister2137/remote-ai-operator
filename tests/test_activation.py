@@ -136,15 +136,17 @@ class ActivationTests(unittest.TestCase):
                 self.assertNotIn(raw_key, msg)
 
     def test_missing_credential_emits_debug_log_without_leaking_key(self):
-        from remote_operator.credentials import SessionKeys
+        from remote_operator.credentials import SessionKeys, SessionUnavailable
 
         raw_key = "sk-test-fake-key-1234567890abcdef"
         subject = "test-user"
         store = SessionKeys(lifetime=60, capacity=4, clock=time.monotonic)
         token = store.open(subject)
-        with self.assertLogs("remote_operator.credentials", level=logging.DEBUG) as captured:
-            with self.assertRaises(Exception):
-                store.key_for(token, subject=subject)
+        with (
+            self.assertLogs("remote_operator.credentials", level=logging.DEBUG) as captured,
+            self.assertRaises(SessionUnavailable),
+        ):
+            store.key_for(token, subject=subject)
         self.assertEqual(len(captured.records), 1)
         self.assertEqual(captured.records[0].levelname, "DEBUG")
         log_msg = captured.records[0].getMessage()

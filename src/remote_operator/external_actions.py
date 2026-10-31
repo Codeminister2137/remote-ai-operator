@@ -436,7 +436,11 @@ class ExternalActionBridge:
                 (new_raw, expired.id, old_raw),
             )
             if cur.rowcount != 1:
-                __import__("logging").getLogger(__name__).debug("retry/concurrent-update detected for action %s rowcount=%s", action.id, cur.rowcount)
+                __import__("logging").getLogger(__name__).debug(
+                    "retry/concurrent-update detected for action %s rowcount=%s",
+                    action.id,
+                    cur.rowcount,
+                )
                 # Stale read: another writer already resolved this action.
                 # Never overwrite the terminal state; return the current record.
                 row = db.execute(
