@@ -204,6 +204,17 @@ class SupervisorUnitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.supervisor.write_plan(thread["id"])
 
+    def test_expired_plan_can_be_rewritten_but_live_plan_cannot(self):
+        thread_id, first = self._planned()
+        with self.assertRaises(ValueError):
+            self.supervisor.write_plan(thread_id)
+        thread = self.supervisor._thread(thread_id)
+        thread["approval"]["expires"] = time.time() - 1
+        self.supervisor.operator.store.save(thread, "test_expire", {})
+        second = self.supervisor.write_plan(thread_id)
+        self.assertNotEqual(second["nonce"], first["nonce"])
+        self.assertEqual(self.supervisor._thread(thread_id)["status"], "planned")
+
     def test_malformed_ids_rejected(self):
         with self.assertRaises(ValueError):
             self.supervisor.get_thread("../escape")
