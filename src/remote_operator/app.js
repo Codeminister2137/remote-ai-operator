@@ -220,7 +220,17 @@ async function openSupervisorThread(id) {
   element("supervisorThreads").value = id;
   renderSupervisorTranscript(detail.thread.history || []);
   element("supervisorPlan").textContent = detail.thread.plan ? detail.thread.plan.markdown : "No plan written.";
-  supervisorNote("Thread open. Chat to refine requirements, then write the plan.");
+  if (detail.thread.status === "planned" && approval && typeof approval.expires === "number") {
+    const remainingMs = approval.expires * 1000 - Date.now();
+    if (remainingMs <= 0) {
+      supervisorPlanNonce = "";
+      supervisorNote("Plan approval expired. Write the plan again for a fresh approval window.");
+    } else {
+      supervisorNote("Thread open. Approve the plan within ~" + Math.max(1, Math.round(remainingMs / 60000)) + " min. If it expires, write the plan again.");
+    }
+  } else {
+    supervisorNote("Thread open. Chat to refine requirements, then write the plan.");
+  }
   supervisorActions();
 }
 async function loadSupervisorRuns() {
@@ -343,6 +353,15 @@ async function refresh() {
   element("evidence").textContent = task.evidence ? JSON.stringify(task.evidence, null, 2) : "Not validated.";
   element("validation-summary").textContent = task.evidence ?
     (task.evidence.passed ? "Passed" : "Failed") + " · " + task.evidence.runner + " · source " + task.evidence.candidate_digest.slice(0,12) : "Not validated.";
+  if (task.status === "awaiting_approval" && task.approval && typeof task.approval.expires === "number") {
+    const remainingMs = task.approval.expires * 1000 - Date.now();
+    if (remainingMs <= 0) {
+      message("Approval expired. Run fresh validation, then approve within its window.");
+    } else {
+      const minutes = Math.max(1, Math.round(remainingMs / 60000));
+      element("validation-summary").textContent += " · approve within ~" + minutes + " min";
+    }
+  }
   actions();
   const events = await api("/api/tasks/" + encodeURIComponent(id) + "/events");
   if (!stillSelected(id, selection, session)) return;

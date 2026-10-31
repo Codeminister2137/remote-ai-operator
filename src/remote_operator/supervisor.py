@@ -127,8 +127,13 @@ class Supervisor:
         """Render the plan artifact from the transcript; returns it with a nonce."""
         with self.operator.lock:
             thread = self._thread(thread_id)
-            if thread["status"] != "open":
+            if thread["status"] not in ("open", "planned"):
                 raise ValueError("Thread is closed to new plans")
+            if thread["status"] == "planned":
+                approval = thread.get("approval") or {}
+                if time.time() < (approval.get("expires") or 0):
+                    raise ValueError("A plan is already pending approval")
+                # Expired plan: fall through and mint a fresh approval window.
             user_turns = [turn["text"] for turn in thread["history"] if turn["role"] == "user"]
             if not user_turns:
                 raise ValueError("Thread has no requirements yet")
