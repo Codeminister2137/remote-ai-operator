@@ -208,7 +208,7 @@ def _base_app(*, public_origin, sessions):
 
     @app.exception_handler(KeyError)
     async def unknown_task(request, exc):
-        return JSONResponse({"detail": "Unknown task"}, status_code=404)
+        return JSONResponse({"detail": f"Unknown task: {request.url.path}"}, status_code=404)
 
     @app.exception_handler(404)
     async def not_found(request, exc):

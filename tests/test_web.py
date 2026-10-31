@@ -92,6 +92,15 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/api/tasks/missing", headers=self.auth)
         self.assertEqual(response.status_code, 404)
 
+    async def test_unknown_task_error_includes_route(self):
+        path = "/api/tasks/nonexistent-task-id-xyz"
+        response = await self.client.get(path, headers=self.auth)
+        self.assertEqual(response.status_code, 404)
+        body = response.json()
+        self.assertIn("detail", body)
+        self.assertIn("Unknown task", body["detail"])
+        self.assertIn(path, body["detail"])
+
     async def test_static_ui_is_safe_and_no_store(self):
         response = await self.client.get("/")
         self.assertEqual(response.status_code, 200)
