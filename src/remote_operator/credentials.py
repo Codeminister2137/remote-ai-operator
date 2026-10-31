@@ -1,12 +1,15 @@
 """Bounded in-memory visitor credentials;not an account or persistence service."""
 
 import hashlib
+import logging
 import math
 import re
 import secrets
 import threading
 import time
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 class SessionUnavailable(ValueError):
@@ -191,6 +194,7 @@ class SessionKeys:
             if not secrets.compare_digest(entry.subject, subject):
                 raise SessionUnavailable()
             if entry.key is None:
+                logger.debug("missing credential for subject '%s'", subject)
                 raise SessionUnavailable(
                     f"No visitor model key is attached to this session for subject '{subject}'"
                 )
