@@ -355,6 +355,7 @@ def run_development_loop(
         receipts. Provenance: all receipts are host-generated; acceptance
         binds to exact reviewed bytes and validation output.
     """
+    print("[debug] run_development_loop start")
     receipts: list[Receipt] = []
     workspace = Path(workspace)
     allowlist = tuple(allowlist)
