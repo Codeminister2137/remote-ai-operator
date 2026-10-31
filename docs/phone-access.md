@@ -31,6 +31,14 @@ forward raw wake packets publicly or modify firmware to make this demo work.
 
 No remote service is activated by the setup instructions or repository tests.
 
+## Docker resilience
+
+Task validation runs in a local Docker container. The server starts Docker
+Desktop automatically when a validation finds the daemon down (Windows only,
+one retry per validation), and Docker Desktop auto-starts at sign-in via the
+per-user Run key. If validation still reports Docker unreachable, start Docker
+Desktop on the PC and tap Run fresh validation.
+
 ## HTTPS certificate consent
 
 Tailscale HTTPS certificates publish the certified machine and tailnet DNS name
