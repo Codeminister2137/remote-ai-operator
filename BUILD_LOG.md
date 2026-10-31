@@ -1,5 +1,12 @@
 # Event-built contributions
 
+2026-10-30: added supervisor planning threads over the task store: chat turns,
+plan artifacts, exact plan approval into queued run jobs, and run status, on
+both owner and hosted routes. Scripted replies are labelled offline reference;
+live inference reuses the audited operation interface. Nine new deterministic
+tests; full local suite 208 passed with 8 integration skips; Ruff check and
+format clean. No live model authorship is claimed for the scripted path.
+
 2026-10-28: prepared the next source candidate for local release review. The
 neutral external-actions API and mobile UI are implemented separately from the
 registered importer demo; no private Workbench implementation is included. A local
