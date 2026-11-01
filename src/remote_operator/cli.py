@@ -193,6 +193,9 @@ def main():
                 token = os.environ.get("OPERATOR_ACCESS_TOKEN", "")
                 if len(token) < 32:
                     raise ValueError("Set OPERATOR_ACCESS_TOKEN to at least 32 random characters")
+                from remote_operator.supervisor_runner import supervise_drain_worker
+
+                monitor, drain_status = supervise_drain_worker(operator, factory)
                 application = create_app(
                     operator,
                     token,
@@ -200,10 +203,8 @@ def main():
                     mode=args.model_mode,
                     public_origin=args.public_origin,
                     allowance_status=allowance_status,
+                    drain_snapshot=lambda: drain_status.snapshot(monitor.is_alive()),
                 )
-                from remote_operator.supervisor_runner import start_drain_worker
-
-                start_drain_worker(operator, factory)
             uvicorn.run(
                 application,
                 host="127.0.0.1",

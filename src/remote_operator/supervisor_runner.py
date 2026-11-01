@@ -286,6 +286,43 @@ class SupervisorRunner:
         )
 
 
+class DrainWorkerStatus:
+    """Thread-safe pass counters for one supervised drain worker."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.last_pass: float | None = None
+        self.passes = 0
+        self.errors = 0
+        self.restarts = 0
+
+    def record_pass(self, ok: bool) -> None:
+        with self._lock:
+            self.last_pass = time.time()
+            self.passes += 1
+            if not ok:
+                self.errors += 1
+
+    def record_restart(self) -> None:
+        with self._lock:
+            self.restarts += 1
+
+    def snapshot(self, alive: bool) -> dict:
+        with self._lock:
+            return {
+                "alive": alive,
+                "last_pass": self.last_pass,
+                "passes": self.passes,
+                "errors": self.errors,
+                "restarts": self.restarts,
+            }
+
+
+def _check_interval(interval_seconds: float) -> None:
+    if type(interval_seconds) not in (int, float) or not interval_seconds > 0:
+        raise ValueError("interval_seconds must be a positive number")
+
+
 def start_drain_worker(
     operator,
     model_factory,
@@ -293,6 +330,7 @@ def start_drain_worker(
     interval_seconds: float = DRAIN_WORKER_INTERVAL_SECONDS,
     max_jobs: int = 10,
     stop_event: threading.Event | None = None,
+    status: DrainWorkerStatus | None = None,
 ) -> threading.Thread:
     """Run queued supervisor jobs in a daemon thread while serve lives.
 
@@ -302,8 +340,7 @@ def start_drain_worker(
     ``stop_event`` or process exit. Shares the serve ``operator`` the same
     way request handlers already do; the operator lock serializes writers.
     """
-    if type(interval_seconds) not in (int, float) or not interval_seconds > 0:
-        raise ValueError("interval_seconds must be a positive number")
+    _check_interval(interval_seconds)
     stop = stop_event or threading.Event()
 
     def _notify_send_or_none():
@@ -340,8 +377,56 @@ def start_drain_worker(
                 runner.refresh_waiting()
             except Exception:
                 logger.exception("supervisor drain pass failed")
+                if status is not None:
+                    status.record_pass(False)
+            else:
+                if status is not None:
+                    status.record_pass(True)
             stop.wait(interval_seconds)
 
     thread = threading.Thread(target=_loop, name="supervisor-drain", daemon=True)
     thread.start()
     return thread
+
+
+def supervise_drain_worker(
+    operator,
+    model_factory,
+    *,
+    interval_seconds: float = DRAIN_WORKER_INTERVAL_SECONDS,
+    max_jobs: int = 10,
+    stop_event: threading.Event | None = None,
+    status: DrainWorkerStatus | None = None,
+) -> tuple[threading.Thread, DrainWorkerStatus]:
+    """Keep one drain worker alive, restarting it when its thread dies.
+
+    A per-pass guard already survives ordinary errors; the monitor covers
+    the remaining case (a fatal escaping the worker thread), which would
+    otherwise silently stop all draining. Returns the monitor thread and
+    the shared status. The worker shares ``stop_event`` for clean shutdown.
+    """
+    _check_interval(interval_seconds)
+    holder = status or DrainWorkerStatus()
+    stop = stop_event or threading.Event()
+    state: dict = {"worker": None}
+
+    def _monitor() -> None:
+        while not stop.is_set():
+            worker = state["worker"]
+            if worker is None or not worker.is_alive():
+                if worker is not None:
+                    holder.record_restart()
+                    logger.warning("supervisor drain worker died; restarting")
+                state["worker"] = start_drain_worker(
+                    operator,
+                    model_factory,
+                    interval_seconds=interval_seconds,
+                    max_jobs=max_jobs,
+                    stop_event=stop,
+                    status=holder,
+                )
+            stop.wait(interval_seconds)
+
+    monitor = threading.Thread(target=_monitor, name="supervisor-drain-monitor", daemon=True)
+    monitor.start()
+    return monitor, holder
