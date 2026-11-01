@@ -66,6 +66,11 @@ TOOLS = [
     ),
     function("validate", "Execute protected tests in the isolated runner", {}),
     function("finish", "Request host review after successful validation", {}),
+    function(
+        "ask_owner",
+        "Park this task with one question; other work continues and the task resumes on answer",
+        {"question": {"type": "string"}},
+    ),
 ]
 
 

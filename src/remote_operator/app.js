@@ -123,6 +123,10 @@ function actions() {
   element("revalidate").disabled = !active || busy || !["awaiting_approval", "review_required", "paused"].includes(task.status);
   element("preview").disabled = !active || busy || task.status !== "completed";
   element("cancel").disabled = !active || ["completed", "applying", "rejected", "cancelled"].includes(task.status);
+  const parked = active && task.status === "waiting_on_owner";
+  element("question-block").hidden = !parked;
+  if (parked) element("pending-question").textContent = task.pending_question || "(no question recorded)";
+  element("send-answer").disabled = !parked || busy;
   if (typeof supervisorActions === "function") supervisorActions();
 }
 async function recentTasks() {
@@ -230,6 +234,13 @@ element("powerCancel").onclick = () => guarded(async () => {
   await api("/api/power/sleep/cancel", "POST");
   await refreshPowerStatus();
   message("Scheduled sleep cancelled.");
+});
+element("send-answer").onclick = () => guarded(async () => {
+  const text = element("answer-text").value;
+  const out = await api("/api/tasks/" + element("taskId").value.trim() + "/answer", "POST", {text});
+  element("answer-text").value = "";
+  await refresh();
+  message("Answer recorded. " + (out.resumed_runs.length ? out.resumed_runs.length + " run(s) resuming." : "Task paused; run it to resume."));
 });
 let supervisorThreadId = "";
 let supervisorBusy = false;

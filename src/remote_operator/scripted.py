@@ -32,7 +32,7 @@ def import_issues(text, existing=()):
     return {"issues": issues, "errors": errors}
 '''
 
-ALLOWED_ACTIONS = {"read_file", "write_file", "validate", "finish"}
+ALLOWED_ACTIONS = {"read_file", "write_file", "validate", "finish", "ask_owner", "owner_answer"}
 
 
 def _validate_history_actions(history):
