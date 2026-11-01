@@ -18,6 +18,8 @@ from remote_operator.control import digest
 
 PLAN_APPROVAL_SECONDS = 600
 RUNS_DIRNAME = "supervisor_runs"
+OWNER_REPLY_TOPIC = "Owner replies"
+OWNER_REPLY_PREFIX = "REPLY:"
 
 
 class Supervisor:
@@ -80,6 +82,23 @@ class Supervisor:
                     {"id": task["id"], "topic": task["prompt"][:160], "status": task["status"]}
                 )
         return summaries
+
+    def reply_to_owner_thread(self, model, text: str) -> dict:
+        """Record an owner reply in the single shared replies thread.
+
+        Creates the ``Owner replies`` thread on first use and appends
+        afterwards, so owner messages never become demo tasks. Returns the
+        thread id plus the assistant reply receipt.
+        """
+        thread_id = None
+        for summary in self.list_threads(50):
+            if summary["topic"] == OWNER_REPLY_TOPIC and summary["status"] == "open":
+                thread_id = summary["id"]
+                break
+        if thread_id is None:
+            thread_id = self.open_thread(OWNER_REPLY_TOPIC)["id"]
+        posted = self.post_message(model, thread_id, text)
+        return {"thread_id": thread_id, **posted}
 
     def post_message(self, model, thread_id: str, text: str) -> dict:
         """Append a user message and generate the assistant planning reply."""

@@ -109,6 +109,8 @@ class Operator:
     def submit(self, prompt: str) -> dict:
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 4000:
             raise ValueError("Task requires 1-4000 characters")
+        if prompt.strip()[:6].upper() == "REPLY:":
+            raise ValueError("REPLY prompts route to the owner thread, not tasks")
         with self.lock:
             task_id = uuid.uuid4().hex
             folder = self.root / task_id
@@ -446,6 +448,8 @@ class Operator:
 
     def review(self, task_id: str) -> dict:
         task = self.store.get(task_id)
+        if task.get("supervisor_thread"):
+            raise ValueError("Task id is a planning thread; use the thread routes")
         candidate = read_source(self.folder(task_id, "candidate"))
         return {
             "task": task,
