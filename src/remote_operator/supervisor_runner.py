@@ -44,7 +44,7 @@ class SupervisorRunner:
         self.operator = operator
         self.notify_send = notify_send
         self.notify_on = (
-            {"completed", "failed", "cancelled", "awaiting_approval"}
+            {"completed", "failed", "cancelled", "awaiting_approval", "waiting_on_owner"}
             if notify_on is None
             else set(notify_on)
         )
@@ -168,6 +168,23 @@ class SupervisorRunner:
                 outcomes.append(self._finish_job(path, job, task["status"]))
         return outcomes
 
+    def resume_answered(self, task_id: str) -> list[dict]:
+        """Requeue jobs parked on an owner question the owner just answered."""
+        outcomes = []
+        for path in sorted(self._runs.glob("*.json")):
+            job = self._read_job(path)
+            if (
+                job is None
+                or job.get("task_id") != task_id
+                or job.get("status") != "waiting_on_owner"
+            ):
+                continue
+            job["status"] = "queued"
+            job["note"] = "Owner answered; resuming"
+            self._write_job(path, job)
+            outcomes.append({"run_id": job.get("run_id", path.stem), "status": "queued"})
+        return outcomes
+
     def drain(self, model, *, max_jobs: int = 10) -> list[dict]:
         """Run up to ``max_jobs`` queued jobs, oldest first; one worker only."""
         if type(max_jobs) is not int or not 1 <= max_jobs <= 100:
@@ -230,6 +247,8 @@ class SupervisorRunner:
         status = task["status"]
         if status == "awaiting_approval":
             return self._finish_job(path, job, "awaiting_approval")
+        if status == "waiting_on_owner":
+            return self._finish_job(path, job, "waiting_on_owner")
         if status == "paused":
             job["status"] = "paused"
             job["note"] = "Transport paused; will resume on the next drain"

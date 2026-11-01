@@ -90,6 +90,11 @@ class PowerSleep(BaseModel):
     delay_seconds: int = Field(default=60, ge=10, le=3600)
 
 
+class AnswerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=2000)
+
+
 class ThreadTopic(BaseModel):
     model_config = ConfigDict(extra="forbid")
     topic: str = Field(min_length=1, max_length=4000)
@@ -359,6 +364,15 @@ def _task_routes(app, principal):
     def revalidate(task_id: str, who: Annotated[Principal, Depends(principal)]):
         """Re-run validation for the task candidate."""
         return who.operator.revalidate(task_id)
+
+    @app.post("/api/tasks/{task_id}/answer")
+    def answer(task_id: str, body: AnswerInput, who: Annotated[Principal, Depends(principal)]):
+        """Answer a parked owner question and requeue the linked runs."""
+        from remote_operator.supervisor_runner import SupervisorRunner
+
+        task = who.operator.answer(task_id, body.text)
+        resumed = SupervisorRunner(who.operator).resume_answered(task_id)
+        return {"status": task["status"], "resumed_runs": [r["run_id"] for r in resumed]}
 
     @app.get("/api/allowance")
     def allowance(who: Annotated[Principal, Depends(principal)]):

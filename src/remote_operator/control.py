@@ -216,6 +216,11 @@ class Operator:
                 )
                 task["pending"] = None
                 self.store.save(task, "tool_completed", {"name": operation.name, "result": result})
+                if task.get("status") == "waiting_on_owner":
+                    self.store.save(
+                        task, "question_asked", {"question": task.get("pending_question", "")}
+                    )
+                    return task
             raise TimeoutError("Model call allowance exhausted")
         except RunCancelled:
             task["status"] = "cancelled"
@@ -262,6 +267,17 @@ class Operator:
             task["evidence"] = asdict(evidence)
             self._check_control(task["id"], deadline)
             return task["evidence"]
+        if operation.name == "ask_owner":
+            question = (
+                operation.arguments.get("question", "")
+                if isinstance(operation.arguments, dict)
+                else ""
+            )
+            if not isinstance(question, str) or not question.strip() or len(question) > 500:
+                raise ValueError("ask_owner requires a 1-500 character question")
+            task["pending_question"] = question.strip()
+            task["status"] = "waiting_on_owner"
+            return {"parked": True}
         raise ValueError(f"Unknown or invalid tool: {operation.name}")
 
     def _prepare_approval(self, task: dict) -> None:
@@ -427,6 +443,22 @@ class Operator:
                 task["status"], task["pending"] = "review_required", None
                 self.store.save(task, "revalidation_failed")
                 raise
+
+    def answer(self, task_id: str, text: str) -> dict:
+        """Record the owner's answer and resume a parked task as paused."""
+        if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+            raise ValueError("Answer requires 1-2000 characters")
+        with self.lock:
+            task = self.store.get(task_id)
+            if task.get("status") != "waiting_on_owner":
+                raise ValueError("Task has no pending owner question")
+            if self.store.cancelled(task_id):
+                raise ValueError("Task was cancelled")
+            task["history"].append({"name": "owner_answer", "result": {"text": text.strip()}})
+            task["pending_question"] = None
+            task["status"] = "paused"
+            self.store.save(task, "question_answered")
+            return task
 
     def sample(self, task_id, csv_text):
         with self.lock:
