@@ -378,10 +378,14 @@ def _owner_routes(app, principal):
     @app.get("/api/settings")
     def get_settings(who: Annotated[Principal, Depends(principal)]):
         """Return run settings plus mail readiness (never secrets)."""
+        from remote_operator.control import TASK_APPROVAL_SECONDS
+        from remote_operator.supervisor import PLAN_APPROVAL_SECONDS
+
         _owner_only(who)
         return {
             **run_settings.load_settings(who.operator.root),
             "mail_configured": run_settings.mail_configured(),
+            "approval_window_minutes": min(TASK_APPROVAL_SECONDS, PLAN_APPROVAL_SECONDS) // 60,
         }
 
     @app.put("/api/settings")

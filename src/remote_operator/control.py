@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE = "issue_import.py"
 MAX_SOURCE_BYTES = 32_768
+TASK_APPROVAL_SECONDS = 600
 
 
 def digest(value: str) -> str:
@@ -275,7 +276,7 @@ class Operator:
             raise ValueError("Validation policy changed; fresh validation required")
         task["approval"] = {
             "nonce": secrets.token_urlsafe(24),
-            "expires": time.time() + 600,
+            "expires": time.time() + TASK_APPROVAL_SECONDS,
             "candidate_digest": candidate,
             "checks_digest": policy,
             "evidence_digest": digest(json.dumps(evidence, sort_keys=True)),
