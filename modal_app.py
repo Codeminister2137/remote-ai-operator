@@ -2,11 +2,11 @@
 
 Deploy (single writer, full container replacement):
 
-    git rev-parse --short HEAD > src/remote_operator/build_commit.txt
     modal deploy --strategy recreate modal_app.py
 
-Refresh ``build_commit.txt`` to the deployed commit first; hosted
-``/api/config`` reports it so the live revision is always identifiable.
+The image bakes the deploying commit (``git rev-parse --short HEAD``) as
+``OPERATOR_BUILD_COMMIT``; hosted ``/api/config`` reports it so the live
+revision is always identifiable. ``build_commit.txt`` is the local fallback.
 
 The ``remote-operator-hosted`` secret supplies ``OPERATOR_VISITOR_CODE`` and
 ``OPERATOR_PUBLIC_ORIGIN``. State lives on the ``remote-operator-state`` volume so
@@ -16,6 +16,7 @@ directory or private plans.
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 import modal
@@ -24,13 +25,28 @@ APP_NAME = "remote-operator-hosted"
 PROJECT = Path("/app")
 RUNTIME = Path("/data/runtime")
 
+
+def _deploy_commit() -> str:
+    """Short HEAD of the deploying checkout (runs locally at deploy time)."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            cwd=Path(__file__).resolve().parent,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else "unknown"
+
 app = modal.App(APP_NAME)
 volume = modal.Volume.from_name("remote-operator-state", create_if_missing=True, version=2)
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install_from_pyproject("pyproject.toml", optional_dependencies=["modal"])
-    .env({"PYTHONPATH": "/app/src:/app"})
+    .env({"PYTHONPATH": "/app/src:/app", "OPERATOR_BUILD_COMMIT": _deploy_commit()})
     .add_local_dir(
         "src/remote_operator",
         "/app/src/remote_operator",

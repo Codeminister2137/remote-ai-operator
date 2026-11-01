@@ -6,6 +6,7 @@ a task ID,workspace path or browser field never selects another principal.
 
 import asyncio
 import logging
+import os
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -721,12 +722,14 @@ def create_hosted_app(
     @app.get("/api/config")
     def configuration(request: Request):
         """Return hosted deployment configuration for the visitor."""
-        try:
-            build_commit = (
-                Path(__file__).with_name("build_commit.txt").read_text(encoding="utf-8").strip()
-            )
-        except OSError:
-            build_commit = "unknown"
+        build_commit = os.environ.get("OPERATOR_BUILD_COMMIT", "")
+        if not build_commit:
+            try:
+                build_commit = (
+                    Path(__file__).with_name("build_commit.txt").read_text(encoding="utf-8").strip()
+                )
+            except OSError:
+                build_commit = "unknown"
         token = request.cookies.get(SESSION_COOKIE, "")
         try:
             subject = sessions.subject(token)
