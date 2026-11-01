@@ -76,6 +76,20 @@ class Approval(BaseModel):
     nonce: str = Field(min_length=1, max_length=128)
 
 
+class PlanApproval(Approval):
+    execute: bool = True
+
+
+class SupervisionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    supervision: str = Field(min_length=1, max_length=32)
+
+
+class PowerSleep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    delay_seconds: int = Field(default=60, ge=10, le=3600)
+
+
 class ThreadTopic(BaseModel):
     model_config = ConfigDict(extra="forbid")
     topic: str = Field(min_length=1, max_length=4000)
@@ -352,6 +366,56 @@ def _task_routes(app, principal):
         return who.allowance_status() if who.allowance_status is not None else {"enabled": False}
 
 
+def _owner_routes(app, principal):
+    """Register owner machine settings and power routes (hosted: refused)."""
+    from remote_operator import power as power_control
+    from remote_operator import settings as run_settings
+
+    def _owner_only(who: Principal) -> None:
+        if who.hosted:
+            raise HTTPException(403, "Owner machine control is not available to visitors")
+
+    @app.get("/api/settings")
+    def get_settings(who: Annotated[Principal, Depends(principal)]):
+        """Return run settings plus mail readiness (never secrets)."""
+        _owner_only(who)
+        return {
+            **run_settings.load_settings(who.operator.root),
+            "mail_configured": run_settings.mail_configured(),
+        }
+
+    @app.put("/api/settings")
+    def put_settings(body: SupervisionUpdate, who: Annotated[Principal, Depends(principal)]):
+        """Persist the supervision mode (attended or unattended)."""
+        _owner_only(who)
+        try:
+            saved = run_settings.save_settings(who.operator.root, body.supervision)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        return {**saved, "mail_configured": run_settings.mail_configured()}
+
+    @app.post("/api/power/sleep")
+    def schedule_sleep(body: PowerSleep, who: Annotated[Principal, Depends(principal)]):
+        """Schedule a cancellable workstation sleep (owner machine only)."""
+        _owner_only(who)
+        try:
+            return power_control.schedule_sleep(who.operator.root, body.delay_seconds)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+
+    @app.get("/api/power/sleep")
+    def sleep_status(who: Annotated[Principal, Depends(principal)]):
+        """Return the last sleep schedule receipt, or idle."""
+        _owner_only(who)
+        return power_control.sleep_status(who.operator.root)
+
+    @app.post("/api/power/sleep/cancel")
+    def cancel_sleep(who: Annotated[Principal, Depends(principal)]):
+        """Cancel a pending scheduled sleep."""
+        _owner_only(who)
+        return {"cancelled": power_control.cancel_sleep(who.operator.root)}
+
+
 def _supervisor_routes(app, principal):
     """Register supervisor planning-thread routes."""
     from remote_operator.supervisor import Supervisor
@@ -387,9 +451,11 @@ def _supervisor_routes(app, principal):
         return Supervisor(who.operator).write_plan(thread_id)
 
     @app.post("/api/supervisor/threads/{thread_id}/approve")
-    def approve_plan(thread_id: str, body: Approval, who: Annotated[Principal, Depends(principal)]):
-        """Approve the exact reviewed plan and enqueue a run."""
-        return Supervisor(who.operator).approve_plan(thread_id, body.nonce)
+    def approve_plan(
+        thread_id: str, body: PlanApproval, who: Annotated[Principal, Depends(principal)]
+    ):
+        """Approve the exact reviewed plan and enqueue a run unless planning-only."""
+        return Supervisor(who.operator).approve_plan(thread_id, body.nonce, execute=body.execute)
 
     @app.get("/api/supervisor/runs")
     def list_runs(who: Annotated[Principal, Depends(principal)]):
@@ -506,6 +572,7 @@ def create_app(
     _task_routes(app, owner)
     _external_action_routes(app, owner)
     _supervisor_routes(app, owner)
+    _owner_routes(app, owner)
 
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
@@ -610,6 +677,7 @@ def create_hosted_app(
     _task_routes(app, visitor)
     _external_action_routes(app, visitor)
     _supervisor_routes(app, visitor)
+    _owner_routes(app, visitor)
 
     @app.get("/api/config")
     def configuration(request: Request):
