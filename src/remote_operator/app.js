@@ -344,7 +344,7 @@ element("supervisorThreads").onchange = () => guarded(() => supervisorStep(async
 }));
 element("supervisorOpen").onclick = () => guarded(() => supervisorStep(async () => {
   const topic = element("supervisorNewTopic").value.trim();
-  if (!topic) { supervisorNote("Enter a topic first."); return; }
+  if (!topic) { supervisorNote("Enter a thread topic first."); return; }
   const opened = await api("/api/supervisor/threads", "POST", {topic});
   element("supervisorNewTopic").value = "";
   await loadSupervisorThreads();
