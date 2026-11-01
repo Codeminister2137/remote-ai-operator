@@ -1,8 +1,10 @@
 # Window status
 
-The owner UI shows one agent-activity line in the Progress section
-(`windowStatus`). It answers: is an agent window active right now, which
-slice, and when was the last heartbeat.
+The owner UI shows agent activity in the Progress section from a single
+`/api/window` poll: the window line (`windowStatus`), the agents line
+(`agentsStatus`), and the worker line (`drainStatus`). It answers: is an
+agent window active right now, which slice, which agents/workers are busy,
+and is the drain worker alive.
 
 ## Source file
 
@@ -20,17 +22,21 @@ on every heartbeat. The serve process only reads; it never writes.
   "last_heartbeat_utc": "2026-11-01T10:30:00Z",
   "next_heartbeat_utc": "2026-11-01T10:35:00Z",
   "sleep_state": "awake",
-  "note": "slice 3 of 5"
+  "note": "slice 3 of 5",
+  "agents": [{"name": "worker-a", "task": "digest probe", "status": "running"}]
 }
 ```
 
-All fields are strings. `sleep_state` is the agent's own sleep label
-(e.g. `awake`, `sleep_scheduled`); it is informational, not a power command.
+All fields are strings except `agents`, a list of `{name, task, status}`
+string triples the agent rewrites on every worker spawn/finish.
+`sleep_state` is the agent's own sleep label (e.g. `awake`,
+`no-sleep override`); it is informational, not a power command.
 
 ## Route behaviour
 
 `GET /api/window` (owner auth only; hosted visitors get 403 like the other
-owner routes) returns the file fields plus `running: true`. A missing file
-returns `{"running": false}`. Malformed JSON, a non-object payload, or
-non-string fields never raise: the loader falls back to safe defaults
-(`running: false`, empty strings).
+owner routes) merges the file with live process state: `serve_pid` and the
+drain snapshot (`drain`, null when no worker) plus `running: true`. A
+missing file returns `{"running": false}` plus the process keys. Malformed
+JSON, a non-object payload, or non-string fields never raise: the loader
+falls back to safe defaults (`running: false`, empty strings, no agents).
