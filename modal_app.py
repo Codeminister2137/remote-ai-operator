@@ -2,7 +2,11 @@
 
 Deploy (single writer, full container replacement):
 
+    git rev-parse --short HEAD > src/remote_operator/build_commit.txt
     modal deploy --strategy recreate modal_app.py
+
+Refresh ``build_commit.txt`` to the deployed commit first; hosted
+``/api/config`` reports it so the live revision is always identifiable.
 
 The ``remote-operator-hosted`` secret supplies ``OPERATOR_VISITOR_CODE`` and
 ``OPERATOR_PUBLIC_ORIGIN``. State lives on the ``remote-operator-state`` volume so

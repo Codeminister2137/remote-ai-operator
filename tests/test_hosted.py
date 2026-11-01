@@ -391,6 +391,7 @@ class HostedAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(config["authenticated"])
         self.assertFalse(config["live_inference"])
         self.assertFalse(config["model_route_configured"])
+        self.assertTrue(config["build_commit"])
         self.assertEqual((await self.client.get("/api/tasks")).status_code, 401)
         self.assertEqual(
             (await self.client.post("/api/session", json={"code": "wrong-code"})).status_code, 403
