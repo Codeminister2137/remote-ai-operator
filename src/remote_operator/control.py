@@ -19,43 +19,84 @@ from remote_operator.store import Store
 logger = logging.getLogger(__name__)
 
 SOURCE = "issue_import.py"
+ADMITTED_SUFFIXES = (".js", ".html")
 MAX_SOURCE_BYTES = 32_768
-TASK_APPROVAL_SECONDS = 600
+TASK_APPROVAL_SECONDS = 3600
 
 
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def safe_file(root: Path) -> Path:
-    """Reject links/junctions at the registered workspace and controlled source."""
-    for path in (root, root / SOURCE):
+def admitted_file(name: str) -> str:
+    """Return ``name`` when it is SOURCE or an admitted single-segment basename.
+
+    Besides the registered sample source, only single-segment basenames ending
+    in .js/.html are admitted. Separators, parent references, absolute or
+    drive-qualified paths, empty names and other extensions are refused before
+    any filesystem access.
+    """
+    if name == SOURCE:
+        return name
+    if (
+        not isinstance(name, str)
+        or not name
+        or "/" in name
+        or "\\" in name
+        or ".." in name
+        or ":" in name
+        or os.path.isabs(name)
+        or name != Path(name).name
+        or not name.endswith(ADMITTED_SUFFIXES)
+    ):
+        raise ValueError("Only the registered sample source is accessible")
+    return name
+
+
+def safe_path(root: Path, name: str) -> Path:
+    """Reject links/junctions at the registered workspace and one controlled file."""
+    target = root / admitted_file(name)
+    for path in (root, target):
         if path.is_symlink() or path.is_junction():
             raise ValueError("Linked workspace/source is forbidden")
-    return root / SOURCE
+    return target
 
 
-def read_source(root: Path) -> str:
-    path = safe_file(root)
+def safe_file(root: Path) -> Path:
+    """Reject links/junctions at the registered workspace and controlled source."""
+    return safe_path(root, SOURCE)
+
+
+def read_named(root: Path, name: str) -> str:
+    path = safe_path(root, name)
     if path.stat().st_size > MAX_SOURCE_BYTES:
         raise ValueError("Source exceeds allowed size")
     return path.read_bytes().decode("utf-8")
 
 
-def write_source(root: Path, source: str) -> None:
-    if not isinstance(source, str) or len(source.encode()) > MAX_SOURCE_BYTES:
+def read_source(root: Path) -> str:
+    return read_named(root, SOURCE)
+
+
+def write_named(root: Path, name: str, content: str) -> None:
+    admitted = admitted_file(name)
+    if not isinstance(content, str) or len(content.encode()) > MAX_SOURCE_BYTES:
         raise ValueError("Invalid source size/type")
-    destination = safe_file(root)
+    destination = safe_path(root, admitted)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(dir=root, delete=False) as stream:
             temporary = Path(stream.name)
-            stream.write(source.encode())
-        safe_file(root)
+            stream.write(content.encode())
+        safe_path(root, admitted)
         os.replace(temporary, destination)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+def write_source(root: Path, source: str) -> None:
+    write_named(root, SOURCE, source)
 
 
 @dataclass(frozen=True)
@@ -248,13 +289,14 @@ class Operator:
         workspace = self.folder(task["id"], "candidate")
         if operation.name in {"read_file", "write_file"}:
             expected = {"path"} if operation.name == "read_file" else {"path", "content"}
-            if set(operation.arguments) != expected or operation.arguments["path"] != SOURCE:
+            if set(operation.arguments) != expected:
                 raise ValueError("Only the registered sample source is accessible")
+            name = admitted_file(operation.arguments["path"])
             if operation.name == "read_file":
-                return {"content": read_source(workspace)}
-            write_source(workspace, operation.arguments["content"])
+                return {"content": read_named(workspace, name)}
+            write_named(workspace, name, operation.arguments["content"])
             task["evidence"] = None
-            return {"digest": digest(read_source(workspace))}
+            return {"digest": digest(read_named(workspace, name))}
         if operation.name == "validate" and not operation.arguments:
             before = digest(read_source(workspace))
             evidence = self.validator.validate(
@@ -392,7 +434,13 @@ class Operator:
             elif task["status"] in {"running", "reconciliation_required"}:
                 pending = task["pending"]
                 if pending and pending["name"] == "write_file":
-                    actual = digest(read_source(self.folder(task_id, "candidate")))
+                    try:
+                        name = admitted_file(pending["arguments"].get("path", SOURCE))
+                    except ValueError:
+                        raise ValueError(
+                            "Uncertain edit differs; manual inspection required"
+                        ) from None
+                    actual = digest(read_named(self.folder(task_id, "candidate"), name))
                     if actual != digest(pending["arguments"].get("content", "")):
                         raise ValueError("Uncertain edit differs; manual inspection required")
                     task["history"].append(
@@ -483,15 +531,33 @@ class Operator:
         task = self.store.get(task_id)
         if task.get("supervisor_thread"):
             raise ValueError("Task id is a planning thread; use the thread routes")
-        candidate = read_source(self.folder(task_id, "candidate"))
-        return {
-            "task": task,
-            "diff": "".join(
+        candidate_dir = self.folder(task_id, "candidate")
+        candidate = read_source(candidate_dir)
+        parts = [
+            "".join(
                 difflib.unified_diff(
                     task["base_source"].splitlines(True),
                     candidate.splitlines(True),
                     fromfile="base/" + SOURCE,
                     tofile="candidate/" + SOURCE,
                 )
-            ),
-        }
+            )
+        ]
+        for name in sorted(path.name for path in candidate_dir.iterdir() if path.is_file()):
+            if name == SOURCE:
+                continue
+            try:
+                admitted = admitted_file(name)
+            except ValueError:
+                continue
+            parts.append(
+                "".join(
+                    difflib.unified_diff(
+                        [],
+                        read_named(candidate_dir, admitted).splitlines(True),
+                        fromfile="base/" + admitted,
+                        tofile="candidate/" + admitted,
+                    )
+                )
+            )
+        return {"task": task, "diff": "".join(parts)}
