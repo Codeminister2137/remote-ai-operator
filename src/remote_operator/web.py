@@ -399,7 +399,8 @@ def _owner_routes(app, principal):
         return {
             **run_settings.load_settings(who.operator.root),
             "mail_configured": run_settings.mail_configured(),
-            "approval_window_minutes": min(TASK_APPROVAL_SECONDS, PLAN_APPROVAL_SECONDS) // 60,
+            "approval_window_minutes": PLAN_APPROVAL_SECONDS // 60,
+            "task_approval_minutes": TASK_APPROVAL_SECONDS // 60,
         }
 
     @app.put("/api/settings")
