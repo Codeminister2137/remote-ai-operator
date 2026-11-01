@@ -275,6 +275,20 @@ def _task_routes(app, principal):
     @app.post("/api/tasks")
     def submit(body: Submission, who: Annotated[Principal, Depends(principal)]):
         """Create a new task for the authenticated principal."""
+        from remote_operator.supervisor import OWNER_REPLY_PREFIX, Supervisor
+
+        prompt = body.prompt.strip()
+        if prompt[:6].upper() == OWNER_REPLY_PREFIX:
+            posted = Supervisor(who.operator).reply_to_owner_thread(
+                who.model_factory(), prompt[6:].strip() or "(empty reply)"
+            )
+            return {
+                "id": posted["thread_id"],
+                "status": "replied",
+                "mode": who.mode,
+                "reply": True,
+                "thread_id": posted["thread_id"],
+            }
         task = who.operator.submit(body.prompt)
         return {"id": task["id"], "status": task["status"], "mode": who.mode}
 
