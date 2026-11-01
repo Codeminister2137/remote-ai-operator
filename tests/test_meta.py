@@ -232,7 +232,9 @@ class MetaContracts(unittest.TestCase):
         self.assertEqual(self.requests, [])
 
     def test_money_limit_persists_in_new_store_after_failed_request(self):
-        grant = replace(self.grant, approved_usd="0.006")
+        # One-request reserve is ~$0.0061 at fixture prices; the grant must
+        # cover one request yet refuse a second after the restart.
+        grant = replace(self.grant, approved_usd="0.007")
         actor = self.actor(
             lambda request: httpx.Response(503, json={"error": {"message": "fixture"}}), grant
         )
@@ -240,7 +242,7 @@ class MetaContracts(unittest.TestCase):
             actor.next_operation([], prompt="task")
         allowance = actor.last_receipt["local_allowance"]
         self.assertEqual(allowance["requests_used"], 1)
-        self.assertEqual(allowance["limit_usd"], "0.006")
+        self.assertEqual(allowance["limit_usd"], "0.007")
         self.assertEqual(actor.last_receipt["spending_control"], "local_estimate_not_provider_cap")
         restarted = MetaModel(
             "fixture-secret",
