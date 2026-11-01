@@ -136,7 +136,9 @@ class OwnerRoutesTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_settings_reports_approval_window(self):
         response = await self.client.get("/api/settings", headers=self.auth)
-        self.assertEqual(response.json()["approval_window_minutes"], 10)
+        body = response.json()
+        self.assertEqual(body["approval_window_minutes"], 10)
+        self.assertEqual(body["task_approval_minutes"], 60)
 
     async def test_plan_approve_accepts_execute_flag(self):
         opened = await self.client.post(

@@ -159,7 +159,7 @@ async function loadSettings() {
   element("mailState").textContent = settings.mail_configured ?
     "Mail: configured. Unattended mode sends run updates to the owner address." :
     "Mail: NOT configured. Unattended mode cannot send updates until SMTP is set up.";
-  element("approvalWindow").textContent = "Approval window: ~" + settings.approval_window_minutes + " min. Expired approvals need a fresh validation or plan.";
+  element("approvalWindow").textContent = "Approval windows: tasks ~" + settings.task_approval_minutes + " min, plans ~" + settings.approval_window_minutes + " min. Expired approvals need a fresh validation or plan.";
   element("settingsNote").textContent = "";
 }
 async function refreshPowerStatus() {
