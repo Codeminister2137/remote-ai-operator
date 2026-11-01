@@ -1,5 +1,50 @@
 # Event-built contributions
 
+2026-11-01: reconciled this log with the tree at 454f34b. The merges below
+landed after the judge-accounts entry and were unlogged; grouped by theme in
+merge order. No source change in this entry; subjects follow the merged heads.
+- Oct-31 observability and UX: run-v8/v9 supervised logging and error-clarity
+  slices; phone task selection and approval UX; Docker daemon self-heal with one
+  retry per validation; supervisor planning chat UI with thread-list API;
+  approval expiry guidance with expired-plan rewrite; supervisor-runs UI
+  wrapped-list fix.
+- Serve and drain foundation: drain-worker thread in local serve; owner replies
+  routed to the shared thread, never demo tasks; run-settings backend with
+  planning-only approval and worker notifications; chat-first UI rework with run
+  settings and power control; task-summary thread flag.
+- Owner questions, admission and approvals: non-blocking owner-question inbox
+  (`ask_owner` op, answer route, inbox UI); strict `.js`/`.html` admission with
+  review coverage; task and plan approval windows reported separately
+  (60/10 min); supervised UI slice proving the admitted-file loop; money-limit
+  fixture recalibration for the longer admitted-paths prompt.
+- Supervision, power and docs: served phone operation in README; supervised
+  drain worker with restart-on-death, liveness endpoint and UI line; power
+  reschedule with stale-cancel cleanup; corrected D3 admission error messages;
+  Create-thread/topic label clarity; human-readable run mails.
+- Trials: GO-META-UI live loop trial and owner-approved Meta loop trial records.
+- Window activity, build marker and connect feedback: window/agent-activity
+  status surface with merged drain+serve state and one UI poll; hosted config
+  reporting the deploy commit marker (`build_commit.txt`, image env with file
+  fallback, ASCII refresh); adjacent connect status with wrong-token and
+  progress visibility.
+New files since the judge-accounts entry: `src/remote_operator/power.py`,
+`src/remote_operator/settings.py`, `src/remote_operator/window_status.py`,
+`src/remote_operator/build_commit.txt`, five docs (`drain-supervision`,
+`file-admission`, `owner-questions`, `supervised-ui-slice`, `window-status`)
+and eleven test modules (`test_connect_feedback`, `test_drain_supervision`,
+`test_file_admission`, `test_owner_questions`, `test_owner_reply`,
+`test_owner_settings`, `test_power`, `test_run_mail`,
+`test_supervised_ui_slice`, `test_supervisor_drain_worker`,
+`test_window_status`). Earlier packaging counts in this log are dated
+snapshots, not current-tree claims. Reconciliation-day validation at 454f34b:
+offline checker ELIGIBLE in scripted mode and for a synthetic valid Meta
+grant, correctly NOT ELIGIBLE for the deliberately inactive example grant;
+full suite 423 passed, 9 skipped, 189 subtests; `ruff check` clean while
+`ruff format --check` flags pre-existing drift in `modal_app.py` and
+`tests/test_supervisor.py` (untouched by this pass). Main advanced to 0459eb1
+(judge UX polish in `app.css`/`app.js`/`index.html`) after this tree was cut;
+that merge is not covered here.
+
 2026-10-31: added judge accounts with self-funded evaluation for hosted demos:
 code-gated signup, password login bound to stable `judge-` subjects, per-judge
 finite self-grants against the judge's own Meta key (model server-pinned, owner
