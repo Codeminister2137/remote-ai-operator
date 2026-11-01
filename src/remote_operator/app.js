@@ -39,7 +39,7 @@ async function api(path, method = "GET", body) {
   const raw = await response.text();
   let data;
   try { data = JSON.parse(raw); }
-  catch { throw new Error("Server response (HTTP " + response.status + "): " + raw.slice(0, 300)); }
+  catch { throw new Error("The server returned a response this page could not read (HTTP " + response.status + "). Check your connection and try again. Details: " + raw.slice(0, 300)); }
   if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
   return data;
 }
@@ -119,7 +119,7 @@ function actions() {
   element("reconcile").disabled = !recoverable;
   element("recovery-note").hidden = !recoverable;
   element("recovery-note").textContent = recoverable && task.status === "running" ?
-    "If progress stopped after a disconnect, inspect the saved state. Active execution refuses this check without interruption." :
+    "If progress stopped after a disconnect, use Inspect interrupted action below. If a run is still active, wait for it to finish first." :
     "An action may have been interrupted. Inspect its saved result before resuming. This does not repeat the action or approve a change.";
   element("revalidate").disabled = !active || busy || !["awaiting_approval", "review_required", "paused"].includes(task.status);
   element("preview").disabled = !active || busy || task.status !== "completed";
@@ -532,11 +532,11 @@ element("reconcile").onclick = () => guarded(() => taskAction("/reconcile", {}, 
 element("load").onclick = () => guarded(() => chooseTask(element("taskId").value.trim()));
 element("approve").onclick = () => guarded(async () => {
   if (!task) return;
-  if (!task.approval) { message("No approval nonce for this task. Run fresh validation first."); return; }
+  if (!task.approval) { message("This task has no valid approval yet. Run fresh validation first, then approve."); return; }
   await taskAction("/approve", {nonce: task.approval.nonce}, "Verified change applied to the local demo target.");
 });
 element("reject").onclick = () => guarded(() => taskAction("/reject", {}, "Change rejected; target not updated."));
-element("revalidate").onclick = () => guarded(() => taskAction("/revalidate", {}, "Fresh validation completed; previous approval nonce is invalid."));
+element("revalidate").onclick = () => guarded(() => taskAction("/revalidate", {}, "Fresh validation completed. The previous approval is no longer valid — review and approve again."));
 element("cancel").onclick = () => guarded(async () => {
   const id = element("taskId").value.trim(), session = sessionRevision, selection = selectionRevision;
   await api("/api/tasks/" + encodeURIComponent(id) + "/cancel", "POST", {});
@@ -645,7 +645,7 @@ element("connect").onclick = () => guarded(async () => {
   try {
     await loadMode(session);
     if (session === sessionRevision)
-      accessStatus(selectedMode ? "Connected. Execution mode loaded." : "Connect got no execution mode.");
+      accessStatus(selectedMode ? "Connected. Execution mode loaded." : "Connected, but no execution mode was loaded. Check the server is running, then press Connect again.");
   } catch (error) {
     if (session === sessionRevision) accessStatus("Connect failed: " + error.message);
     throw error;
