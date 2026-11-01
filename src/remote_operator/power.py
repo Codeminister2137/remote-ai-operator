@@ -16,6 +16,7 @@ RECEIPT_FILENAME = "power-sleep.json"
 CANCEL_FILENAME = "power-sleep.cancel"
 MIN_DELAY_SECONDS = 10
 MAX_DELAY_SECONDS = 3600
+CANCEL_GRACE_SECONDS = 1.2
 
 _HELPER = (
     "import ctypes, sys, time\n"
@@ -51,7 +52,13 @@ def schedule_sleep(runtime_dir: Path, delay_seconds: int = 60) -> dict:
     directory = Path(runtime_dir)
     directory.mkdir(parents=True, exist_ok=True)
     receipt_path, cancel_path = _paths(directory)
-    cancel_sleep(runtime_dir)
+    if cancel_sleep(runtime_dir):
+        # A previous helper may still be polling; it checks every second,
+        # so a 1.2 s grace guarantees it observes the cancel file before
+        # the new schedule removes it. Without the unlink, every schedule
+        # after a cancel would instantly abort while reporting scheduled.
+        time.sleep(CANCEL_GRACE_SECONDS)
+    cancel_path.unlink(missing_ok=True)
     due = time.time() + delay_seconds
     creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
         subprocess, "CREATE_NEW_PROCESS_GROUP", 0
