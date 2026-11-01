@@ -17,3 +17,6 @@ padding:15px;border-radius:8px;font-size:.85rem;max-height:450px;overflow:auto}l
 
 th:last-child,td:last-child{min-width:4.5em;white-space:nowrap}#events{overflow-wrap:anywhere;list-style:none;padding-left:0;max-height:260px;overflow:auto}summary{cursor:pointer;color:#a3c8ff;padding:8px 0}
 #externalActions{list-style:none;padding-left:0}#externalActions li.external-action{background:#101725;border:1px solid #344461;border-radius:8px;padding:12px;margin:10px 0}#externalActions li.external-action div{margin-bottom:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+body{overflow-x:hidden}button{max-width:100%}
+#judge-start ol{padding-left:24px;margin:10px 0}#judge-start li{padding:4px 0}
+@media (max-width:380px){main{padding:20px 12px 60px}section{padding:16px 14px}button{width:100%;margin:5px 0}}
