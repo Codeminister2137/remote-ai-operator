@@ -51,6 +51,15 @@ class SettingsUnitTests(unittest.TestCase):
 
 
 class PlanningOnlyTests(unittest.TestCase):
+    def test_thread_flag_in_task_summaries(self):
+        with tempfile.TemporaryDirectory() as name:
+            operator = _operator(Path(name))
+            thread = Supervisor(operator).open_thread("topic")
+            task = operator.submit("plain demo task")
+            by_id = {s["id"]: s for s in operator.store.recent_tasks()}
+            self.assertTrue(by_id[thread["id"]]["thread"])
+            self.assertFalse(by_id[task["id"]]["thread"])
+
     def test_approve_without_execute_queues_no_run(self):
         with tempfile.TemporaryDirectory() as name:
             operator = _operator(Path(name))
@@ -124,6 +133,33 @@ class OwnerRoutesTests(unittest.IsolatedAsyncioTestCase):
             "/api/power/sleep", headers=self.auth, json={"delay_seconds": 5}
         )
         self.assertEqual(response.status_code, 422)
+
+    async def test_settings_reports_approval_window(self):
+        response = await self.client.get("/api/settings", headers=self.auth)
+        self.assertEqual(response.json()["approval_window_minutes"], 10)
+
+    async def test_plan_approve_accepts_execute_flag(self):
+        opened = await self.client.post(
+            "/api/supervisor/threads", headers=self.auth, json={"topic": "t"}
+        )
+        thread_id = opened.json()["id"]
+        await self.client.post(
+            f"/api/supervisor/threads/{thread_id}/messages",
+            headers=self.auth,
+            json={"text": "req"},
+        )
+        plan = await self.client.post(
+            f"/api/supervisor/threads/{thread_id}/plan", headers=self.auth
+        )
+        approved = await self.client.post(
+            f"/api/supervisor/threads/{thread_id}/approve",
+            headers=self.auth,
+            json={"nonce": plan.json()["nonce"], "execute": False},
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+        self.assertIsNone(approved.json()["run_id"])
+        runs = await self.client.get("/api/supervisor/runs", headers=self.auth)
+        self.assertEqual(runs.json()["runs"], [])
 
 
 class HostedRefusalTests(unittest.IsolatedAsyncioTestCase):

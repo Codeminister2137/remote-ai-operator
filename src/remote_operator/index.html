@@ -25,13 +25,8 @@
 <button id="attachKey" disabled>Attach key</button><button id="detachKey" class="secondary" disabled>Remove key</button></div>
 <p id="key-note">Without a key this demo runs a fixed offline reference and makes no model requests.</p>
 <button id="leaveSession" class="secondary">Leave demo</button><p id="session-note"></p></section>
-<section><h2>Model spending</h2><p id="allowance-summary">Connect to view this server's allowance.</p>
-<p id="allowance-note">Local reserved estimates are separate from provider credits and final billing.</p>
-<button id="refreshAllowance" class="secondary" disabled>Refresh spending</button></section>
-<section><h2>Tasks</h2><button id="newTask" class="secondary" disabled>New task</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
-<button id="refreshTasks" class="secondary" disabled>Refresh tasks</button><p>Choose a task to review its progress or result. Selecting a task never starts work or approves a change.</p></section>
-<section><h2>Supervisor planning</h2>
-<p>Chat with the supervisor to plan work, then review the written plan. Planning never starts implementation or approves a change.</p>
+<section><h2>1 · Chat</h2>
+<p>Start here. Chat to plan work, write the plan, choose a run mode in settings, then approve. Anything you write here counts as your reply. Planning never starts implementation or approves a change.</p>
 <label>Threads<select id="supervisorThreads" disabled><option value="">Connect to load threads</option></select></label>
 <label>New topic<input id="supervisorNewTopic" autocomplete="off" placeholder="What should we plan?"></label>
 <button id="supervisorOpen" class="secondary" disabled>Open thread</button>
@@ -43,10 +38,39 @@
 <button id="supervisorWritePlan" class="secondary" disabled>Write plan</button>
 <button id="supervisorApprovePlan" disabled>Approve plan</button>
 <h3>Runs</h3><ul id="supervisorRuns"><li>No runs yet.</li></ul>
+<p>Approved runs start automatically about every 30 seconds. If a run sits queued longer, the worker needs attention.</p>
 <p id="supervisorNote" role="status" aria-live="polite"></p></section>
-<section><h2>Workbench pending actions</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
+<section><h2>2 · Run settings</h2>
+<label>Run mode<select id="runMode" disabled><option value="implement">Plan + implement (queues a run on approval)</option><option value="planning">Planning only (approves, queues nothing)</option></select></label>
+<div id="supervision-row"><label>Supervision<select id="supervisionMode" disabled><option value="attended">Attended (you watch, no mail)</option><option value="unattended">Unattended (mail me on run events)</option></select></label>
+<p id="mailState">Connect to check mail readiness.</p></div>
+<p id="approvalWindow">Approval window: unknown until connected.</p>
+<p id="execMode">Execution mode: unknown until connected.</p>
+<p id="settingsNote" role="status" aria-live="polite"></p>
+<div id="power-block"><h3>Sleep this PC</h3>
+<p>Owner only. Schedules a real workstation sleep you can cancel. Wake-on-LAN keeps working afterwards.</p>
+<label>Delay<select id="powerDelay" disabled><option value="60">1 minute</option><option value="300">5 minutes</option><option value="900">15 minutes</option><option value="3600">60 minutes</option></select></label>
+<button id="powerArm" class="secondary" disabled>Sleep this PC…</button>
+<button id="powerCancel" class="secondary" disabled>Cancel scheduled sleep</button>
+<p id="powerStatus">No sleep scheduled.</p></div></section>
+<p id="message" role="status" aria-live="polite"></p>
+<section><h2>3 · Review &amp; approve — the one approval place</h2>
+<p>Every approval happens here: task changes and Workbench actions below. Nothing is applied until you press approve.</p>
+<pre id="diff">No candidate yet.</pre>
+<h3>Validation evidence</h3><p id="validation-summary">Not validated.</p><details><summary>Show validation receipt</summary><pre id="evidence">Not validated.</pre></details>
+<p>Approval applies this candidate only to the separate local demo target. It does not push or deploy.</p>
+<button id="approve" disabled>Approve this verified change</button>
+<button id="revalidate" class="secondary" disabled>Run fresh validation</button><button id="reject" class="secondary" disabled>Reject change</button></section>
+<section><h2>4 · Progress</h2><p><span id="status">No task selected</span></p><p id="event-summary">Create a new task or select a saved task.</p><button id="eventHistory" class="secondary" hidden>Show all activity</button><ol id="events"></ol></section>
+<section><h2>5 · Pending actions from Workbench</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
 <p>External actions from AI Workbench or other connected tools appear here. Approve or reject the exact pending change.</p>
 <ul id="externalActions"><li>Connect to load pending actions.</li></ul></section>
+<section><h2>6 · Task history</h2><button id="newTask" class="secondary" disabled>New task</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
+<button id="refreshTasks" class="secondary" disabled>Refresh tasks</button><p>Past runs live here. Choose one to review its progress or result. Selecting never starts work or approves a change.</p></section>
+<section><h2>7 · Spending</h2><p id="allowance-summary">Connect to view this server's allowance.</p>
+<p id="allowance-note">Local reserved estimates are separate from provider credits and final billing.</p>
+<button id="refreshAllowance" class="secondary" disabled>Refresh spending</button></section>
+<details><summary>8 · Demo playground (CSV import judges' demo)</summary>
 <section><h2>New development task</h2><p>This demo asks the agent to add spreadsheet-style import to a small issue tracker: accept valid issues and explain why other rows cannot be imported.</p><label>Request<textarea id="prompt" rows="4">Implement CSV import for the issue tracker, including validation and duplicate handling, following the sample acceptance specification.</textarea></label>
 <label class="check"><input id="inject" type="checkbox" checked> Inject one transport failure after the edit</label>
 <button id="submit" disabled>Create and run new task</button>
@@ -57,13 +81,6 @@
 <p id="recovery-note" hidden></p>
 <button id="reconcile" class="secondary" disabled>Inspect interrupted action</button>
 <button id="resume" class="secondary" disabled>Resume paused task</button><button id="cancel" class="secondary" disabled>Cancel task</button></section>
-<p id="message" role="status" aria-live="polite"></p>
-<section><h2>Selected task progress <span id="status">No task selected</span></h2><p id="event-summary">Create a new task or select a saved task.</p><button id="eventHistory" class="secondary" hidden>Show all activity</button><ol id="events"></ol></section>
-<section><h2>Review exact change</h2><pre id="diff">No candidate yet.</pre>
-<h3>Validation evidence</h3><p id="validation-summary">Not validated.</p><details><summary>Show validation receipt</summary><pre id="evidence">Not validated.</pre></details>
-<p>Approval applies this candidate only to the separate local demo target. It does not push or deploy.</p>
-<button id="approve" disabled>Approve this verified change</button>
-<button id="revalidate" class="secondary" disabled>Run fresh validation</button><button id="reject" class="secondary" disabled>Reject change</button></section>
 <section><h2>Try the feature the agent built</h2>
 <p>After approving, run the new importer on the example below. Each line is one issue. Two valid issues should appear in the table; the duplicate ID and missing title should appear as row errors. You can edit the input and try again. This checks the approved code with sample data; it does not save issues to a live tracker.</p>
 <label>CSV input<textarea id="csv" rows="7">id,title,status
@@ -74,4 +91,5 @@ new-3,Another imported issue,closed</textarea></label>
 <button id="preview" disabled>Run approved import</button>
 <h3>Accepted issues</h3><div class="table-wrap"><table><thead><tr><th>ID</th><th>Title</th><th>Status</th></tr></thead><tbody id="issues"></tbody></table></div>
 <h3>Row errors</h3><ul id="import-errors"></ul></section>
+</details>
 </main></body></html>

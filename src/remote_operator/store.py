@@ -82,7 +82,12 @@ class Store:
         for (body,) in rows:
             task = json.loads(body)
             summaries.append(
-                {"id": task["id"], "prompt": task["prompt"][:160], "status": task["status"]}
+                {
+                    "id": task["id"],
+                    "prompt": task["prompt"][:160],
+                    "status": task["status"],
+                    "thread": bool(task.get("supervisor_thread")),
+                }
             )
         return summaries
 

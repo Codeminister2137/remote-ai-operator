@@ -109,6 +109,7 @@ function actions() {
   element("submit").disabled = busy || connecting || !inferenceAllowed();
   element("refreshAllowance").disabled = selectedMode === null || connecting;
   element("refreshExternal").disabled = selectedMode === null || connecting;
+  for (const id of ["runMode", "supervisionMode", "powerDelay", "powerArm"]) element(id).disabled = selectedMode === null || connecting;
   for (const id of ["recentTasks", "refreshTasks", "load", "taskId"]) element(id).disabled = busy || connecting || selectedMode === null;
   element("approve").disabled = !active || busy || task.status !== "awaiting_approval";
   element("reject").disabled = !active || busy || !["queued", "paused", "awaiting_approval", "review_required"].includes(task.status);
@@ -129,15 +130,42 @@ async function recentTasks() {
   const summaries = await api("/api/tasks?limit=20");
   if (session !== sessionRevision || selectedMode === null) return [];
   const chooser = element("recentTasks");
+  const tasksOnly = summaries.filter((item) => !item.thread);
   const placeholder = document.createElement("option");
-  placeholder.value = ""; placeholder.textContent = summaries.length ? "New task (no saved task selected)" : "No saved tasks yet";
-  chooser.replaceChildren(placeholder, ...summaries.map((item) => {
+  placeholder.value = ""; placeholder.textContent = tasksOnly.length ? "New task (no saved task selected)" : "No saved tasks yet";
+  chooser.replaceChildren(placeholder, ...tasksOnly.map((item) => {
     const option = document.createElement("option");
     option.value = item.id; option.textContent = item.status + " · " + item.prompt;
     return option;
   }));
   chooser.value = element("taskId").value.trim();
-  return summaries;
+  return tasksOnly;
+}
+async function loadSettings() {
+  const session = sessionRevision;
+  if (hosted) {
+    element("supervision-row").hidden = true;
+    element("power-block").hidden = true;
+    element("settingsNote").textContent = "Run mode applies to your plans. Machine settings are owner-only.";
+    return;
+  }
+  const settings = await api("/api/settings");
+  if (session !== sessionRevision || selectedMode === null) return;
+  element("supervisionMode").value = settings.supervision;
+  element("mailState").textContent = settings.mail_configured ?
+    "Mail: configured. Unattended mode sends run updates to the owner address." :
+    "Mail: NOT configured. Unattended mode cannot send updates until SMTP is set up.";
+  element("approvalWindow").textContent = "Approval window: ~" + settings.approval_window_minutes + " min. Expired approvals need a fresh validation or plan.";
+  element("settingsNote").textContent = "";
+}
+async function refreshPowerStatus() {
+  if (hosted || selectedMode === null) return;
+  const session = sessionRevision;
+  const status = await api("/api/power/sleep");
+  if (session !== sessionRevision || selectedMode === null) return;
+  element("powerStatus").textContent = status.status === "sleep_scheduled" ?
+    "Sleep scheduled. Cancel here to stop it." : "No sleep scheduled.";
+  element("powerCancel").disabled = status.status !== "sleep_scheduled";
 }
 async function refreshExternalActions() {
   const session = sessionRevision;
@@ -176,6 +204,33 @@ async function refreshExternalActions() {
   }));
 }
 element("refreshExternal").onclick = () => guarded(refreshExternalActions);
+element("supervisionMode").onchange = () => guarded(async () => {
+  const saved = await api("/api/settings", "PUT", {supervision: element("supervisionMode").value});
+  element("settingsNote").textContent = saved.supervision === "unattended" ?
+    (saved.mail_configured ? "Unattended: run updates will be mailed to the owner." : "Unattended selected but mail is NOT configured: no updates will arrive.") :
+    "Attended: runs still execute; no mail is sent.";
+});
+let powerArmed = false;
+element("powerArm").onclick = () => guarded(async () => {
+  if (!powerArmed) {
+    powerArmed = true;
+    element("powerArm").textContent = "Confirm sleep";
+    element("powerStatus").textContent = "Press Confirm sleep to schedule, or Cancel.";
+    return;
+  }
+  powerArmed = false;
+  element("powerArm").textContent = "Sleep this PC…";
+  await api("/api/power/sleep", "POST", {delay_seconds: Number(element("powerDelay").value)});
+  await refreshPowerStatus();
+  message("Sleep scheduled. Cancel here to stop it.");
+});
+element("powerCancel").onclick = () => guarded(async () => {
+  powerArmed = false;
+  element("powerArm").textContent = "Sleep this PC…";
+  await api("/api/power/sleep/cancel", "POST");
+  await refreshPowerStatus();
+  message("Scheduled sleep cancelled.");
+});
 let supervisorThreadId = "";
 let supervisorBusy = false;
 let supervisorPlanNonce = "";
@@ -289,11 +344,13 @@ element("supervisorWritePlan").onclick = () => guarded(() => supervisorStep(asyn
 }));
 element("supervisorApprovePlan").onclick = () => guarded(() => supervisorStep(async () => {
   if (!supervisorThreadId || !supervisorPlanNonce) return;
-  const queued = await api("/api/supervisor/threads/" + supervisorThreadId + "/approve", "POST", {nonce: supervisorPlanNonce});
+  const execute = element("runMode").value !== "planning";
+  const queued = await api("/api/supervisor/threads/" + supervisorThreadId + "/approve", "POST", {nonce: supervisorPlanNonce, execute});
   supervisorPlanNonce = "";
   await loadSupervisorRuns();
   await openSupervisorThread(supervisorThreadId);
-  supervisorNote("Plan approved. Run queued: " + queued.run_id.slice(0, 12) + ".");
+  supervisorNote(execute ? "Plan approved. Run queued: " + queued.run_id.slice(0, 12) + "." :
+    "Plan approved (planning only). Nothing was queued; switch run mode and approve a fresh plan to implement.");
 }));
 function renderEvents() {
   const start = showAllEvents ? 0 : Math.max(0, taskEvents.length - 20);
@@ -410,6 +467,12 @@ element("submit").onclick = () => guarded(async () => {
     }
     const created = await api("/api/tasks", "POST", {prompt: element("prompt").value});
     if (session !== sessionRevision) return;
+    if (created.reply) {
+      await loadSupervisorThreads();
+      await openSupervisorThread(created.thread_id);
+      message("Reply recorded in the Owner replies thread. No demo task was started.");
+      return;
+    }
     await chooseTask(created.id); await recentTasks();
     message(configuration.live_inference ? "Running the configured Meta actor within its allowance." : "Running a fixed offline reference; no model request is being made.");
     startPolling();
@@ -506,6 +569,10 @@ async function loadMode(session) {
   }
   await refreshAllowance();
   if (session !== sessionRevision) return;
+  element("execMode").textContent = "Execution mode: " + (selectedMode.live_inference ? "live Meta inference" : "scripted offline reference") + ".";
+  await loadSettings();
+  if (session !== sessionRevision) return;
+  await refreshPowerStatus();
   const summaries = await recentTasks();
   if (session !== sessionRevision) return;
   await refreshExternalActions();
@@ -513,6 +580,11 @@ async function loadMode(session) {
   try {
     await loadSupervisorThreads();
     if (session !== sessionRevision) return;
+    if (!supervisorThreadId) {
+      const chooser = element("supervisorThreads");
+      const replies = [...chooser.options].find((option) => option.textContent.endsWith("Owner replies"));
+      if (replies && replies.value) await openSupervisorThread(replies.value);
+    }
     await loadSupervisorRuns();
     if (session !== sessionRevision) return;
   } catch (error) {
