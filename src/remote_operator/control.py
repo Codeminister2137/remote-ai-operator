@@ -49,7 +49,7 @@ def admitted_file(name: str) -> str:
         or name != Path(name).name
         or not name.endswith(ADMITTED_SUFFIXES)
     ):
-        raise ValueError("Only the registered sample source is accessible")
+        raise ValueError("File path is not admitted")
     return name
 
 
@@ -290,7 +290,7 @@ class Operator:
         if operation.name in {"read_file", "write_file"}:
             expected = {"path"} if operation.name == "read_file" else {"path", "content"}
             if set(operation.arguments) != expected:
-                raise ValueError("Only the registered sample source is accessible")
+                raise ValueError("Invalid file operation arguments")
             name = admitted_file(operation.arguments["path"])
             if operation.name == "read_file":
                 return {"content": read_named(workspace, name)}
