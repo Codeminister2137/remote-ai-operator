@@ -96,3 +96,18 @@ issues and 2 expected errors, second-visitor isolation, reload persistence with 
 browser storage, session exit and no horizontal overflow at desktop and mobile
 widths. That used one Modal Sandbox creation and no inference. The URL has not been
 tested with a visitor-owned Meta key or a judge grant.
+
+## 2026-11-01 owner-approved loop trial (grant meta-loop-20261101-owner-approved)
+
+Bounds from the owner's `APPROVE-META-$2` site reply after a no-hard-cap
+notice: muse-spark-1.3, 10 requests, USD 2, 131072 input bytes, 8192 output
+tokens, expiry 22:00Z. Key live-probed (9 models, spark-1.3 listed) before
+spending; no other billing source touched.
+
+`demo --model-mode meta --grant .runtime/grant.json --allow-live-inference
+--inject-failure` completed to `awaiting_approval` on the first attempt:
+Meta-authored candidate, injected transport failure recovered, 7/7 protected
+Docker checks green, approval nonce issued with the 60-minute window.
+Ledger: 4 requests used, USD 0.41143775 reserved, USD 1.58856225 remaining
+(demo turns reported 5 calls; the 4-vs-5 difference is observed, unexplained).
+Grant file stays in gitignored `.runtime/`; nothing secret is recorded here.
