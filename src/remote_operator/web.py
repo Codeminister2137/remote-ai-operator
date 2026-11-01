@@ -384,10 +384,17 @@ def _owner_routes(app, principal):
     """Register owner machine settings and power routes (hosted: refused)."""
     from remote_operator import power as power_control
     from remote_operator import settings as run_settings
+    from remote_operator import window_status as window_reader
 
     def _owner_only(who: Principal) -> None:
         if who.hosted:
             raise HTTPException(403, "Owner machine control is not available to visitors")
+
+    @app.get("/api/window")
+    def window(who: Annotated[Principal, Depends(principal)]):
+        """Return agent window/activity status from the owner machine file."""
+        _owner_only(who)
+        return window_reader.load_window_status(who.operator.root)
 
     @app.get("/api/settings")
     def get_settings(who: Annotated[Principal, Depends(principal)]):
