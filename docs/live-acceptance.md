@@ -111,3 +111,15 @@ Docker checks green, approval nonce issued with the 60-minute window.
 Ledger: 4 requests used, USD 0.41143775 reserved, USD 1.58856225 remaining
 (demo turns reported 5 calls; the 4-vs-5 difference is observed, unexplained).
 Grant file stays in gitignored `.runtime/`; nothing secret is recorded here.
+
+## 2026-11-01 GO-META-UI trial (same grant)
+
+Owner-approved second trial on the remaining allowance: supervised loop
+(thread, plan, approve, drain) with the live Meta model on an admitted-file
+task, in an isolated temp runtime while the allowance ledger stayed on the
+shared store so the 10-request bound held across both trials. The model
+wrote a genuine accessible `widget.html` status badge (185 chars) and kept
+the sample source valid; review covered both diffs; job reached
+`awaiting_approval`. Ledger after: 9 requests used, USD 0.98968650
+reserved, USD 1.01031350 remaining. D3 admission is now proven with a real
+model through the real loop, not just a scripted double.
