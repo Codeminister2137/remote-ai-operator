@@ -171,19 +171,6 @@ async function refreshPowerStatus() {
     "Sleep scheduled. Cancel here to stop it." : "No sleep scheduled.";
   element("powerCancel").disabled = status.status !== "sleep_scheduled";
 }
-async function refreshDrainStatus() {
-  if (hosted || selectedMode === null) return;
-  const session = sessionRevision;
-  const health = await api("/api/drain");
-  if (session !== sessionRevision || selectedMode === null) return;
-  if (!health.running || !health.alive) {
-    element("drainStatus").textContent = "Worker: NOT draining. Queued runs are stalled; restart serve on the PC.";
-    return;
-  }
-  const ago = health.last_pass === null ? "never" : Math.max(0, Math.round(Date.now() / 1000 - health.last_pass)) + "s ago";
-  element("drainStatus").textContent = "Worker: draining, last pass " + ago +
-    " (passes " + health.passes + ", errors " + health.errors + ", restarts " + health.restarts + ").";
-}
 async function refreshWindowStatus() {
   if (hosted || selectedMode === null) return;
   const session = sessionRevision;
@@ -191,13 +178,25 @@ async function refreshWindowStatus() {
   if (session !== sessionRevision || selectedMode === null) return;
   if (!status.running) {
     element("windowStatus").textContent = "Window: no agent activity reported.";
+  } else {
+    let line = "Window: " + (status.slice || "unscheduled slice");
+    if (status.phase) line += " · " + status.phase;
+    if (status.last_heartbeat_utc) line += " (last heartbeat " + status.last_heartbeat_utc + ")";
+    if (status.note) line += " " + status.note;
+    element("windowStatus").textContent = line;
+  }
+  const agents = Array.isArray(status.agents) ? status.agents : [];
+  element("agentsStatus").textContent = agents.length ?
+    "Agents: " + agents.map((a) => a.name + " (" + (a.task || "idle") + ", " + (a.status || "?") + ")").join("; ") + "." :
+    "Agents: none active.";
+  const health = status.drain;
+  if (!health || !health.alive) {
+    element("drainStatus").textContent = "Worker: NOT draining. Queued runs are stalled; restart serve on the PC.";
     return;
   }
-  let line = "Window: " + (status.slice || "unscheduled slice");
-  if (status.phase) line += " · " + status.phase;
-  if (status.last_heartbeat_utc) line += " (last heartbeat " + status.last_heartbeat_utc + ")";
-  if (status.note) line += " " + status.note;
-  element("windowStatus").textContent = line;
+  const ago = health.last_pass === null ? "never" : Math.max(0, Math.round(Date.now() / 1000 - health.last_pass)) + "s ago";
+  element("drainStatus").textContent = "Worker: draining, last pass " + ago +
+    " (passes " + health.passes + ", errors " + health.errors + ", restarts " + health.restarts + ", serve PID " + status.serve_pid + ").";
 }
 async function refreshExternalActions() {
   const session = sessionRevision;
@@ -612,8 +611,6 @@ async function loadMode(session) {
   await loadSettings();
   if (session !== sessionRevision) return;
   await refreshPowerStatus();
-  if (session !== sessionRevision) return;
-  await refreshDrainStatus();
   if (session !== sessionRevision) return;
   await refreshWindowStatus();
   if (session !== sessionRevision) return;

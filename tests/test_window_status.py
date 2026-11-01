@@ -69,6 +69,37 @@ class WindowStatusUnitTests(unittest.TestCase):
             self.assertEqual(body["phase"], "")
             self.assertEqual(body["note"], "")
 
+    def test_agents_keep_only_well_formed_entries(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            (root / "window-status.json").write_text(
+                json.dumps(
+                    {
+                        "slice": "s",
+                        "agents": [
+                            {"name": "w1", "task": "t", "status": "running"},
+                            {"name": "", "task": "t", "status": "x"},
+                            {"task": "no-name"},
+                            "junk",
+                            {"name": "w2", "task": 7, "status": None},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            body = load_window_status(root)
+            self.assertEqual(
+                body["agents"],
+                [
+                    {"name": "w1", "task": "t", "status": "running"},
+                    {"name": "w2", "task": "", "status": ""},
+                ],
+            )
+            (root / "window-status.json").write_text(
+                json.dumps({"slice": "s", "agents": {"name": "w"}}), encoding="utf-8"
+            )
+            self.assertEqual(load_window_status(root)["agents"], [])
+
 
 class WindowEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -89,9 +120,11 @@ class WindowEndpointTests(unittest.IsolatedAsyncioTestCase):
         denied = await self.client.get("/api/window")
         self.assertEqual(denied.status_code, 401)
 
-    async def test_missing_file_returns_not_running(self):
+    async def test_missing_file_returns_not_running_with_process_state(self):
         body = (await self.client.get("/api/window", headers=self.auth)).json()
-        self.assertEqual(body, {"running": False})
+        self.assertFalse(body["running"])
+        self.assertIsInstance(body["serve_pid"], int)
+        self.assertIsNone(body["drain"])
 
     async def test_file_fields_are_returned(self):
         (self.operator.root / "window-status.json").write_text(
@@ -117,8 +150,32 @@ class WindowEndpointTests(unittest.IsolatedAsyncioTestCase):
         page = await self.client.get("/")
         self.assertEqual(page.status_code, 200)
         self.assertIn('id="windowStatus"', page.text)
+        self.assertIn('id="agentsStatus"', page.text)
+        self.assertIn('id="drainStatus"', page.text)
         javascript = (await self.client.get("/app.js")).text
         self.assertIn("refreshWindowStatus", javascript)
+        self.assertNotIn("refreshDrainStatus", javascript)
+
+    async def test_window_merges_agents_and_drain(self):
+        (self.operator.root / "window-status.json").write_text(
+            json.dumps({**PAYLOAD, "agents": [{"name": "w1", "task": "t", "status": "run"}]}),
+            encoding="utf-8",
+        )
+        app = create_app(
+            self.operator,
+            self.token,
+            drain_snapshot=lambda: {"alive": True, "passes": 9},
+        )
+        client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://localhost"
+        )
+        try:
+            body = (await client.get("/api/window", headers=self.auth)).json()
+        finally:
+            await client.aclose()
+        self.assertEqual(body["agents"], [{"name": "w1", "task": "t", "status": "run"}])
+        self.assertEqual(body["drain"], {"alive": True, "passes": 9})
+        self.assertIsInstance(body["serve_pid"], int)
 
 
 class WindowHostedRefusalTests(unittest.IsolatedAsyncioTestCase):

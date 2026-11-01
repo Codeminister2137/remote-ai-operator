@@ -380,8 +380,10 @@ def _task_routes(app, principal):
         return who.allowance_status() if who.allowance_status is not None else {"enabled": False}
 
 
-def _owner_routes(app, principal):
+def _owner_routes(app, principal, drain_snapshot=None):
     """Register owner machine settings and power routes (hosted: refused)."""
+    import os
+
     from remote_operator import power as power_control
     from remote_operator import settings as run_settings
     from remote_operator import window_status as window_reader
@@ -392,9 +394,12 @@ def _owner_routes(app, principal):
 
     @app.get("/api/window")
     def window(who: Annotated[Principal, Depends(principal)]):
-        """Return agent window/activity status from the owner machine file."""
+        """Return agent activity plus worker/process state (one poll)."""
         _owner_only(who)
-        return window_reader.load_window_status(who.operator.root)
+        status = window_reader.load_window_status(who.operator.root)
+        status["serve_pid"] = os.getpid()
+        status["drain"] = drain_snapshot() if drain_snapshot is not None else None
+        return status
 
     @app.get("/api/settings")
     def get_settings(who: Annotated[Principal, Depends(principal)]):
@@ -599,7 +604,7 @@ def create_app(
     _task_routes(app, owner)
     _external_action_routes(app, owner)
     _supervisor_routes(app, owner)
-    _owner_routes(app, owner)
+    _owner_routes(app, owner, drain_snapshot=drain_snapshot)
 
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
