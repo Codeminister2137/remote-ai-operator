@@ -323,6 +323,46 @@ def _check_interval(interval_seconds: float) -> None:
         raise ValueError("interval_seconds must be a positive number")
 
 
+def _thread_topic(operator, thread_id: str) -> str:
+    """Best-effort thread title for mails; never breaks sending."""
+    try:
+        thread = operator.store.get(thread_id)
+    except (KeyError, ValueError, OSError):
+        return ""
+    if not isinstance(thread, dict) or not thread.get("supervisor_thread"):
+        return ""
+    prompt = thread.get("prompt", "")
+    return str(prompt).strip().splitlines()[0][:120] if str(prompt).strip() else ""
+
+
+_RUN_MAIL_ACTIONS = {
+    "awaiting_approval": (
+        "It finished and needs your review. Open the operator page, find the "
+        "run in Review & approve, and approve or reject the exact change."
+    ),
+    "waiting_on_owner": (
+        "It parked itself with a question for you. Open the operator page, "
+        "answer in Review & approve, and the run resumes by itself."
+    ),
+    "completed": "It is done. No action needed.",
+    "failed": "It failed. No action needed unless you want to start it again.",
+    "cancelled": "It was cancelled. No action needed.",
+}
+
+
+def format_run_mail(summary: dict, topic: str) -> str:
+    """Human-readable run mail: headline, action, then raw details."""
+    run = str(summary.get("run_id", ""))[:8]
+    status = str(summary.get("status", "unknown"))
+    head = f"Run {run} ({topic})" if topic else f"Run {run}"
+    lines = [f"{head}: {status}.", "", _RUN_MAIL_ACTIONS.get(status, "No action needed.")]
+    error = summary.get("error")
+    if status == "failed" and error:
+        lines += ["", f"Error: {error}"[:1000]]
+    lines += ["", "Details:", json.dumps(summary, indent=2, default=str)]
+    return "\n".join(lines)
+
+
 def start_drain_worker(
     operator,
     model_factory,
@@ -360,7 +400,9 @@ def start_drain_worker(
             return send_owner_mail(
                 to=config["owner"],
                 subject=f"[operator] run {summary['status']}: {summary['run_id'][:8]}",
-                body=json.dumps(summary, indent=2),
+                body=format_run_mail(
+                    summary, _thread_topic(operator, summary.get("thread_id", ""))
+                ),
                 config=config,
                 dry_run=False,
                 receipts_dir=receipts,
