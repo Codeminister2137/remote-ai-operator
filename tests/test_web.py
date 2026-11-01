@@ -203,7 +203,7 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual([item["id"] for item in response.json()], [third["id"], second["id"]])
             for item in response.json():
-                self.assertEqual(set(item), {"id", "prompt", "status"})
+                self.assertEqual(set(item), {"id", "prompt", "status", "thread"})
                 self.assertLessEqual(len(item["prompt"]), 160)
             full = (await self.client.get("/api/tasks", headers=self.auth)).json()
             self.assertEqual(full[-1]["status"], "paused")
