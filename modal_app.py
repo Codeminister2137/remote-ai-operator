@@ -34,6 +34,7 @@ def _deploy_commit() -> str:
             capture_output=True,
             text=True,
             timeout=15,
+            check=False,
             cwd=Path(__file__).resolve().parent,
         )
     except (OSError, subprocess.SubprocessError):
