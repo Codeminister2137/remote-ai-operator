@@ -44,6 +44,7 @@ async function api(path, method = "GET", body) {
   return data;
 }
 function message(text) { element("message").textContent = text; }
+function accessStatus(text) { element("accessStatus").textContent = text; }
 async function guarded(action) {
   try { await action(); } catch (error) { message(error.message); }
 }
@@ -640,19 +641,33 @@ async function loadMode(session) {
 element("connect").onclick = () => guarded(async () => {
   stopPolling(); const session = ++sessionRevision;
   selectedMode = null; allowance = null; allowanceCursor = ""; connecting = true; actions();
-  try { await loadMode(session); }
-  finally {
+  accessStatus("Connecting…");
+  try {
+    await loadMode(session);
+    if (session === sessionRevision)
+      accessStatus(selectedMode ? "Connected. Execution mode loaded." : "Connect got no execution mode.");
+  } catch (error) {
+    if (session === sessionRevision) accessStatus("Connect failed: " + error.message);
+    throw error;
+  } finally {
     if (session === sessionRevision) { connecting = false; actions(); }
   }
 });
 element("enterSession").onclick = () => guarded(async () => {
   stopPolling(); const session = ++sessionRevision;
   selectedMode = null; allowance = null; allowanceCursor = ""; connecting = true; actions();
+  accessStatus("Connecting…");
   try {
     await api("/api/session", "POST", {code: element("accessCode").value});
     element("accessCode").value = "";
     await loadMode(session);
-    if (session === sessionRevision) message("Private session started. Review execution mode before submitting your task.");
+    if (session === sessionRevision) {
+      message("Private session started. Review execution mode before submitting your task.");
+      accessStatus("Connected. Private session started.");
+    }
+  } catch (error) {
+    if (session === sessionRevision) accessStatus("Connect failed: " + error.message);
+    throw error;
   } finally {
     if (session === sessionRevision) { connecting = false; actions(); }
   }
