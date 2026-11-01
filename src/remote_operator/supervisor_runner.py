@@ -286,11 +286,36 @@ def start_drain_worker(
     if type(interval_seconds) not in (int, float) or not interval_seconds > 0:
         raise ValueError("interval_seconds must be a positive number")
     stop = stop_event or threading.Event()
-    runner = SupervisorRunner(operator)
+
+    def _notify_send_or_none():
+        from remote_operator import settings as run_settings
+        from remote_operator.notify import load_smtp_config, send_owner_mail
+
+        if run_settings.load_settings(operator.root)["supervision"] != "unattended":
+            return None
+        try:
+            config = load_smtp_config()
+        except (ValueError, OSError):
+            logger.warning("unattended supervision without SMTP settings; not notifying")
+            return None
+        receipts = operator.root / "notify_receipts"
+
+        def _send(summary):
+            return send_owner_mail(
+                to=config["owner"],
+                subject=f"[operator] run {summary['status']}: {summary['run_id'][:8]}",
+                body=json.dumps(summary, indent=2),
+                config=config,
+                dry_run=False,
+                receipts_dir=receipts,
+            )
+
+        return _send
 
     def _loop() -> None:
         while not stop.is_set():
             try:
+                runner = SupervisorRunner(operator, notify_send=_notify_send_or_none())
                 runner.reconcile_jobs()
                 runner.drain(model_factory(), max_jobs=max_jobs)
                 runner.refresh_waiting()

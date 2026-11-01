@@ -176,8 +176,14 @@ class Supervisor:
             self.operator.store.save(thread, "plan_written", {"digest": plan_digest})
             return {"digest": plan_digest, "markdown": markdown, "nonce": approval["nonce"]}
 
-    def approve_plan(self, thread_id: str, nonce: str, *, now: float | None = None) -> dict:
-        """Approve the exact reviewed plan bytes and enqueue a run job."""
+    def approve_plan(
+        self, thread_id: str, nonce: str, *, now: float | None = None, execute: bool = True
+    ) -> dict:
+        """Approve the exact reviewed plan bytes and enqueue a run job.
+
+        With ``execute=False`` (planning-only mode) the plan is approved
+        and recorded but no run job is queued.
+        """
         with self.operator.lock:
             thread = self._thread(thread_id)
             approval = thread.get("approval")
@@ -203,6 +209,13 @@ class Supervisor:
                 thread["approval"] = None
                 self.operator.store.save(thread, "approval_invalidated")
                 raise ValueError("Reviewed plan changed")
+            if type(execute) is not bool:
+                raise ValueError("execute must be true or false")
+            thread["status"] = "approved"
+            thread["approval"] = None
+            if not execute:
+                self.operator.store.save(thread, "plan_approved", {"execute": False})
+                return {"run_id": None, "status": "approved"}
             run_id = uuid.uuid4().hex
             job = {
                 "run_id": run_id,
@@ -216,8 +229,6 @@ class Supervisor:
             tmp = target.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(job), encoding="utf-8")
             tmp.replace(target)
-            thread["status"] = "approved"
-            thread["approval"] = None
             self.operator.store.save(thread, "run_queued", {"run_id": run_id})
             return {"run_id": run_id, "status": "queued"}
 
