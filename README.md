@@ -14,6 +14,26 @@ remain unfinished. No private packages are required.
 
 For a short independent walkthrough, see [Reviewer guide](docs/reviewer-guide.md).
 
+## Phone operation (served UI)
+
+The served UI is chat-first: one numbered flow from chat to review.
+
+- Chat: tasks and supervisor threads live side by side. Any `REPLY:`
+  message lands in the shared Owner replies thread instead of starting
+  a demo task. Sending anything new in a thread counts as a reply.
+- Run settings box: planning-only vs execute mode, attended vs
+  unattended supervision, approval windows (tasks ~60 min, plans
+  ~10 min), and PC sleep with confirm, delay and cancel.
+- Review and approve: diffs, validation evidence and the Approve /
+  Reject actions for the selected task or plan.
+- Owner questions: a worker can park one task with a question
+  (`waiting_on_owner`) while other runs continue; answering resumes it.
+- Serve drains queued runs itself every 30 s; no manual CLI drain is
+  needed. Docker Desktop is revived automatically after sleep/wake.
+
+Details: docs/remote-supervisor.md, docs/owner-questions.md,
+docs/supervised-ui-slice.md, docs/file-admission.md.
+
 ## Prerequisites
 
 - Python 3.14 for the default uv development environment (library minimum: 3.12).
