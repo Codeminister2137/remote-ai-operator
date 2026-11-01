@@ -38,7 +38,7 @@ uv run --locked remote-ai-operator serve
 1. Open http://127.0.0.1:8765 and enter your token. Connect and inspect the mode.
 2. Select **New task**, review the registered sample request and create/run it.
 3. Read selected-task activity, expand older entries if needed and inspect the diff.
-4. Review validation, then approve the exact change. Run the approved importer:
+4. Review validation, then approve the exact change. Press **Run approved import**:
    two issues are accepted; the duplicate and missing title produce two errors.
 5. Switch saved tasks or reload/reconnect. Selecting work never runs or approves it.
 
