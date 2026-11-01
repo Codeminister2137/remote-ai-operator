@@ -184,6 +184,21 @@ async function refreshDrainStatus() {
   element("drainStatus").textContent = "Worker: draining, last pass " + ago +
     " (passes " + health.passes + ", errors " + health.errors + ", restarts " + health.restarts + ").";
 }
+async function refreshWindowStatus() {
+  if (hosted || selectedMode === null) return;
+  const session = sessionRevision;
+  const status = await api("/api/window");
+  if (session !== sessionRevision || selectedMode === null) return;
+  if (!status.running) {
+    element("windowStatus").textContent = "Window: no agent activity reported.";
+    return;
+  }
+  let line = "Window: " + (status.slice || "unscheduled slice");
+  if (status.phase) line += " · " + status.phase;
+  if (status.last_heartbeat_utc) line += " (last heartbeat " + status.last_heartbeat_utc + ")";
+  if (status.note) line += " " + status.note;
+  element("windowStatus").textContent = line;
+}
 async function refreshExternalActions() {
   const session = sessionRevision;
   if (selectedMode === null) return;
@@ -599,6 +614,8 @@ async function loadMode(session) {
   await refreshPowerStatus();
   if (session !== sessionRevision) return;
   await refreshDrainStatus();
+  if (session !== sessionRevision) return;
+  await refreshWindowStatus();
   if (session !== sessionRevision) return;
   const summaries = await recentTasks();
   if (session !== sessionRevision) return;
