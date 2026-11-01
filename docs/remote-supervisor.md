@@ -41,7 +41,11 @@ kept in the thread store.
 
 ## Worker
 
-`uv run --locked remote-ai-operator supervisor-drain` reconciles jobs left
+The local owner `serve` process runs a drain worker thread: reconcile at
+startup (covers reboot/wake backlog), then reconcile + drain + refresh
+every 30 seconds, first pass immediate. `uv run --locked
+remote-ai-operator supervisor-drain` remains for one-shot/CLI use and for
+hosted deployments (no worker there): it reconciles jobs left
 running by an interrupted worker, runs queued jobs oldest-first (default 10,
 `--max-jobs 1..100`), then refreshes jobs waiting on owner approval. Each job
 becomes one operator task whose prompt is the approved plan (truncated past

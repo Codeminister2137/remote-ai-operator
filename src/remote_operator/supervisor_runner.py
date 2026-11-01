@@ -14,7 +14,9 @@ once the owner approves the task through the normal task routes.
 """
 
 import json
+import logging
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
@@ -25,6 +27,9 @@ ALLOWANCE_EXHAUSTED = "Model call allowance exhausted"
 OPERATOR_BUSY = "Another operator action is active"
 TASK_NOT_READY = "Task is not ready; reconcile uncertain effects first"
 TERMINAL_JOB = {"completed", "failed", "cancelled"}
+DRAIN_WORKER_INTERVAL_SECONDS = 30.0
+
+logger = logging.getLogger(__name__)
 
 
 class SupervisorRunner:
@@ -260,3 +265,39 @@ class SupervisorRunner:
         return self._finish_job(
             path, job, "failed", error=f"Task needs owner review: {task['status']}"
         )
+
+
+def start_drain_worker(
+    operator,
+    model_factory,
+    *,
+    interval_seconds: float = DRAIN_WORKER_INTERVAL_SECONDS,
+    max_jobs: int = 10,
+    stop_event: threading.Event | None = None,
+) -> threading.Thread:
+    """Run queued supervisor jobs in a daemon thread while serve lives.
+
+    The first pass runs immediately (startup backlog after reboot or wake),
+    then reconcile + drain + refresh repeats every ``interval_seconds``.
+    One bad pass is logged and skipped; the thread only stops on
+    ``stop_event`` or process exit. Shares the serve ``operator`` the same
+    way request handlers already do; the operator lock serializes writers.
+    """
+    if type(interval_seconds) not in (int, float) or not interval_seconds > 0:
+        raise ValueError("interval_seconds must be a positive number")
+    stop = stop_event or threading.Event()
+    runner = SupervisorRunner(operator)
+
+    def _loop() -> None:
+        while not stop.is_set():
+            try:
+                runner.reconcile_jobs()
+                runner.drain(model_factory(), max_jobs=max_jobs)
+                runner.refresh_waiting()
+            except Exception:
+                logger.exception("supervisor drain pass failed")
+            stop.wait(interval_seconds)
+
+    thread = threading.Thread(target=_loop, name="supervisor-drain", daemon=True)
+    thread.start()
+    return thread

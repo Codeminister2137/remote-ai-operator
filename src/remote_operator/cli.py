@@ -201,6 +201,9 @@ def main():
                     public_origin=args.public_origin,
                     allowance_status=allowance_status,
                 )
+                from remote_operator.supervisor_runner import start_drain_worker
+
+                start_drain_worker(operator, factory)
             uvicorn.run(
                 application,
                 host="127.0.0.1",
