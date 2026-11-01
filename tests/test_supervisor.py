@@ -170,6 +170,8 @@ class SupervisorFlowTests(unittest.IsolatedAsyncioTestCase):
             "supervisorNote",
         ):
             self.assertIn(f'id="{element_id}"', page.text)
+        self.assertIn(">Create thread<", page.text)
+        self.assertIn("One thread is one planning conversation", page.text)
 
     async def test_served_script_calls_supervisor_endpoints(self):
         script = await self.client.get("/app.js")
