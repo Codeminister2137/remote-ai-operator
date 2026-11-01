@@ -171,6 +171,19 @@ async function refreshPowerStatus() {
     "Sleep scheduled. Cancel here to stop it." : "No sleep scheduled.";
   element("powerCancel").disabled = status.status !== "sleep_scheduled";
 }
+async function refreshDrainStatus() {
+  if (hosted || selectedMode === null) return;
+  const session = sessionRevision;
+  const health = await api("/api/drain");
+  if (session !== sessionRevision || selectedMode === null) return;
+  if (!health.running || !health.alive) {
+    element("drainStatus").textContent = "Worker: NOT draining. Queued runs are stalled; restart serve on the PC.";
+    return;
+  }
+  const ago = health.last_pass === null ? "never" : Math.max(0, Math.round(Date.now() / 1000 - health.last_pass)) + "s ago";
+  element("drainStatus").textContent = "Worker: draining, last pass " + ago +
+    " (passes " + health.passes + ", errors " + health.errors + ", restarts " + health.restarts + ").";
+}
 async function refreshExternalActions() {
   const session = sessionRevision;
   if (selectedMode === null) return;
@@ -584,6 +597,9 @@ async function loadMode(session) {
   await loadSettings();
   if (session !== sessionRevision) return;
   await refreshPowerStatus();
+  if (session !== sessionRevision) return;
+  await refreshDrainStatus();
+  if (session !== sessionRevision) return;
   const summaries = await recentTasks();
   if (session !== sessionRevision) return;
   await refreshExternalActions();

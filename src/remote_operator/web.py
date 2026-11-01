@@ -559,6 +559,7 @@ def create_app(
     mode="scripted",
     public_origin=None,
     allowance_status=None,
+    drain_snapshot=None,
 ) -> FastAPI:
     """Create the local single-owner FastAPI application.
 
@@ -597,6 +598,13 @@ def create_app(
     def configuration():
         """Return local deployment configuration."""
         return {"mode": mode, "live_inference": mode == "meta", "https_origin": public_origin}
+
+    @app.get("/api/drain", dependencies=[Depends(owner)])
+    def drain_health():
+        """Return drain-worker liveness (never secrets)."""
+        if drain_snapshot is None:
+            return {"running": False}
+        return {"running": True, **drain_snapshot()}
 
     return app
 
