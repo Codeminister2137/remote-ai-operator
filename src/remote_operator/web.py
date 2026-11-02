@@ -499,6 +499,18 @@ def _supervisor_routes(app, principal):
         """Return one queued supervisor run."""
         return Supervisor(who.operator).run_status(run_id)
 
+    @app.get("/api/supervisor/inbox")
+    def inbox(
+        who: Annotated[Principal, Depends(principal)], since: int = Query(0, ge=0)
+    ):
+        """Return attention items (owner messages, parked questions, terminal runs)."""
+        from remote_operator.supervisor_inbox import read_inbox
+
+        try:
+            return read_inbox(who.operator, since=since)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+
 
 def _external_action_routes(app, principal):
     """Register neutral external pending-action routes."""
