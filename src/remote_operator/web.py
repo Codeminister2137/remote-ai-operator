@@ -28,6 +28,12 @@ from remote_operator.scripted import ScriptedModel
 SESSION_COOKIE = "operator_session"
 SESSION_HEADER = "x-operator-request"
 
+HOSTED_PLANNING_ONLY_MESSAGE = (
+    "Hosted mode is planning-only: runs are not executed here, so this approval "
+    "was not recorded. Approve again with execute=false (planning run mode) to "
+    "record the plan without queuing a run."
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -486,7 +492,19 @@ def _supervisor_routes(app, principal):
     def approve_plan(
         thread_id: str, body: PlanApproval, who: Annotated[Principal, Depends(principal)]
     ):
-        """Approve the exact reviewed plan and enqueue a run unless planning-only."""
+        """Approve the exact reviewed plan and enqueue a run unless planning-only.
+
+        Hosted principals are planning-only: no drain worker consumes their
+        runs, so execute=true is refused loudly instead of queueing a job that
+        would sit in queued forever. The pending approval survives the refusal;
+        hosted callers retry the same nonce with execute=false.
+        """
+        if who.hosted:
+            if body.execute:
+                raise HTTPException(409, HOSTED_PLANNING_ONLY_MESSAGE)
+            return Supervisor(who.operator).approve_plan(
+                thread_id, body.nonce, execute=False
+            )
         return Supervisor(who.operator).approve_plan(thread_id, body.nonce, execute=body.execute)
 
     @app.get("/api/supervisor/runs")
