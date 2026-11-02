@@ -20,3 +20,6 @@ th:last-child,td:last-child{min-width:4.5em;white-space:nowrap}#events{overflow-
 body{overflow-x:hidden}button{max-width:100%}
 #judge-start ol{padding-left:24px;margin:10px 0}#judge-start li{padding:4px 0}
 @media (max-width:380px){main{padding:20px 12px 60px}section{padding:16px 14px}button{width:100%;margin:5px 0}}
+#viewNav{display:flex;flex-wrap:wrap;gap:4px;margin:16px 0 0}#viewNav button.active{background:#8ab5ff;color:#10203b}#verdict{font-weight:650;color:#ffd487}#planSettingsNote{color:#a3c8ff}#demoReviewStatus{color:#b5c3da}
+#approvalSubject{font-weight:650;color:#a3c8ff}#approvalChecklist{list-style:none;padding-left:0}#approvalChecklist li{padding:3px 0;color:#b5c3da}
+#diffModeBar{margin:8px 0}#diffModeBar button.active{background:#8ab5ff;color:#10203b}.diff-split-file{margin:10px 0}.diff-split-head{font-weight:650;color:#ffd487;margin:6px 0 4px}.diff-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}.diff-col{margin:0;overflow-x:auto}.diff-old{background:rgba(255,138,138,.07)}.diff-new{background:rgba(138,223,160,.07)}.diff-col::before{display:block;font-weight:650;color:#b5c3da;margin-bottom:4px}.diff-old::before{content:"old (base)"}.diff-new::before{content:"new (candidate)"}@media (max-width:720px){.diff-cols{grid-template-columns:1fr}}
