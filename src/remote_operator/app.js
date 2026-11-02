@@ -971,3 +971,141 @@ element("taskId").addEventListener("input", () => {
   } catch { /* Local deployment: wait for the owner token. */ }
 })();
 actions();
+/* ---- Dictation v1: Web Speech API textarea filler (client-only) ----
+   Fills the paired textarea only; never sends. Rows stay hidden unless
+   the browser exposes SpeechRecognition (standard or webkit prefix). */
+const Dictation = (() => {
+  const Recognition = typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+  let activeStop = null;
+  function supported() { return typeof Recognition === "function"; }
+  function create() { return new Recognition(); }
+  function stopActive() {
+    if (activeStop) {
+      const stop = activeStop;
+      activeStop = null;
+      try { stop(); } catch { /* Stopping a stale session is best-effort. */ }
+    }
+  }
+  function setActive(stop) { activeStop = stop; }
+  function clearActive(stop) { if (activeStop === stop) activeStop = null; }
+  return { supported, create, stopActive, setActive, clearActive };
+})();
+function dictateLangName(code) { return code === "pl-PL" ? "polski" : "English"; }
+function dictateErrorMessage(code) {
+  switch (code) {
+    case "not-allowed":
+    case "service-not-allowed":
+      return "Microphone blocked. Allow mic access for this page (HTTPS required), then try again.";
+    case "no-speech":
+      return "No speech heard. Try again.";
+    case "audio-capture":
+      return "No microphone found on this device.";
+    case "network":
+      return "Browser speech service unreachable. Check the connection and try again.";
+    case "language-not-supported":
+      return "This browser does not support that dictation language. Try the other language.";
+    case "aborted":
+      return "";
+    default:
+      return "Dictation error (" + code + "). Try again or type instead.";
+  }
+}
+function joinDictation(head, tail) {
+  if (!head) return tail;
+  return /\s$/.test(head) ? head + tail : head + " " + tail;
+}
+function wireDictation(fieldId, buttonId, langId, statusId) {
+  const row = document.querySelector('[data-dictate-for="' + fieldId + '"]');
+  if (!Dictation.supported() || !row) return; // Row stays hidden: typed input unaffected.
+  const field = element(fieldId);
+  const button = element(buttonId);
+  const lang = element(langId);
+  const status = element(statusId);
+  row.hidden = false;
+  let rec = null;
+  let base = "";
+  let finalText = "";
+  let lastRendered = null;
+  function setRecording(on) {
+    button.classList.toggle("recording", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.textContent = on ? "Stop dictation" : "🎤 Dictate (browser speech recognition)";
+  }
+  function stop() {
+    if (rec) { try { rec.stop(); } catch { /* stop() after end is harmless. */ } }
+  }
+  button.onclick = () => {
+    if (rec) { stop(); return; } // Toggle off; onend commits the transcript.
+    Dictation.stopActive(); // Only one dictation session at a time.
+    base = field.value;
+    finalText = "";
+    lastRendered = null;
+    status.textContent = "";
+    let session;
+    try {
+      session = Dictation.create();
+    } catch {
+      status.textContent = "Dictation unavailable in this browser. Type instead.";
+      return;
+    }
+    rec = session;
+    Dictation.setActive(stop);
+    session.lang = lang.value;
+    session.interimResults = true;
+    session.continuous = false; // Single utterance; the platform end-points on silence.
+    session.maxAlternatives = 1;
+    session.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const chunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += chunk;
+        else interim += chunk;
+      }
+      lastRendered = joinDictation(base, finalText + interim); // Interim shown live, provisional.
+      field.value = lastRendered;
+    };
+    session.onerror = (event) => {
+      const note = dictateErrorMessage(event.error || "unknown");
+      if (note) {
+        status.textContent = note;
+        message(note);
+      }
+    };
+    session.onend = () => {
+      Dictation.clearActive(stop);
+      const captured = finalText.trim() !== "";
+      if (captured) {
+        // If the user typed during dictation, append to their edit instead of clobbering it.
+        field.value = (field.value === lastRendered || field.value === base) ?
+          joinDictation(base, finalText) : joinDictation(field.value, finalText);
+        status.textContent = "Dictation added (" + dictateLangName(lang.value) +
+          "). Review and edit before sending. Nothing was sent.";
+      } else if (status.textContent === "") {
+        status.textContent = "No speech captured; field unchanged.";
+        field.value = base;
+      } else if (lastRendered !== null) {
+        field.value = base; // Partial interim was shown; restore the pre-dictation text.
+      } // Else an error note is already shown; keep it and leave the field alone.
+      rec = null;
+      setRecording(false);
+      field.focus();
+    };
+    setRecording(true);
+    status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
+    try {
+      session.start();
+    } catch (error) {
+      Dictation.clearActive(stop);
+      rec = null;
+      setRecording(false);
+      field.value = base;
+      status.textContent = "Could not start dictation (" +
+        (error && error.message ? error.message : "mic unavailable") +
+        "). Check mic permission and HTTPS, then try again.";
+    }
+  };
+}
+wireDictation("prompt", "dictate-prompt", "dictate-lang-prompt", "dictate-status-prompt");
+wireDictation("supervisorInput", "dictate-supervisor", "dictate-lang-supervisor", "dictate-status-supervisor");
+wireDictation("answer-text", "dictate-answer", "dictate-lang-answer", "dictate-status-answer");

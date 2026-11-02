@@ -35,6 +35,7 @@
 <p id="message" role="status" aria-live="polite"></p>
 <div id="view-demo">
 <section><h2>Demo step 1 · Request</h2><p>This demo asks the agent to add spreadsheet-style import to a small issue tracker: accept valid issues and explain why other rows cannot be imported.</p><label>Request<textarea id="prompt" rows="4">Implement CSV import for the issue tracker, including validation and duplicate handling, following the sample acceptance specification.</textarea></label>
+<div class="dictate-row" data-dictate-for="prompt" hidden><button id="dictate-prompt" class="secondary" aria-pressed="false" title="Dictate into the request using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and submit.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-prompt"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-prompt" class="dictate-status" role="status" aria-live="polite"></span></div>
 <label class="check"><input id="inject" type="checkbox" checked> Inject one transport failure after the edit</label>
 <button id="submit" disabled>Create and run new task</button></section>
 <section><h2>Demo step 2 · Review &amp; approve</h2><p id="demoReviewStatus">No task yet. Create and run one above; you will be brought to the Review view when it is ready.</p><button id="demoReviewCta" class="secondary" disabled>Open in Review</button></section>
@@ -66,6 +67,7 @@ new-3,Another imported issue,closed</textarea></label>
 <button id="refreshSupervisor" class="secondary" disabled>Refresh threads</button>
 <ol id="supervisorTranscript"></ol>
 <label>Message<textarea id="supervisorInput" rows="3"></textarea></label>
+<div class="dictate-row" data-dictate-for="supervisorInput" hidden><button id="dictate-supervisor" class="secondary" aria-pressed="false" title="Dictate into the chat message using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and press Send.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-supervisor"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-supervisor" class="dictate-status" role="status" aria-live="polite"></span></div>
 <button id="supervisorSend" disabled>Send message</button>
 <h3>Plan</h3><pre id="supervisorPlan">No plan written.</pre>
 <button id="supervisorWritePlan" class="secondary" disabled>Write plan</button></section>
@@ -95,7 +97,9 @@ new-3,Another imported issue,closed</textarea></label>
 <p>Approval applies this candidate only to the separate local demo target. It does not push or deploy.</p>
 <button id="approve" disabled title="Apply this verified change to the local demo target only. No push or deploy.">Approve this verified change</button>
 <button id="revalidate" class="secondary" disabled title="Run a fresh validation. The previous approval becomes invalid.">Run fresh validation</button><button id="reject" class="secondary" disabled title="Reject this change. The demo target is left unchanged.">Reject change</button>
-<div id="question-block" hidden><h3>Owner question — work is parked, other runs continue</h3><p id="pending-question"></p><label>Your answer<textarea id="answer-text" rows="3"></textarea></label><button id="send-answer" disabled title="Send your answer and resume the parked work.">Send answer and resume</button></div></section>
+<div id="question-block" hidden><h3>Owner question — work is parked, other runs continue</h3><p id="pending-question"></p><label>Your answer<textarea id="answer-text" rows="3"></textarea></label>
+<div class="dictate-row" data-dictate-for="answer-text" hidden><button id="dictate-answer" class="secondary" aria-pressed="false" title="Dictate into the answer using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and press Send.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-answer"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-answer" class="dictate-status" role="status" aria-live="polite"></span></div>
+<button id="send-answer" disabled title="Send your answer and resume the parked work.">Send answer and resume</button></div></section>
 <section><h2>Task progress</h2><p><span id="status">No task selected</span></p><p id="event-summary">Create a new task or select a saved task.</p><button id="eventHistory" class="secondary" hidden>Show all activity</button><ol id="events"></ol></section>
 <section><h2>Pending actions from Workbench</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
 <p>External actions from AI Workbench or other connected tools appear here. Approve or reject the exact pending change.</p>
