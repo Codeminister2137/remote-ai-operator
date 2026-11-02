@@ -260,7 +260,7 @@ element("supervisionMode").onchange = () => guarded(async () => {
   const saved = await api("/api/settings", "PUT", {supervision: element("supervisionMode").value});
   element("settingsNote").textContent = saved.supervision === "unattended" ?
     (saved.mail_configured ? "Unattended: run updates will be mailed to the owner." : "Unattended selected but mail is NOT configured: no updates will arrive.") :
-    "Attended: runs still execute; no mail is sent.";
+    (saved.mail_configured ? "Attended: mail only when a run needs you (waiting, failed, done after your answers)." : "Attended selected but mail is NOT configured: no updates will arrive.");
   updatePlanSettingsNote();
 });
 element("runMode").onchange = () => updatePlanSettingsNote();
@@ -312,7 +312,7 @@ function updatePlanSettingsNote() {
     "Plan + implement: approving queues a run.";
   const supervision = element("supervisionMode").value === "unattended" ?
     "Unattended supervision (mail on run events)." :
-    "Attended supervision (no mail).";
+    "Attended supervision (mail only when a run needs you).";
   element("planSettingsNote").textContent = supervisorPlanNonce ?
     "Approving now: " + mode + " " + supervision :
     "Approval settings will appear here once a plan is written.";

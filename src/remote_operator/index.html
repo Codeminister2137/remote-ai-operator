@@ -73,7 +73,7 @@ new-3,Another imported issue,closed</textarea></label>
 <button id="supervisorWritePlan" class="secondary" disabled>Write plan</button></section>
 <section><h2>Supervise · Run settings</h2>
 <label>Run mode<select id="runMode" disabled title="Planning only approves without queuing work; Plan + implement queues a run on approval."><option value="implement">Plan + implement (queues a run on approval)</option><option value="planning">Planning only (approves, queues nothing)</option></select></label>
-<div id="supervision-row"><label>Supervision<select id="supervisionMode" disabled title="Unattended mails run updates to the owner; attended sends no mail."><option value="attended">Attended (you watch, no mail)</option><option value="unattended">Unattended (mail me on run events)</option></select></label>
+<div id="supervision-row"><label>Supervision<select id="supervisionMode" disabled title="Unattended mails every run outcome; attended mails only runs needing you."><option value="attended">Attended (you watch, mail only when needed)</option><option value="unattended">Unattended (mail me on run events)</option></select></label>
 <p id="mailState">Connect to check mail readiness.</p></div>
 <p id="approvalWindow">Approval window: unknown until connected.</p>
 <p id="execMode">Execution mode: unknown until connected.</p>
