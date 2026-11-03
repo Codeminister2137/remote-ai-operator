@@ -46,6 +46,22 @@ const eventNames = {
   cancelled:"Task cancelled; earlier effects preserved", sample_executed:"Sample feature exercised",
   revalidation_started:"Fresh validation started", reconciled:"Interrupted effects reconciled"
 };
+function humanizeStatus(raw) {
+  const words = String(raw || "").replace(/_/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Unknown";
+}
+function parseChecksReport(output) {
+  const match = /OPERATOR_CHECKS (\{[^}]*\})/.exec(String(output || ""));
+  if (!match) return null;
+  try {
+    const report = JSON.parse(match[1]);
+    return typeof report.tests === "number" ? report : null;
+  } catch { return null; }
+}
+function parseChecksDuration(output) {
+  const match = /Ran \d+ tests? in ([\d.]+)s/.exec(String(output || ""));
+  return match ? match[1] + "s" : null;
+}
 async function api(path, method = "GET", body) {
   const headers = {};
   if (hosted) { if (method !== "GET") headers["X-Operator-Request"] = "1"; }
@@ -140,6 +156,10 @@ function actions() {
     "An action may have been interrupted. Inspect its saved result before resuming. This does not repeat the action or approve a change.";
   element("revalidate").disabled = !active || busy || !["awaiting_approval", "review_required", "paused"].includes(task.status);
   element("preview").disabled = !active || busy || task.status !== "completed";
+  element("tryApproved").disabled = !active || busy || task.status !== "completed";
+  const hasId = selectedMode !== null && !busy && !connecting && !!element("taskId").value.trim();
+  element("copyTaskId").disabled = !hasId;
+  element("copyTaskLink").disabled = !hasId;
   element("cancel").disabled = !active || ["completed", "applying", "rejected", "cancelled"].includes(task.status);
   const parked = active && task.status === "waiting_on_owner";
   element("question-block").hidden = !parked;
@@ -157,7 +177,8 @@ async function recentTasks() {
   placeholder.value = ""; placeholder.textContent = tasksOnly.length ? "New task (no saved task selected)" : "No saved tasks yet";
   chooser.replaceChildren(placeholder, ...tasksOnly.map((item) => {
     const option = document.createElement("option");
-    option.value = item.id; option.textContent = item.status + " · " + item.prompt;
+    option.value = item.id; option.textContent = humanizeStatus(item.status) + " · " + item.prompt;
+    option.title = "Raw status: " + item.status;
     return option;
   }));
   chooser.value = element("taskId").value.trim();
@@ -196,17 +217,21 @@ async function refreshWindowStatus() {
   if (session !== sessionRevision || selectedMode === null) return;
   if (!status.running) {
     element("windowStatus").textContent = "Window: no agent activity reported.";
+    element("windowStatus").title = "";
   } else {
     let line = "Window: " + (status.slice || "unscheduled slice");
-    if (status.phase) line += " · " + status.phase;
+    if (status.phase) line += " · " + humanizeStatus(status.phase);
     if (status.last_heartbeat_utc) line += " (last heartbeat " + status.last_heartbeat_utc + ")";
     if (status.note) line += " " + status.note;
     element("windowStatus").textContent = line;
+    element("windowStatus").title = status.phase ? "Raw phase: " + status.phase : "";
   }
   const agents = Array.isArray(status.agents) ? status.agents : [];
   element("agentsStatus").textContent = agents.length ?
-    "Agents: " + agents.map((a) => a.name + " (" + (a.task || "idle") + ", " + (a.status || "?") + ")").join("; ") + "." :
+    "Agents: " + agents.map((a) => a.name + " (" + (a.task || "idle") + ", " + humanizeStatus(a.status || "") + ")").join("; ") + "." :
     "Agents: none active.";
+  element("agentsStatus").title = agents.length ?
+    "Raw: " + agents.map((a) => a.name + "=" + (a.status || "?")).join("; ") : "";
   const health = status.drain;
   if (!health || !health.alive) {
     element("drainStatus").textContent = "Worker: NOT draining. Queued runs are stalled; restart serve on the PC.";
@@ -232,17 +257,20 @@ async function refreshExternalActions() {
     const item = document.createElement("li");
     item.className = "external-action";
     const summary = document.createElement("div");
-    summary.textContent = action.status + " · " + action.description.replace(/\n/g, " · ");
+    summary.textContent = humanizeStatus(action.status) + " · " + action.description.replace(/\n/g, " · ");
+    summary.title = "Raw status: " + action.status;
     item.append(summary);
     if (action.status === "submitted") {
       const approve = document.createElement("button");
       approve.textContent = "Approve"; approve.className = "secondary";
+      approve.title = "Approve this pending external action.";
       approve.onclick = () => guarded(async () => {
         await api("/api/external-actions/" + action.id + "/approve", "POST", {nonce: action.nonce});
         await refreshExternalActions(); message("External action approved.");
       });
       const reject = document.createElement("button");
       reject.textContent = "Reject"; reject.className = "secondary";
+      reject.title = "Reject this pending external action.";
       reject.onclick = () => guarded(async () => {
         await api("/api/external-actions/" + action.id + "/reject", "POST");
         await refreshExternalActions(); message("External action rejected.");
@@ -334,7 +362,8 @@ async function loadSupervisorThreads() {
   placeholder.textContent = threads.length ? "Choose a thread" : "No threads yet";
   chooser.replaceChildren(placeholder, ...threads.map((item) => {
     const option = document.createElement("option");
-    option.value = item.id; option.textContent = item.status + " · " + item.topic;
+    option.value = item.id; option.textContent = humanizeStatus(item.status) + " · " + item.topic;
+    option.title = "Raw status: " + item.status;
     return option;
   }));
   chooser.value = supervisorThreadId;
@@ -469,7 +498,7 @@ function renderApprovalSubject() {
     " \u00b7 actor " + runner + " \u00b7 candidate " + short(task.evidence && task.evidence.candidate_digest) +
     " \u00b7 base " + short(task.base_digest) + (promptLine ? ' \u00b7 "' + promptLine + '"' : "");
   const rows = [];
-  const push = (ok, text) => rows.push((ok ? "PASS " : "FAIL ") + text);
+  const push = (ok, text) => rows.push({ok, text: (ok ? "PASS " : "FAIL ") + text});
   if (!task.evidence) {
     push(false, "No candidate produced yet.");
   } else {
@@ -482,9 +511,10 @@ function renderApprovalSubject() {
   } else if (task.status === "awaiting_approval") {
     push(false, "No valid approval \u2014 run fresh validation first.");
   }
-  checklist.replaceChildren(...rows.map((text) => {
+  checklist.replaceChildren(...rows.map((row) => {
     const item = document.createElement("li");
-    item.textContent = text;
+    item.textContent = row.text;
+    item.className = row.ok ? "pass" : "fail";
     return item;
   }));
 }
@@ -503,9 +533,11 @@ async function loadSupervisorRuns() {
   }
   list.replaceChildren(...runs.map((run) => {
     const item = document.createElement("li");
-    item.textContent = run.status + " · " + run.run_id.slice(0, 12) + " ";
+    item.textContent = humanizeStatus(run.status) + " · " + run.run_id.slice(0, 12) + " ";
+    item.title = "Raw status: " + run.status;
     const review = document.createElement("button");
     review.textContent = "Review"; review.className = "secondary";
+    review.title = "Open this run's task in the Review view.";
     review.onclick = () => guarded(() => supervisorStep(async () => {
       const detail = await api("/api/supervisor/runs/" + run.run_id);
       if (!detail.task_id) { supervisorNote("Run has no linked task yet; wait for the worker."); return; }
@@ -568,9 +600,10 @@ function renderEvents() {
   const start = showAllEvents ? 0 : Math.max(0, taskEvents.length - 20);
   element("events").replaceChildren(...taskEvents.slice(start).map((event, offset) => {
     const item = document.createElement("li");
-    item.textContent = (start + offset + 1) + " · " + (eventNames[event.kind] || event.kind) + (event.payload.injected ? " (injected)" : "") +
+    item.textContent = (start + offset + 1) + " · " + (eventNames[event.kind] || humanizeStatus(event.kind)) + (event.payload.injected ? " (injected)" : "") +
       (event.payload.name ? " · " + event.payload.name : "") +
       (event.kind === "transport_failed" && typeof event.payload.detail === "string" ? " · " + event.payload.detail : "");
+    item.title = "Raw event: " + event.kind;
     return item;
   }));
   element("event-summary").textContent = !task ? "Create a new task or select a saved task." :
@@ -578,13 +611,73 @@ function renderEvents() {
   element("eventHistory").hidden = taskEvents.length <= 20;
   element("eventHistory").textContent = showAllEvents ? "Show latest activity" : "Show all activity (" + taskEvents.length + ")";
 }
+function renderEvidenceCard() {
+  const card = element("evidenceCard");
+  if (!task || !task.evidence) { card.hidden = true; card.replaceChildren(); card.title = ""; return; }
+  const evidence = task.evidence;
+  const report = parseChecksReport(evidence.output);
+  const duration = parseChecksDuration(evidence.output);
+  const bits = [];
+  if (report) {
+    const passedCount = Math.max(0, report.tests - (report.failures || 0) - (report.errors || 0));
+    bits.push(passedCount + "/" + report.tests + " checks passed");
+    if (report.skipped) bits.push(report.skipped + " skipped");
+  }
+  bits.push("runner " + evidence.runner);
+  if (duration) bits.push(duration);
+  bits.push("exit " + String(evidence.exit_code));
+  const verdict = document.createElement("strong");
+  verdict.className = evidence.passed ? "pass" : "fail";
+  verdict.textContent = evidence.passed ? "PASS" : "FAIL";
+  card.replaceChildren(verdict, document.createTextNode(" · " + bits.join(" · ")));
+  card.title = "candidate " + evidence.candidate_digest + " · raw: " +
+    JSON.stringify({passed: evidence.passed, runner: evidence.runner, exit_code: evidence.exit_code});
+  card.hidden = false;
+}
+function updateWindowChip() {
+  const chip = element("windowChip");
+  chip.classList.remove("fresh", "stale");
+  if (!task || task.status !== "awaiting_approval" || !task.approval || typeof task.approval.expires !== "number") {
+    chip.textContent = task && task.status === "awaiting_approval" ? "Review window: revalidate needed" : "No review window";
+    chip.title = "Reviewer approval window for the current task.";
+    return;
+  }
+  const remainingMs = task.approval.expires * 1000 - Date.now();
+  const when = new Date(task.approval.expires * 1000).toLocaleString();
+  if (remainingMs <= 0) {
+    chip.textContent = "Review window: expired";
+    chip.classList.add("stale");
+    chip.title = "Approval expired at " + when + ". Run fresh validation.";
+    return;
+  }
+  const minutes = Math.floor(remainingMs / 60000);
+  chip.textContent = minutes >= 1 ? "Review window: ~" + minutes + " min left" : "Review window: <1 min left";
+  chip.classList.add("fresh");
+  chip.title = "Approval expires at " + when + ".";
+}
+setInterval(() => { if (selectedMode !== null && task) updateWindowChip(); }, 10000);
+function updateBuildChip() {
+  const chip = element("buildChip");
+  const commit = selectedMode && selectedMode.build_commit ? String(selectedMode.build_commit) : "";
+  chip.textContent = commit ? "build " + commit.slice(0, 12) : "build …";
+  chip.title = commit ? "Server build commit " + commit + "." : "Server build commit unknown.";
+}
+function applyJudgeVisibility() {
+  const judge = judgeSession === true;
+  element("machineSection").hidden = judge;
+  element("workbenchSection").hidden = judge;
+}
 function clearTaskView() {
   task = null; taskEvents = []; showAllEvents = false; reviewContext = null;
   element("status").textContent = "No task selected";
+  element("status").title = "";
   renderDiffViews("", "No candidate yet.");
   element("evidence").textContent = "Not validated.";
   element("validation-summary").textContent = "Not validated.";
   element("verdict").textContent = "No candidate yet.";
+  element("verdict").className = "";
+  renderEvidenceCard();
+  updateWindowChip();
   renderApprovalSubject();
   element("demoReviewStatus").textContent = "No task yet. Create and run one above; you will be brought to the Review view when it is ready.";
   element("demoReviewCta").disabled = true;
@@ -623,7 +716,8 @@ async function refresh() {
   task = review.task;
   if (location.hash.slice(1) !== task.id) location.hash = task.id;
   element("recentTasks").value = task.id;
-  element("status").textContent = task.status;
+  element("status").textContent = humanizeStatus(task.status);
+  element("status").title = "Raw status: " + task.status;
   renderDiffViews(review.diff, "No candidate change.");
   element("evidence").textContent = task.evidence ? JSON.stringify(task.evidence, null, 2) : "Not validated.";
   element("validation-summary").textContent = task.evidence ?
@@ -641,10 +735,15 @@ async function refresh() {
     !task.evidence.passed ? "Validation FAILED. Do not approve; inspect the receipt or revalidate." :
     task.status === "awaiting_approval" ? "Ready: validation passed. Review the diff, then approve to apply." :
     task.status === "completed" ? "Completed: this change was applied." :
-    "Status: " + task.status + ".";
-  element("demoReviewStatus").textContent = "Task " + task.status + ": " + element("verdict").textContent;
+    "Status: " + humanizeStatus(task.status) + ".";
+  element("verdict").className = !task.evidence ? "" : !task.evidence.passed ? "verdict-fail" :
+    ["awaiting_approval", "completed"].includes(task.status) ? "verdict-ready" : "";
+  element("demoReviewStatus").textContent = "Task " + humanizeStatus(task.status) + ": " + element("verdict").textContent;
+  element("demoReviewStatus").title = "Raw status: " + task.status;
   element("demoReviewCta").disabled = false;
   renderApprovalSubject();
+  renderEvidenceCard();
+  updateWindowChip();
   actions();
   const events = await api("/api/tasks/" + encodeURIComponent(id) + "/events");
   if (!stillSelected(id, selection, session)) return;
@@ -654,7 +753,7 @@ async function refresh() {
   else stopPolling();
   const status = task.status;
   if (previousStatus !== status && !["running", "applying"].includes(status)) await recentTasks();
-  if (status === "awaiting_approval" && previousStatus !== status) {
+  if (status === "awaiting_approval" && previousStatus !== status && !task.supervisor_thread) {
     message("Change ready for review: check the diff in the Review view, then press Approve this verified change.");
     switchView("review");
   }
@@ -742,9 +841,9 @@ element("resume").onclick = () => guarded(async () => {
     actions();
   }
 });
-element("preview").onclick = () => guarded(async () => {
+async function runSample() {
   const result = await taskAction("/sample", {csv_text: element("csv").value}, "Applied importer executed.");
-  if (!result) return;
+  if (!result) return null;
   element("issues").replaceChildren(...result.issues.map((issue) => {
     const row = document.createElement("tr");
     for (const key of ["id", "title", "status"]) {
@@ -756,8 +855,40 @@ element("preview").onclick = () => guarded(async () => {
     const item = document.createElement("li"); item.textContent = "Row " + error.row + ": " + error.message; return item;
   }));
   message(result.issues.length + " issues accepted; " + result.errors.length + " row errors. Applied source: " + result.target_digest.slice(0,12));
+  return result;
+}
+element("preview").onclick = () => guarded(runSample);
+element("tryApproved").onclick = () => guarded(async () => {
+  const result = await runSample();
+  if (!result) return;
+  switchView("demo");
+  element("demoStep3").scrollIntoView();
+});
+async function copyText(text, success) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  message(success);
+}
+element("copyTaskId").onclick = () => guarded(async () => {
+  const id = element("taskId").value.trim();
+  if (!id) { message("No task selected to copy."); return; }
+  await copyText(id, "Task ID copied.");
+});
+element("copyTaskLink").onclick = () => guarded(async () => {
+  const id = element("taskId").value.trim();
+  if (!id) { message("No task selected to copy."); return; }
+  await copyText(location.origin + location.pathname + location.search + "#" + id, "Task link copied.");
 });
 function displayMode(configuration) {
+  updateBuildChip();
   document.querySelector(".notice").textContent = configuration.live_inference ?
     "META MODE · Real AI coding" : "SCRIPTED OFFLINE REFERENCE · No Meta inference";
   element("access-note").textContent = hosted ?
@@ -787,6 +918,7 @@ async function loadMode(session) {
   selectedMode = configuration; displayMode(configuration);
   sessionKeyAttached = !!configuration.session_key_attached;
   judgeSession = !!configuration.judge;
+  applyJudgeVisibility();
   if (hosted) {
     modelRouteConfigured = configuration.model_route_configured !== false;
     element("key-controls").hidden = !modelRouteConfigured;
@@ -824,8 +956,12 @@ async function loadMode(session) {
   if (saved || summaries.length) {
     await chooseTask(saved || summaries[0].id);
     if (session === sessionRevision) {
-      switchView("review");
-      message("Connected. Your saved task is loaded; review its current status in the Review view.");
+      if (task && !task.supervisor_thread) {
+        switchView("review");
+        message("Connected. Your saved task is loaded; review its current status in the Review view.");
+      } else {
+        message("Connected. Your saved task is loaded.");
+      }
     }
   } else message("Connected. Review execution mode before submitting your task.");
 }
@@ -936,10 +1072,11 @@ element("grantSave").onclick = () => guarded(async () => {
 });
 element("token").addEventListener("input", () => {
   sessionRevision++; selectionRevision++; stopPolling(); selectedMode = null; task = null; connecting = false;
-  allowance = null; allowanceCursor = "";
+  allowance = null; allowanceCursor = ""; judgeSession = false;
   element("allowance-summary").textContent = "Connect to view this server's allowance.";
   element("allowance-note").textContent = "Local reserved estimates are separate from provider credits and final billing.";
   element("recentTasks").replaceChildren(); clearTaskView();
+  applyJudgeVisibility(); updateBuildChip();
   document.querySelector(".notice").textContent = "Load execution mode before submitting";
 });
 element("taskId").addEventListener("input", () => {

@@ -30,4 +30,12 @@ body{overflow-x:hidden}button{max-width:100%}
 @keyframes dictate-pulse{50%{opacity:.55}}
 .dictate-lang{display:inline-flex;gap:8px;align-items:center;margin:0;font-size:.9rem}
 .dictate-lang select{width:auto;margin-top:0;padding:10px}
-.dictate-status{font-size:.85rem;color:#a3c8ff;flex-basis:100%}
+.dictate-status{font-size:.85rem;color:#a3c8ff;flex-basis:100%}
+#statusFooter{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0}
+.chip{display:inline-block;padding:7px 12px;border:1px solid #31415e;border-radius:999px;background:#192337;color:#b5c3da;font-size:.85rem}
+.chip.fresh{color:#8adfa0;border-color:#2f6b4a}.chip.stale{color:#ff9a9a;border-color:#6b2f2f}
+#verdict.verdict-ready{color:#8adfa0}#verdict.verdict-fail{color:#ff9a9a}
+#approvalChecklist li.pass{color:#8adfa0}#approvalChecklist li.fail{color:#ff9a9a;font-weight:650}
+.evidence-card{background:#101725;border:1px solid #31415e;border-radius:8px;padding:12px 14px;margin:10px 0;color:#b5c3da;font-size:.9rem}
+.evidence-card[hidden]{display:none}
+.evidence-card strong{color:#e8eef9}.evidence-card .pass{color:#8adfa0;font-weight:650}.evidence-card .fail{color:#ff9a9a;font-weight:650}
