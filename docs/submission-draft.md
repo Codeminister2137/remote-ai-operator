@@ -74,6 +74,7 @@ to judges.
 | Supervisor threads, plans, drain worker, hosted sweeper | Event-built (Nov 2026) | `supervisor.py`, `supervisor_runner.py` |
 | Dictation (Meta STT + Web Speech fallback) | Event-built (Nov 2026) | `stt.py`; audio never persisted |
 | PL→EN server-side normalization | Event-built (Nov 2026) | `translate.py`; source preserved |
+| Open-weights bonus lane (Baseten Muse Spark Open) | Event-built (Nov 2026) | `--model-mode baseten`; exact-model grant; see `docs/openweights-verification.md` |
 | Judge accounts, self-grants, hosted sessions, Modal deploy | Event-built (Nov 2026) | ADR-0004/0005, single-writer volume |
 | AI Workbench predecessor product | Prior — excluded | Private product; not in this tree, not required |
 | Pending-actions bridge (`external_actions.py`) | Prior surface — hidden from judges | Neutral contract for Workbench-side callers; judge sessions hide the section |
@@ -141,7 +142,9 @@ judge endpoint.
 One registered source file; no arbitrary private-repository execution. Same-route
 recovery is demonstrated; cross-provider fallback is not implemented. No PC wake,
 full desktop control, private-product integration or provider-enforced billing cap
-is claimed. Phone spending is currently read-only; limits are server-configured.
+is claimed. Spending is judge-funded through a self-grant (Max requests +
+Approved USD, defaults 10 / $2.50); there is no provider-enforced billing
+cap beyond the grant itself.
 
 ## Bonus category
 

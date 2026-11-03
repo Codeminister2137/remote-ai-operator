@@ -121,5 +121,7 @@ UI described above spans unmerged `loop3/*` branches on top of `main`
 judge visibility, try-it shortcut), `h1a` (hosted multi-subject drain
 sweeper, `waiting_on_key`), `stt` (Meta transcription backend with
 auto-slice dictation, Web Speech fallback), `translate` (server-side
-PL→EN normalization at ingestion). `openweights` has no commits yet.
+PL→EN normalization at ingestion), `openweights` (Baseten model-mode on
+Muse Spark Open for the open-weights bonus, exact-model grant, key
+separation — see docs/openweights-verification.md).
 Merge all before pointing judges at this card.
