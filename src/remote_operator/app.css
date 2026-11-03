@@ -18,7 +18,12 @@ padding:15px;border-radius:8px;font-size:.85rem;max-height:450px;overflow:auto}l
 th:last-child,td:last-child{min-width:4.5em;white-space:nowrap}#events{overflow-wrap:anywhere;list-style:none;padding-left:0;max-height:260px;overflow:auto}summary{cursor:pointer;color:#a3c8ff;padding:8px 0}
 #externalActions{list-style:none;padding-left:0}#externalActions li.external-action{background:#101725;border:1px solid #344461;border-radius:8px;padding:12px;margin:10px 0}#externalActions li.external-action div{margin-bottom:8px;white-space:pre-wrap;overflow-wrap:anywhere}
 body{overflow-x:hidden}button{max-width:100%}
-#judge-start ol{padding-left:24px;margin:10px 0}#judge-start li{padding:4px 0}
+#judge-start ol{padding-left:24px;margin:10px 0}#judge-start li{padding:4px 0}
+#onboard-wizard ol{padding-left:24px;margin:10px 0}#onboard-wizard li{padding:6px 0}
+#wizard-progress{font-weight:650;color:#a3c8ff}#csvExpect{color:#a3c8ff}
+#access-details summary{cursor:pointer;font-size:1.15rem;font-weight:700}
+#access-details .access-title{margin-right:8px}#access-state{font-size:.85rem;font-weight:400;color:#8ab5ff}
+#csv-gallery{margin:12px 0 4px}
 @media (max-width:380px){main{padding:20px 12px 60px}section{padding:16px 14px}button{width:100%;margin:5px 0}}
 #viewNav{display:flex;flex-wrap:wrap;gap:4px;margin:16px 0 0}#viewNav button.active{background:#8ab5ff;color:#10203b}#verdict{font-weight:650;color:#ffd487}#planSettingsNote{color:#a3c8ff}#demoReviewStatus{color:#b5c3da}
 #approvalSubject{font-weight:650;color:#a3c8ff}#approvalChecklist{list-style:none;padding-left:0}#approvalChecklist li{padding:3px 0;color:#b5c3da}

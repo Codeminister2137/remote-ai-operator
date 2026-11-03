@@ -7,10 +7,16 @@
 <p class="notice">Load execution mode before submitting</p></header>
 <section id="judge-start"><h2>Judge quick start — 3 steps</h2>
 <p><strong>Scripted or Meta?</strong> <em>Scripted offline reference</em> runs a fixed pre-written demo: no AI, no cost, no key needed. <em>Meta mode</em> runs real AI coding, charged to your own Meta account — it needs your key attached below.</p>
-<ol><li><strong>Connect:</strong> enter the demo access code in Access, log in as judge, then set spending limits (Max requests + Approved USD) and attach your Meta API key in “Your model key”.</li>
+<ol><li><strong>Connect:</strong> enter the demo access code in Access, register your judge account and log in, then set spending limits (Max requests + Approved USD) and attach your Meta API key in “Your model key”. The wizard below tracks each step.</li>
 <li><strong>Demo:</strong> open the Demo view and follow its steps — request, review, try the feature. Everything happens in order on one screen.</li>
 <li><strong>Supervise:</strong> for longer work, open the Supervise view: create a thread, chat, write the plan, check run settings, approve the plan, then review each run.</li></ol></section>
-<section><h2>Access</h2>
+<section id="onboard-wizard" hidden><h2>Setup wizard — 4 steps</h2>
+<p id="wizard-progress" role="status">Step 1 of 4: demo access code.</p>
+<ol><li><strong>Code.</strong> Enter the demo access code and open your private session. <em id="wizard-state-1">To do.</em> <button id="wizardGo1" class="secondary" title="Go to the demo access code field.">Go to code</button></li>
+<li><strong>Account.</strong> Register your judge account, then log in. <em id="wizard-state-2">To do.</em> <button id="wizardGo2" class="secondary" title="Go to the judge account fields.">Go to account</button></li>
+<li><strong>Limits.</strong> Save spending limits (defaults: 10 requests, $2.50). <em id="wizard-state-3">To do.</em> <button id="wizardGo3" class="secondary" title="Go to the spending limit fields.">Go to limits</button></li>
+<li><strong>Key or scripted.</strong> Attach your Meta key for real AI, or continue with the free offline reference. <em id="wizard-state-4">To do.</em> <button id="wizardGo4" class="secondary" title="Go to the model key section.">Go to key</button> <button id="wizardScripted" class="secondary" title="Continue with the free offline reference. No key, no cost, no model requests.">Continue without a key</button></li></ol></section>
+<section id="access-section"><details id="access-details" open><summary><span class="access-title">Access</span> <span id="access-state"></span></summary>
 <div id="owner-access"><label>Local access token<input id="token" type="password" autocomplete="off" title="Owner token. It stays in this page's memory and is never stored."></label>
 <button id="connect" title="Connect with the owner token and load the execution mode.">Connect and load execution mode</button></div>
 <div id="visitor-access" hidden><label>Demo access code<input id="accessCode" type="password" autocomplete="off" title="Demo access code from the host. Opens your own private session."></label>
@@ -18,12 +24,12 @@
 <div id="judge-access" hidden><label>Judge username<input id="judgeName" type="text" autocomplete="username" title="Your judge username."></label>
 <label>Judge password<input id="judgePassword" type="password" autocomplete="current-password" title="Your judge password."></label>
 <button id="judgeSignup" title="Register a judge account. Needs the demo access code above.">Register judge account</button><button id="judgeLogin" title="Log in as judge to open your private workspace.">Log in as judge</button>
-<p id="judge-note">Registration needs the demo access code above. Judge sessions keep their own tasks and spending.</p></div>
-<div id="judge-grant" hidden><label>Max requests<input id="grantRequests" type="number" min="1" max="100" title="Maximum Meta requests allowed on your judge account."></label>
-<label>Approved USD<input id="grantUsd" type="text" inputmode="decimal" title="Maximum USD you approve for Meta inference, e.g. 2.50."></label>
+<p id="judge-note">Registration needs the demo access code above. Judge sessions keep their own tasks and spending.</p><p id="judge-validation" role="status" aria-live="polite"></p></div>
+<div id="judge-grant" hidden><label>Max requests<input id="grantRequests" type="number" min="1" max="100" value="10" title="Maximum Meta requests allowed on your judge account."></label>
+<label>Approved USD<input id="grantUsd" type="text" inputmode="decimal" value="2.50" title="Maximum USD you approve for Meta inference, e.g. 2.50."></label>
 <button id="grantSave" title="Save your spending limits. Required before attaching a key.">Save spending limits</button><p id="grant-note"></p></div>
 <p id="access-note">The token stays in this page's memory. Remote access is not configured.</p>
-<p id="accessStatus" role="status" aria-live="polite"></p></section>
+<p id="accessStatus" role="status" aria-live="polite"></p></details></section>
 <section id="key-section" hidden><h2>Your model key</h2>
 <div id="key-controls">
 <p>Attach your own Meta API key to run real AI coding in this demo. It stays in this server's memory for your session only: never written to disk, never sent to the code sandbox, and never charged to the host's credits.</p>
@@ -38,7 +44,7 @@
 <div class="dictate-row" data-dictate-for="prompt" hidden><button id="dictate-prompt" class="secondary" aria-pressed="false" title="Dictate into the request using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and submit.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-prompt"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-prompt" class="dictate-status" role="status" aria-live="polite"></span></div>
 <label class="check"><input id="inject" type="checkbox" checked> Inject one transport failure after the edit</label>
 <button id="submit" disabled>Create and run new task</button></section>
-<section><h2>Demo step 2 · Review &amp; approve</h2><p id="demoReviewStatus">No task yet. Create and run one above; you will be brought to the Review view when it is ready.</p><button id="demoReviewCta" class="secondary" disabled>Open in Review</button></section>
+<section><h2>Demo step 2 · Review &amp; approve</h2><p id="demoReviewStatus">No task yet. Create and run one above; you will be brought to the Review view when it is ready.</p><button id="demoReviewCta" class="secondary" disabled>Open in Review</button><button id="sampleReview" class="secondary" disabled title="Load a ready-made scripted review. Reuses one of your validated tasks, or creates and runs one for you.">Load sample review</button><p id="sampleReviewNote" role="status"></p></section>
 <section><h2>Demo step 3 · Try the feature the agent built</h2>
 <p>After approving, run the new importer on the example below. Each line is one issue. Two valid issues should appear in the table; the duplicate ID and missing title should appear as row errors. You can edit the input and try again. This checks the approved code with sample data; it does not save issues to a live tracker.</p>
 <label>CSV input<textarea id="csv" rows="7" title="Sample CSV. Each line is one issue; edit it and run again.">id,title,status
@@ -46,7 +52,7 @@ existing,Duplicate,open
 new-1,First imported issue,OPEN
 new-2,,closed
 new-3,Another imported issue,closed</textarea></label>
-<button id="preview" disabled title="Run the approved importer on the CSV above. Sample data only; nothing is saved.">Run approved import</button>
+<div id="csv-gallery"><p>Sample gallery — load an input with one click, then run it:</p><button id="csvHappy" class="secondary" title="Load the happy-path CSV: three valid issues, no errors.">Happy path</button><button id="csvEdges" class="secondary" title="Load the edge-case CSV: a duplicate, a missing title, a bad status, and one valid row.">Edge cases</button><button id="csvInvalid" class="secondary" title="Load the all-invalid CSV: every row fails for a different reason.">All invalid</button><p id="csvExpect">Default sample: expect 2 accepted, 2 row errors (duplicate ID + missing title).</p></div><button id="preview" disabled title="Run the approved importer on the CSV above. Sample data only; nothing is saved.">Run approved import</button>
 <h3>Accepted issues</h3><div class="table-wrap"><table><thead><tr><th>ID</th><th>Title</th><th>Status</th></tr></thead><tbody id="issues"></tbody></table></div>
 <h3>Row errors</h3><ul id="import-errors"></ul></section>
 <section><h2>Demo task history</h2><button id="newTask" class="secondary" disabled>Start new demo draft</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
