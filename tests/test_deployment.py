@@ -242,6 +242,43 @@ class HostedDeploymentTests(unittest.IsolatedAsyncioTestCase):
             pass
         self.assertEqual(volume.commits, 1)
 
+    async def test_deployed_approve_execute_true_queues_and_drains(self):
+        from remote_operator.hosted import HostedSessions
+        from remote_operator.scoped import ScopedOperators
+        from remote_operator.supervisor_runner import sweep_hosted_once
+
+        application = self.build()
+        client = await self.client(application)
+        auth = {"X-Operator-Request": "1"}
+        async with client:
+            await client.post("/api/session", json={"code": CODE})
+            opened = await client.post(
+                "/api/supervisor/threads", headers=auth, json={"topic": "Ship it"}
+            )
+            thread_id = opened.json()["id"]
+            await client.post(
+                f"/api/supervisor/threads/{thread_id}/messages",
+                headers=auth,
+                json={"text": "It must handle retries"},
+            )
+            plan = await client.post(
+                f"/api/supervisor/threads/{thread_id}/plan", headers=auth
+            )
+            queued = await client.post(
+                f"/api/supervisor/threads/{thread_id}/approve",
+                headers=auth,
+                json={"nonce": plan.json()["nonce"], "execute": True},
+            )
+            self.assertEqual(queued.status_code, 200, queued.text)
+            run_id = queued.json()["run_id"]
+            restarted = ScopedOperators(
+                self.root / "runtime" / "visitors", ROOT / "sample/issue_import.py", Validator
+            )
+            sweep_hosted_once(restarted, HostedSessions(CODE))
+            runs = await client.get("/api/supervisor/runs", headers=auth)
+            by_id = {run["run_id"]: run for run in runs.json()["runs"]}
+            self.assertEqual(by_id[run_id]["status"], "awaiting_approval")
+
     async def test_missing_sample_is_refused(self):
         with tempfile.TemporaryDirectory() as empty, self.assertRaises(ValueError):
             build_hosted_application(
