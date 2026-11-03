@@ -13,3 +13,4 @@ CURRENT_CONTEXT.md
 *.log
 build/
 dist/
+.idea/
