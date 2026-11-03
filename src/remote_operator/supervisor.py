@@ -149,9 +149,11 @@ class Supervisor:
     def _scripted_reply(self, thread: dict) -> str:
         count = sum(1 for turn in thread["history"] if turn["role"] == "user")
         return (
-            "[SCRIPTED OFFLINE REFERENCE] Recorded message "
-            f"{count} for '{thread['prompt'][:80]}'. "
-            "Ask for a plan artifact when requirements are complete."
+            "[SCRIPTED OFFLINE REFERENCE] "
+            f"Recorded message {count}. "
+            "Live AI is not connected in this thread, so this is a placeholder "
+            "reply, not an answer. Describe what you want to build; when "
+            "requirements are complete, ask for a plan artifact."
         )
 
     def _live_reply(self, model, thread: dict) -> tuple[str, str]:

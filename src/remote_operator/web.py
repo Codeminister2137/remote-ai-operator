@@ -663,7 +663,8 @@ def _stt_routes(app, principal, stt_transport=None):
         """Transcribe one dictation clip with the caller's own Meta key."""
         if who.grant is None or who.key_source is None or not who.key_attached:
             raise HTTPException(
-                409, "Transcription unavailable; attach a provider key or use browser dictation"
+                409,
+                "Transcription unavailable: attach a provider key in Supervise, or use browser dictation instead",
             )
         try:
             audio, audio_type, language = parse_transcribe_form(
@@ -677,7 +678,8 @@ def _stt_routes(app, principal, stt_transport=None):
             raise HTTPException(401, "Visitor session required") from None
         if not isinstance(key, str) or not key:
             raise HTTPException(
-                409, "Transcription unavailable; attach a provider key or use browser dictation"
+                409,
+                "Transcription unavailable: attach a provider key in Supervise, or use browser dictation instead",
             )
         try:
             return await asyncio.to_thread(
@@ -949,8 +951,12 @@ def create_hosted_app(
         active = effective_grant(who.operator, sessions.subject(token))
         if active is None:
             if sessions.subject(token).startswith("judge-"):
-                raise HTTPException(409, "Set judge spending limits first")
-            raise HTTPException(409, "Hosted model route is not configured")
+                raise HTTPException(
+                    409, "Set your judge spending limits first, then attach your key"
+                )
+            raise HTTPException(
+                409, "This demo server has no live model route; only the owner can configure it"
+            )
         try:
             sessions.attach_key(token, body.api_key)
         except SessionCapacity:
@@ -969,7 +975,9 @@ def create_hosted_app(
         from remote_operator.judge_accounts import JudgeAuthError
 
         if judge_accounts is None:
-            raise HTTPException(409, "Judge login is not configured")
+            raise HTTPException(
+                409, "Judge login is not set up on this demo server; the owner must configure it"
+            )
         try:
             sessions.verify_code(body.code)
         except AccessRefused:
@@ -986,7 +994,9 @@ def create_hosted_app(
         from remote_operator.judge_accounts import JudgeAuthError, JudgeLockedOut
 
         if judge_accounts is None:
-            raise HTTPException(409, "Judge login is not configured")
+            raise HTTPException(
+                409, "Judge login is not set up on this demo server; the owner must configure it"
+            )
         try:
             account = judge_accounts.verify(body.username, body.password)
         except JudgeLockedOut:
@@ -1011,7 +1021,10 @@ def create_hosted_app(
     ):
         """Set the judge's own finite spending limits for their own key."""
         if judge_model is None:
-            raise HTTPException(409, "Judge model route is not configured")
+            raise HTTPException(
+                409,
+                "The judge model route is not set up on this demo server; the owner must configure it",
+            )
         token = request.cookies.get(SESSION_COOKIE, "")
         subject = sessions.subject(token)
         if not subject.startswith("judge-"):
