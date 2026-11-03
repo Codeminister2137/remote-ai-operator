@@ -69,6 +69,9 @@ body{overflow-x:hidden}button{max-width:100%}
 
 .dictate-status{font-size:.85rem;color:#a3c8ff;flex-basis:100%}
 #viewNav .nav-action{margin-left:12px;border:1px dashed #8ab5ff}
+#workerPill{margin-left:auto}
+#workerPill.pill-work{color:#8adfa0}#workerPill.pill-idle{color:#8a99b5}
+#workerPill.pill-off{color:#5a6a85}#workerPill.pill-alert{color:#ff9a9a}
 #inboxBell{position:relative}
 .inbox-badge{display:inline-block;min-width:1.6em;padding:1px 7px;margin-left:6px;border-radius:999px;
 background:#ffd487;color:#10203b;font-weight:700;font-size:.85rem;text-align:center}
