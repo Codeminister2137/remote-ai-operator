@@ -184,9 +184,7 @@ class SupervisorFlowTests(unittest.IsolatedAsyncioTestCase):
             "taskSource",
             "opened from",
             "startWindowPolling",
-            'second: "2-digit"',
             "No pending Workbench actions.",
-            "Times show when this page first displayed each entry.",
         ):
             self.assertIn(marker, script.text)
 

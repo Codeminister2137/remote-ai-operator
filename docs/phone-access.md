@@ -41,9 +41,8 @@ no horizontal overflow.
   once and jumps to the newest unread item (thread in Supervise, or
   parked task in Review). Opening a thread or task marks its items read.
 - **Chat.** Supervisor threads render as bubbles (you right, assistant
-  left) with a typing indicator while the assistant replies and
-  first-seen timestamps under each turn. Times are stamped by the page
-  when first shown — the server keeps no per-message timestamps.
+  left) with a typing indicator while the assistant replies. Turns show
+  newest last; the page shows no per-message times.
 - **Dictation.** Request, chat-message and answer fields offer a 🎤
   Dictate button. In Meta mode with a key attached, clips are recorded
   and transcribed by Meta in ~55 s auto-slices against the shared

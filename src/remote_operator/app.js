@@ -377,30 +377,6 @@ function updatePlanSettingsNote() {
     "Approving now: " + mode + " " + supervision :
     "Approval settings will appear here once a plan is written.";
 }
-// ---- First-seen timestamps ----
-// The server stores no per-turn or per-event timestamps, so the page stamps
-// each item with the local time it was first shown. Times are stable within
-// this page session and labelled as first-seen via each <time> title.
-const turnSeenAt = new Map();
-const eventSeenAt = new Map();
-function seenTime(map, key) {
-  let at = map.get(key);
-  if (!at) {
-    at = Date.now();
-    if (map.size > 2000) map.delete(map.keys().next().value);
-    map.set(key, at);
-  }
-  return at;
-}
-function seenTimeElement(map, key) {
-  const at = seenTime(map, key);
-  const when = document.createElement("time");
-  when.dateTime = new Date(at).toISOString();
-  when.title = "First shown by this page at " + new Date(at).toLocaleString() +
-    ". The server keeps no per-message timestamps.";
-  when.textContent = new Date(at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"});
-  return when;
-}
 // ---- Inbox bell (GET /api/supervisor/inbox, same tick as the task poll) ----
 let inboxCursor = 0;
 let inboxItems = []; // oldest first, capped
@@ -497,10 +473,7 @@ function renderSupervisorTranscript(history) {
     const bubble = document.createElement("div");
     bubble.className = "chat-bubble";
     bubble.textContent = turn.text;
-    const when = seenTimeElement(turnSeenAt,
-      supervisorThreadId + ":" + index + ":" + turn.role + ":" + String(turn.text).length);
-    when.className = "chat-time";
-    item.append(who, bubble, when);
+    item.append(who, bubble);
     if (turn.role === "user" && turn.translated && typeof turn.source_text === "string") {
       const details = document.createElement("details");
       const summary = document.createElement("summary");
@@ -820,13 +793,11 @@ function renderEvents() {
       (event.payload.name ? " · " + event.payload.name : "") +
       (event.kind === "transport_failed" && typeof event.payload.detail === "string" ? " · " + event.payload.detail : "");
     item.title = "Raw event: " + event.kind;
-    const when = seenTimeElement(eventSeenAt, (task ? task.id : "") + ":" + event.sequence);
-    when.className = "event-time";
-    item.append(label, document.createTextNode(" "), when);
+    item.append(label);
     return item;
   }));
   element("event-summary").textContent = !task ? "Create a new task or select a saved task." :
-    taskEvents.length ? (start ? "Latest 20 of " : "Showing ") + taskEvents.length + " activity entries for this task. Times show when this page first displayed each entry." : "No activity for this task yet.";
+    taskEvents.length ? (start ? "Latest 20 of " : "Showing ") + taskEvents.length + " activity entries for this task." : "No activity for this task yet.";
   element("eventHistory").hidden = taskEvents.length <= 20;
   element("eventHistory").textContent = showAllEvents ? "Show latest activity" : "Show all activity (" + taskEvents.length + ")";
 }
