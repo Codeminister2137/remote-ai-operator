@@ -46,7 +46,7 @@ try {
   await evaluate("document.getElementById('token').value = " + JSON.stringify(config.token));
   await evaluate("document.getElementById('connect').click()");
   await waitFor("!document.getElementById('submit').disabled");
-  if (!(await evaluate("document.querySelector('.notice').textContent.includes('SCRIPTED OFFLINE')"))) throw new Error("Expected explicit offline mode");
+  if (!(await evaluate("document.querySelector('.notice').textContent.includes('Offline reference')"))) throw new Error("Expected explicit offline mode");
   await evaluate("document.getElementById('submit').click()");
   await waitFor("document.getElementById('status').textContent === 'awaiting_approval' && !document.getElementById('approve').disabled");
   await evaluate("document.getElementById('approve').click()");

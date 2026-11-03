@@ -29,17 +29,18 @@ Four stages, each visible in the served UI and each human-gated:
 
 1. **Supervisor plans** — the owner chats with the model in a planning
    thread (Supervise view); the model drafts, the owner refines, then
-   **Write plan** renders a reviewable plan artifact.
-2. **Owner approves** — the exact plan bytes (or the exact code diff at
-   task level) are reviewed with host-observed evidence and approved with
-   a single-use, expiring nonce. Changed bytes invalidate approval.
-3. **Drain executes** — the bounded drain worker (`supervisor-drain`,
-   also running inside `serve` and as the hosted multi-subject sweeper)
-   reconciles interrupted jobs without replay and runs queued ones
-   oldest-first, stopping again at the human approval boundary.
+   **Write plan** renders a reviewable plan.
+2. **Owner approves** — the exact plan text (or the exact code change at
+   task level) is reviewed with evidence from checks the AI cannot
+   influence, and approved with a one-time, expiring approval code.
+   Changed content invalidates approval.
+3. **Worker runs it** — the bounded worker (`supervisor-drain`, also
+   running inside `serve` and as the hosted multi-visitor sweeper)
+   resumes interrupted jobs without repeating finished work and runs
+   queued ones oldest-first, stopping again where a human must approve.
 4. **Inbox notifies** — the owner is pulled back only when needed: the
-   🔔 inbox bell jumps to parked owner questions and run outcomes;
-   unattended/attended mail receipts cover terminal job events.
+   🔔 inbox bell jumps to waiting owner questions and run results;
+   mail receipts cover finished jobs in watched and unwatched mode.
 
 The loop composes: a plan approval enqueues a run, the run stops at code
 approval, the approved code runs as the visible feature outcome.
@@ -47,10 +48,10 @@ approval, the approved code runs as the visible feature outcome.
 ## What we built during the event
 
 A new independent Python application: Meta Responses tool adapter, scoped coding
-controller, durable task/event and allowance ledger, isolated Docker validation,
-interrupted-effect reconciliation, exact-source approval, a mobile browser UI and a
-single-writer durable hosted deployment on Modal. A small issue-tracker CSV import
-provides a visible feature outcome. Existing
+controller, durable task/event records and spending log, isolated Docker safety
+checks, safe resume after interruptions, exact-change approval, a mobile browser
+UI and a durable hosted deployment on Modal written by one process at a time.
+A small issue-tracker CSV import provides a visible feature outcome. Existing
 private-product implementation is not included or required. Dependencies retain
 their own licenses; the original repository is Apache-2.0. See BUILD_LOG.md and DEMO.md.
 
@@ -88,31 +89,33 @@ and a fixed Meta Responses endpoint. See [runtime eligibility](submission-eligib
 for offline checks and the separate deployment/video review required before submission.
 
 muse-spark-1.3 inspects the registered source, authors the implementation and calls
-protected validation tools. The adapter uses structured Responses function tools
-and transient encrypted continuation. A cold continuation uses recorded visible
-history honestly; private reasoning is not persisted. The host enforces tool scope,
-spending admission, actual-effect receipts and approval independently of the model.
+isolated checking tools. The adapter uses structured Responses function tools
+and short-lived encrypted continuations. A restarted visit reuses recorded
+visible history honestly; private AI reasoning is never stored. The server
+enforces tool scope, spending checks, actual-effect receipts and approval
+independently of the model.
 Meta also authored narrow application development changes, identified in BUILD_LOG.
 
 ## Working demonstration
 
-A user submits the importer task from a phone. Meta writes the importer; the host
-injects a clearly labelled interruption after a saved edit. Recovery keeps the
-completed edit. Seven independent protected tests verify behaviour. The user
-reviews the exact diff and approves application to a separate local demo target.
+A user submits the importer task from a phone. Meta writes the importer; the app
+injects a clearly labelled interruption after a saved edit. The retry keeps the
+completed edit. Seven independent safety checks verify behaviour. The user
+reviews the exact change and approves applying it to a separate local demo target.
 Executing that applied code accepts two valid issues and reports duplicate/missing
 field errors. A fresh physical-phone run is owner-confirmed and its saved effects
 are independently checked. The required three-minute video remains to be recorded.
 
 ## Technical depth
 
-Persisted pending effects and explicit reconciliation prevent blind mutation
-replay. Approval binds candidate/base bytes, validation evidence, runner policy and
-expiry. Generated code runs in a non-root, network-disabled, read-only container
-with resource bounds and both host and container-owned deadlines. Durable local
-reservations precede paid requests and retain failed-call costs. The phone can
-cancel, review, select saved tasks and inspect interrupted state without automatic
-approval. This is a prototype containment boundary, not a general security proof.
+Saved unfinished work and explicit resume checks prevent blindly repeating
+changes. Approval locks in the proposed and base files, the check evidence,
+the test-box policy and expiry. Generated code runs in a non-root,
+network-disabled, read-only container with resource bounds and both server and
+container-owned deadlines. Local spending reservations are recorded before paid
+requests and keep failed-call costs. The phone can cancel, review, select saved
+tasks and inspect interrupted work without automatic approval. This is a
+prototype containment boundary, not a general security proof.
 
 ## Reproducibility and judge access
 
@@ -139,12 +142,12 @@ judge endpoint.
 
 ## Scope and honest limits
 
-One registered source file; no arbitrary private-repository execution. Same-route
-recovery is demonstrated; cross-provider fallback is not implemented. No PC wake,
-full desktop control, private-product integration or provider-enforced billing cap
-is claimed. Spending is judge-funded through a self-grant (Max requests +
-Approved USD, defaults 10 / $2.50); there is no provider-enforced billing
-cap beyond the grant itself.
+One registered source file; no arbitrary private-repository execution. Retrying
+on the same AI route is demonstrated; switching providers mid-task is not
+implemented. No PC wake, full desktop control, private-product integration or
+provider-enforced billing cap is claimed. Spending is judge-funded through a
+self-grant (Max requests + Approved USD, defaults 10 / $2.50); there is no
+provider-enforced billing cap beyond the grant itself.
 
 ## Bonus category
 

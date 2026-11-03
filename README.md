@@ -21,36 +21,37 @@ For the 5-minute judge path (code → wizard → sample → approve → try-it),
 see [Judge quick-start card](docs/judge-card.md).
 
 - Setup wizard: 4 guided steps (access code → judge account → spending
-  limits → key or scripted) with inline validation and Go-to buttons.
+  limits → key or offline) with inline validation and Go-to buttons.
 - Chat: tasks and supervisor threads live side by side, with bubbles
-  and a typing indicator. Any `REPLY:`
-  message lands in the shared Owner replies thread instead of starting
-  a demo task. Sending anything new in a thread counts as a reply.
-- 🔔 Inbox bell: one badge for owner messages and parked questions;
+  and a typing indicator. A message starting with `REPLY:` lands in the
+  shared Owner replies thread instead of starting a demo task. Anything
+  new you write in a thread counts as your reply.
+- 🔔 Inbox bell: one badge for owner messages and waiting questions;
   clicking it jumps to the newest unread item.
-- Dictation: Meta transcription (~55 s auto-slices over the shared
-  allowance) with Web Speech fallback; fills the field only, never sends.
-- Run settings box: planning-only vs execute mode, attended vs
-  unattended supervision, approval windows (tasks ~60 min, plans
-  ~10 min), and PC sleep with confirm, delay and cancel.
-- Review and approve: split/unified diff, evidence card, approval
-  checklist, review-window countdown and the Approve / Reject actions
-  for the selected task or plan. **Load sample review** fetches a
-  ready-made review; **Try it in Demo step 3** jumps to the outcome.
-- Owner questions: a worker can park one task with a question
-  (`waiting_on_owner`) while other runs continue; answering resumes it.
-- Serve drains queued runs itself every 30 s; no manual CLI drain is
+- Dictation: speech transcribed by Meta in ~55-second pieces charged
+  to the shared allowance, or by the browser's own speech recognition
+  when Meta is unavailable; fills the field only, never sends.
+- Run settings box: plan-only vs run-it mode, watched vs unwatched
+  supervision, approval time limits (tasks ~60 min, plans ~10 min),
+  and PC sleep with confirm, delay and cancel.
+- Review and approve: the exact change side-by-side or as one list,
+  evidence card, approval checklist, approval countdown and the
+  Approve / Reject actions for the selected task or plan.
+  **Load sample review** fetches a ready-made review; **Try it in
+  Demo step 3** jumps to the outcome.
+- Owner questions: the worker can pause one task with a question
+  while other runs continue; answering resumes it.
+- The server runs queued work itself every 30 s; no manual command is
   needed. Docker Desktop is revived automatically after sleep/wake.
 
 Details: docs/remote-supervisor.md, docs/owner-questions.md,
 docs/supervised-ui-slice.md, docs/file-admission.md.
 
-Provenance: every surface above is event-built (Nov 2026) and part of the
-judged runtime. Two owner-only surfaces are prior ai-workbench predecessor
-surfaces, excluded from the judged runtime and hidden from judge sessions:
-Pending actions from Workbench (external-actions bridge) and Worker &
-machine (window/agent activity file). See the provenance table in
-[Submission draft](docs/submission-draft.md).
+Provenance: everything above was built during the event (Nov 2026) and is
+part of the judged entry. Two owner-only areas belong to an earlier
+internal product, are excluded from the judged entry and hidden from
+judge visits: Pending actions from Workbench and Worker & machine. See
+the provenance table in [Submission draft](docs/submission-draft.md).
 
 ## Prerequisites
 
@@ -131,10 +132,10 @@ uv run --locked remote-ai-operator serve --hosted
 ```
 
 A visitor enters that code once; the server issues a signed session cookie and a
-server-generated subject, so one visitor's task IDs are not readable or actionable
-from another session. Set `OPERATOR_SESSION_SECRET` (at least 32 random characters) to
-keep a subject stable across a process restart; without it the token is still
-unforgeable but sessions end with the process. Hosted sessions start on the labelled
+server-generated visitor identity, so one visitor's tasks are not readable or
+actionable from another visit. Set `OPERATOR_SESSION_SECRET` (at least 32 random
+characters) to keep a visit stable across a process restart; without it the token
+is still unforgeable but visits end with the process. Hosted sessions start on the labelled
 scripted reference at zero inference cost. A visitor Meta key can be attached for
 that session only and detached at any time; it is never used as identity, never
 persisted and never falls back to another key. Real Meta work additionally requires
@@ -145,10 +146,11 @@ own finite limits against their own key; the server pins the model via
 
 This mode is a localhost preview of the session flow. A hosted judge deployment is
 live at `https://kubajaworski999--hosted.us-east.modal.run`; the access code is
-supplied separately and never committed. It uses the single-writer volume described
-in ADR-0005; `modal deploy --strategy recreate modal_app.py` is the only supported
-deploy. Logout is process-local: a retained token stays valid until expiry after a
-restart, so rotate the signing secret to invalidate all sessions. See
+supplied separately and never committed. It uses the durable volume described
+in ADR-0005, written by one process at a time; `modal deploy --strategy recreate
+modal_app.py` is the only supported deploy. Logging out ends only that browser's
+visit: a kept token stays valid until expiry after a restart, so rotate the
+signing secret to invalidate all visits. See
 [docs/modal-hosting.md](docs/modal-hosting.md), ADR-0004 and ADR-0005.
 
 ## Tests
@@ -172,9 +174,9 @@ scripted actor or passing API test does not establish model coding quality.
 
 After approving, use **Run approved import**. The applied Python function executes
 inside Docker and returns accepted issues plus row errors to the sample table.
-The target digest must still match the approved bytes. Generated code is never
+The applied file must still match the approved bytes. Generated code is never
 imported into the web server. The sample has one existing issue with ID `existing`;
-its import results are transient, with no extra domain database or external service.
+its import results are transient, with no extra database or external service.
 
 ## Optional real-browser acceptance
 
@@ -221,18 +223,19 @@ docs/decisions.md and docs/sample-task.md for scope and provenance.
 ## Spending and interrupted actions
 
 The phone shows the configured server allowance, reserved cost estimate, request
-count and expiry. **Refresh spending** is read-only. Reservations include failed
-requests and are not a provider invoice or accountwide billing cap. Configure
-limits in the private grant before starting the server; the phone cannot raise them.
-Unavailable, expired or exhausted allowances block new inference in the UI while
-preserving local review and validation. Server admission remains authoritative.
+count and expiry. **Refresh spending** only reloads the display. Reservations
+include failed requests and are not a provider invoice or account-wide billing
+cap. Owners configure limits in the private grant before starting the server;
+judges set their own limits in the app (Limits step) against their own key.
+Unavailable, expired or exhausted allowances block new AI work in the UI while
+preserving local review and validation. The server's check is final.
 Authenticated GET `/api/allowance` reports metadata without starting a model call.
 
 **Inspect interrupted action** checks saved effects after an interrupted operation.
-It never resumes inference, replays an edit or approves a change. Active execution
-is refused. Matching saved bytes can establish a paused or completed state;
-mismatched bytes require manual inspection. Then review the state before choosing
-the next action.
+It never resumes AI work, replays an edit or approves a change. Active execution
+is refused. If the saved result matches, it establishes a paused or completed
+state; if it doesn't match, inspect manually. Then review the state before
+choosing the next action.
 
 The pinned Docker image includes GNU `timeout`; each validation/preview command
 also has an internal kill deadline if its host controller disappears. The host
@@ -244,16 +247,16 @@ The Tasks section has an explicit **New task** control. It clears selected progr
 review evidence and sample results without deleting or cancelling saved work.
 **Create and run new task** creates a separate task. The empty saved-task option
 also opens this draft; refreshing the saved list keeps the draft selected.
-Progress uses numbers local to the selected task, showing its latest 20 entries
-by default. **Show all activity** expands that task's history. Internal global
-receipt cursors remain unchanged and are not used as display numbers.
+Activity entries are numbered within the selected task, latest 20 first.
+**Show all activity** expands that task's history.
 
-Modal is selected for hosted judging. The optional Sandbox runner is implemented and
-live-accepted on the real runtime; the hosted access-code session flow, signed
-resumable sessions and single-writer durable state are implemented, covered by local
-tests and live-verified at `https://kubajaworski999--hosted.us-east.modal.run`
-(scripted mode, no judge grant enabled). Personal local Docker hosting remains the
-default. See [docs/modal-hosting.md](docs/modal-hosting.md) for evidence and limits.
+Modal is selected for hosted judging. The optional Sandbox test box is implemented
+and tested live on the real runtime; the hosted access-code visit flow, signed
+visits that survive restarts and durable state written by one process at a time
+are implemented, covered by local tests and live-verified at
+`https://kubajaworski999--hosted.us-east.modal.run`
+(offline reference, no judge grant enabled). Personal local Docker hosting remains
+the default. See [docs/modal-hosting.md](docs/modal-hosting.md) for evidence and limits.
 
 ## License
 

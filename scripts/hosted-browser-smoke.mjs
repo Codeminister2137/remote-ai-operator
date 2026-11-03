@@ -70,7 +70,7 @@ try {
   await evaluate("document.getElementById('accessCode').value = " + JSON.stringify(config.accessCode));
   await evaluate("document.getElementById('enterSession').click()");
   await waitFor("!document.getElementById('submit').disabled");
-  if (!(await evaluate("document.querySelector('.notice').textContent.includes('SCRIPTED OFFLINE')"))) throw new Error("Session did not start on the offline reference");
+  if (!(await evaluate("document.querySelector('.notice').textContent.includes('Offline reference')"))) throw new Error("Session did not start on the offline reference");
   if (await evaluate("document.getElementById('accessCode').value !== ''")) throw new Error("Access code retained in the page field");
   await evaluate("document.getElementById('submit').click()");
   await waitFor("document.getElementById('status').textContent === 'awaiting_approval' && !document.getElementById('approve').disabled");
