@@ -127,5 +127,28 @@ if (!/attended/i.test(String(el("planSettingsNote").textContent))) {
   fail("owner note lost supervision: " + el("planSettingsNote").textContent);
 }
 
-console.log("ACTIONS-OK approve gating, submit reasons, hosted note");
+// Key note names the funding key of the active mode, never the wrong one.
+run(`selectedMode = {mode: "baseten"}; modelRouteConfigured = true; sessionKeyAttached = true; keyNote();`);
+if (!String(el("key-note").textContent).includes("event Baseten key")) {
+  fail("baseten note misnames funding: " + el("key-note").textContent);
+}
+run(`selectedMode = {mode: "meta"}; modelRouteConfigured = true; sessionKeyAttached = true; keyNote();`);
+if (!String(el("key-note").textContent).includes("own Meta account")) {
+  fail("meta note lost funding: " + el("key-note").textContent);
+}
+run(`selectedMode = {mode: "baseten"}; modelRouteConfigured = false; keyNote();`);
+if (!String(el("key-note").textContent).includes("No Baseten model route")) {
+  fail("baseten no-route note wrong: " + el("key-note").textContent);
+}
+run(`selectedMode = null; modelRouteConfigured = false; keyNote();`);
+if (!String(el("key-note").textContent).includes("No Meta model route")) {
+  fail("pre-session no-route note wrong: " + el("key-note").textContent);
+}
+
+// Run/supervision scopes are visible inline, not only inside tips.
+if (!html.includes("Run mode (next plan)")) fail("run scope hint missing");
+if (!html.includes("Supervision (all runs)")) fail("supervision scope hint missing");
+if (html.includes("next task you create")) fail("stale run scope tip kept");
+
+console.log("ACTIONS-OK approve gating, submit reasons, hosted note, key funding, scope hints");
 process.exit(0);
