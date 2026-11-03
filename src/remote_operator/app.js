@@ -1367,11 +1367,11 @@ function grantLimitsValid() {
   const usd = element("grantUsd").value.trim();
   const usdNumber = usd === "" ? NaN : Number(usd);
   const requestsOk = Number.isInteger(requests) && requests >= 1 && requests <= 100;
-  const usdOk = Number.isFinite(usdNumber) && usdNumber > 0;
+  const usdOk = Number.isFinite(usdNumber) && usdNumber > 0 && usdNumber <= 100;
   if (!requestsOk || !usdOk) {
     const problems = [];
     if (!requestsOk) problems.push("Max requests must be a whole number from 1 to 100");
-    if (!usdOk) problems.push("Approved USD must be a positive number, e.g. 2.50");
+    if (!usdOk) problems.push("Approved USD must be a number between 0 and 100, e.g. 2.50");
     element("grant-note").textContent = "Check your limits: " + problems.join("; ") + ".";
     return false;
   }

@@ -172,6 +172,12 @@ class JudgeFlowTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.put(
             "/api/judges/grant",
             headers=self.auth,
+            json={"max_requests": 10, "approved_usd": "999999999"},
+        )
+        self.assertEqual(response.status_code, 409)
+        response = await self.client.put(
+            "/api/judges/grant",
+            headers=self.auth,
             json={"max_requests": 10, "approved_usd": "2.50"},
         )
         self.assertEqual(response.status_code, 200)

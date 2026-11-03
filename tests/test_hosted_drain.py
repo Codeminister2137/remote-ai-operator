@@ -273,6 +273,23 @@ class HostedDrainHttpTests(unittest.IsolatedAsyncioTestCase):
         missing = await second.get(f"/api/supervisor/runs/{run_id}", headers=self.auth)
         self.assertEqual(missing.status_code, 404)
 
+    async def test_subjects_cannot_read_each_others_tasks(self):
+        first = await self._serve()
+        second = await self._serve()
+        created = await first.post(
+            "/api/tasks", headers=self.auth, json={"prompt": "first subject work"}
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        task_id = created.json()["id"]
+        missing = await second.get(f"/api/tasks/{task_id}", headers=self.auth)
+        self.assertEqual(missing.status_code, 404, missing.text)
+        listed = await second.get("/api/tasks", headers=self.auth)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertNotIn(task_id, [task["id"] for task in listed.json()])
+        sweep_hosted_once(self.scoped, self.sessions)
+        missing = await second.get(f"/api/tasks/{task_id}", headers=self.auth)
+        self.assertEqual(missing.status_code, 404, missing.text)
+
     async def test_keyless_live_job_parks_and_resumes_on_reattach(self):
         borrowed = []
         factory = make_actor_factory(borrowed)

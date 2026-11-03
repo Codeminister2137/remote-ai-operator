@@ -116,6 +116,28 @@ class RunnerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("Usage: sandbox_bootstrap.py", result.stdout)
 
+    def test_sandbox_bootstrap_rejects_non_string_payload_before_writes(self):
+        import json
+
+        files = {
+            "/workspace/issue_import.py": "x",
+            "/checks/run_checks.py": "x",
+            "/checks/test_import.py": "x",
+            "/checks/preview.py": "x",
+        }
+        for bad in (123, None, ["x"], "y" * 65_537):
+            result = subprocess.run(
+                [sys.executable, "-I", "-B", "src/remote_operator/sandbox_bootstrap.py"],
+                input=json.dumps(
+                    {"files": files, "entry": "preview.py", "timeout": 5, "payload": bad}
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Sandbox payload", result.stderr)
+
     def test_public_api_docstrings_exist_and_behavior_unchanged(self):
         """Regression: docstring-only change preserves public API and behavior."""
         import inspect

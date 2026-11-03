@@ -227,6 +227,8 @@ class BasetenModel:
 
     def _redact(self, value):
         if isinstance(value, str):
+            if not self._key:
+                return value
             return value.replace(self._key, "[redacted]")
         if isinstance(value, list):
             return [self._redact(item) for item in value]

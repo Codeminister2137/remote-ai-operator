@@ -51,6 +51,9 @@ def main():
     timeout = request["timeout"]
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= 120:
         raise ValueError("Invalid sandbox deadline")
+    payload = request.get("payload")
+    if not isinstance(payload, str) or len(payload.encode()) > 65_536:
+        raise ValueError("Sandbox payload must be a string within 65536 bytes")
     for name, source in files.items():
         if not isinstance(source, str) or len(source.encode()) > 65_536:
             raise ValueError("Sandbox source allowance exceeded")
@@ -64,7 +67,7 @@ def main():
     output = bytearray()
     failure = None
     with tempfile.TemporaryFile() as input_file:
-        input_file.write(request["payload"].encode())
+        input_file.write(payload.encode())
         input_file.seek(0)
         child = subprocess.Popen(
             [sys.executable, "-I", "-B", "-c", CHILD_SETUP, request["entry"], str(timeout)],
