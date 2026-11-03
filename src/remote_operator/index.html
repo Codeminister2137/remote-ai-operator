@@ -1,10 +1,16 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Remote AI Operator</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Remote AI Operator</title><meta name="description" content="Remote AI Operator: supervise the work, approve the result.">
+<meta name="theme-color" content="#101725">
+<meta property="og:title" content="Remote AI Operator"><meta property="og:description" content="Supervise the work. Approve the result."><meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101725'/%3E%3Cpath d='M9 16.5l5.5 5.5L23 10.5' stroke='%23a3c8ff' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head>
 <body><main>
+<div id="quickBanner" role="status"><p><strong>Quick start:</strong> Connect, then run a demo task or supervise a plan — and review every change in one place. Nothing is applied until you approve.</p><p><button id="tourStart" title="Start the 6-stop guided tour of this page.">Take the guided tour</button><button id="quickBannerDismiss" class="secondary" title="Hide this banner for now.">Dismiss</button></p></div>
 <header><p class="eyebrow">REMOTE AI OPERATOR</p><h1>Supervise the work.<br>Approve the result.</h1>
 <p class="notice">Load execution mode before submitting</p></header>
+<ol id="pipelineStepper" class="stepper" aria-label="Pipeline progress"><li id="stepConnect" aria-current="step"><span class="step-dot" aria-hidden="true"></span><span>Connect</span></li><li id="stepPlan"><span class="step-dot" aria-hidden="true"></span><span>Plan</span></li><li id="stepReview"><span class="step-dot" aria-hidden="true"></span><span>Review</span></li><li id="stepRun"><span class="step-dot" aria-hidden="true"></span><span>Run</span></li><li id="stepDone"><span class="step-dot" aria-hidden="true"></span><span>Done</span></li></ol>
 <section id="judge-start"><h2>Judge quick start — 3 steps</h2>
 <p><strong>Scripted or Meta?</strong> <em>Scripted offline reference</em> runs a fixed pre-written demo: no AI, no cost, no key needed. <em>Meta mode</em> runs real AI coding, charged to your own Meta account — it needs your key attached below.</p>
 <ol><li><strong>Connect:</strong> enter the demo access code in Access, log in as judge, then set spending limits (Max requests + Approved USD) and attach your Meta API key in “Your model key”.</li>
@@ -31,14 +37,14 @@
 <button id="attachKey" disabled title="Attach your key to enable real Meta inference, charged to your account.">Attach key</button><button id="detachKey" class="secondary" disabled title="Remove your key. Tasks fall back to the offline reference.">Remove key</button></div>
 <p id="key-note">Without a key this demo runs a fixed offline reference and makes no model requests.</p>
 <button id="leaveSession" class="secondary" title="Leave the demo session.">Leave demo</button><p id="session-note"></p></section>
-<nav id="viewNav" aria-label="Views"><button id="navDemo" class="secondary">Demo</button><button id="navSupervise" class="secondary">Supervise</button><button id="navReview" class="secondary">Review</button><button id="navActivity" class="secondary">Activity</button></nav>
+<nav id="viewNav" aria-label="Views"><button id="navDemo" class="secondary" title="Show the Demo view: request, review, try the feature.">Demo</button><button id="navSupervise" class="secondary" title="Show the Supervise view: threads, plans, runs.">Supervise</button><button id="navReview" class="secondary" title="Show the Review view: the one approval place.">Review</button><button id="navActivity" class="secondary" title="Show the Activity view: worker, spending, power.">Activity</button><button id="tourStartNav" class="secondary" title="Start the 6-stop guided tour of this page.">Tour</button></nav>
 <p id="message" role="status" aria-live="polite"></p>
 <div id="view-demo">
 <section><h2>Demo step 1 · Request</h2><p>This demo asks the agent to add spreadsheet-style import to a small issue tracker: accept valid issues and explain why other rows cannot be imported.</p><label>Request<textarea id="prompt" rows="4">Implement CSV import for the issue tracker, including validation and duplicate handling, following the sample acceptance specification.</textarea></label>
 <div class="dictate-row" data-dictate-for="prompt" hidden><button id="dictate-prompt" class="secondary" aria-pressed="false" title="Dictate into the request using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and submit.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-prompt"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-prompt" class="dictate-status" role="status" aria-live="polite"></span></div>
 <label class="check"><input id="inject" type="checkbox" checked> Inject one transport failure after the edit</label>
-<button id="submit" disabled>Create and run new task</button></section>
-<section><h2>Demo step 2 · Review &amp; approve</h2><p id="demoReviewStatus">No task yet. Create and run one above; you will be brought to the Review view when it is ready.</p><button id="demoReviewCta" class="secondary" disabled>Open in Review</button></section>
+<button id="submit" disabled title="Create a task from the request above and run it.">Create and run new task</button></section>
+<section><h2>Demo step 2 · Review &amp; approve</h2><p id="demoReviewStatus">No task yet. Create and run one above; you will be brought to the Review view when it is ready.</p><button id="demoReviewCta" class="secondary" disabled title="Open the current task in the Review view.">Open in Review</button></section>
 <section><h2>Demo step 3 · Try the feature the agent built</h2>
 <p>After approving, run the new importer on the example below. Each line is one issue. Two valid issues should appear in the table; the duplicate ID and missing title should appear as row errors. You can edit the input and try again. This checks the approved code with sample data; it does not save issues to a live tracker.</p>
 <label>CSV input<textarea id="csv" rows="7" title="Sample CSV. Each line is one issue; edit it and run again.">id,title,status
@@ -46,40 +52,40 @@ existing,Duplicate,open
 new-1,First imported issue,OPEN
 new-2,,closed
 new-3,Another imported issue,closed</textarea></label>
-<button id="preview" disabled title="Run the approved importer on the CSV above. Sample data only; nothing is saved.">Run approved import</button>
+<button id="preview" disabled aria-describedby="tip-preview">Run approved import</button><span class="toggletip-wrap"><button type="button" class="toggletip" id="tipBtn-preview" aria-expanded="false" aria-controls="tip-preview" aria-label="More about running the approved import">?</button><span class="toggletip-bubble" id="tip-preview" role="status" hidden>Run the approved importer on the CSV above. Sample data only; nothing is saved.</span></span>
 <h3>Accepted issues</h3><div class="table-wrap"><table><thead><tr><th>ID</th><th>Title</th><th>Status</th></tr></thead><tbody id="issues"></tbody></table></div>
 <h3>Row errors</h3><ul id="import-errors"></ul></section>
-<section><h2>Demo task history</h2><button id="newTask" class="secondary" disabled>Start new demo draft</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
-<button id="refreshTasks" class="secondary" disabled>Refresh tasks</button><p>Past demo runs live here. Choose one to review its progress or result. Selecting never starts work or approves a change.</p>
+<section><h2>Demo task history</h2><button id="newTask" class="secondary" disabled title="Start a new demo draft. Saved work is unchanged.">Start new demo draft</button><label>Recent tasks<select id="recentTasks" disabled><option value="">Connect to load your tasks</option></select></label>
+<button id="refreshTasks" class="secondary" disabled title="Reload the recent task list.">Refresh tasks</button><p>Past demo runs live here. Choose one to review its progress or result. Selecting never starts work or approves a change.</p>
 <details><summary>Recover another task by ID</summary>
 <label>Task ID<input id="taskId" autocomplete="off" placeholder="Optional: paste a saved task ID"></label>
-<button id="load" class="secondary" disabled>Load task</button></details>
+<button id="load" class="secondary" disabled title="Load the task with the ID above.">Load task</button></details>
 <p id="recovery-note" hidden></p>
-<button id="reconcile" class="secondary" disabled>Inspect interrupted action</button>
-<button id="resume" class="secondary" disabled>Resume paused task</button><button id="cancel" class="secondary" disabled>Cancel task</button></section>
+<button id="reconcile" class="secondary" disabled title="Inspect the saved result of a possibly interrupted action. Does not repeat it.">Inspect interrupted action</button>
+<button id="resume" class="secondary" disabled title="Resume the paused task.">Resume paused task</button><button id="cancel" class="secondary" disabled title="Request cancellation. A started atomic application cannot be revoked.">Cancel task</button></section>
 </div>
 <div id="view-supervise" hidden>
 <section><h2>Supervise · Chat</h2>
 <p>Start here. Chat to plan work, write the plan, then check run settings below and approve. Anything you write here counts as your reply. Planning never starts implementation or approves a change. One thread is one planning conversation; its topic is just the title you give it.</p>
 <label>Threads<select id="supervisorThreads" disabled><option value="">Connect to load threads</option></select></label>
 <label>New thread topic<input id="supervisorNewTopic" autocomplete="off" placeholder="Name a new thread, e.g. Fix login bug"></label>
-<button id="supervisorOpen" class="secondary" disabled>Create thread</button>
-<button id="refreshSupervisor" class="secondary" disabled>Refresh threads</button>
+<button id="supervisorOpen" class="secondary" disabled title="Create a thread with the topic above.">Create thread</button>
+<button id="refreshSupervisor" class="secondary" disabled title="Reload threads and runs.">Refresh threads</button>
 <ol id="supervisorTranscript"></ol>
 <label>Message<textarea id="supervisorInput" rows="3"></textarea></label>
 <div class="dictate-row" data-dictate-for="supervisorInput" hidden><button id="dictate-supervisor" class="secondary" aria-pressed="false" title="Dictate into the chat message using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and press Send.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-supervisor"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-supervisor" class="dictate-status" role="status" aria-live="polite"></span></div>
-<button id="supervisorSend" disabled>Send message</button>
+<button id="supervisorSend" disabled title="Send this message in the open thread.">Send message</button>
 <h3>Plan</h3><pre id="supervisorPlan">No plan written.</pre>
-<button id="supervisorWritePlan" class="secondary" disabled>Write plan</button></section>
+<button id="supervisorWritePlan" class="secondary" disabled title="Write a plan from the open thread.">Write plan</button></section>
 <section><h2>Supervise · Run settings</h2>
-<label>Run mode<select id="runMode" disabled title="Planning only approves without queuing work; Plan + implement queues a run on approval."><option value="implement">Plan + implement (queues a run on approval)</option><option value="planning">Planning only (approves, queues nothing)</option></select></label>
-<div id="supervision-row"><label>Supervision<select id="supervisionMode" disabled title="Unattended mails every run outcome; attended mails only runs needing you."><option value="attended">Attended (you watch, mail only when needed)</option><option value="unattended">Unattended (mail me on run events)</option></select></label>
+<label>Run mode<select id="runMode" disabled aria-describedby="tip-runMode"><option value="implement">Plan + implement (queues a run on approval)</option><option value="planning">Planning only (approves, queues nothing)</option></select><span class="toggletip-wrap"><button type="button" class="toggletip" id="tipBtn-runMode" aria-expanded="false" aria-controls="tip-runMode" aria-label="More about run mode">?</button><span class="toggletip-bubble" id="tip-runMode" role="status" hidden>Planning only approves without queuing work; Plan + implement queues a run on approval.</span></span></label>
+<div id="supervision-row"><label>Supervision<select id="supervisionMode" disabled aria-describedby="tip-supervisionMode"><option value="attended">Attended (you watch, mail only when needed)</option><option value="unattended">Unattended (mail me on run events)</option></select><span class="toggletip-wrap"><button type="button" class="toggletip" id="tipBtn-supervisionMode" aria-expanded="false" aria-controls="tip-supervisionMode" aria-label="More about supervision">?</button><span class="toggletip-bubble" id="tip-supervisionMode" role="status" hidden>Unattended mails every run outcome; attended mails only runs needing you.</span></span></label>
 <p id="mailState">Connect to check mail readiness.</p></div>
 <p id="approvalWindow">Approval window: unknown until connected.</p>
 <p id="execMode">Execution mode: unknown until connected.</p>
 <p id="settingsNote" role="status" aria-live="polite"></p>
 <p id="planSettingsNote">Approval settings will appear here once a plan is written.</p>
-<button id="supervisorApprovePlan" disabled>Approve plan</button></section>
+<button id="supervisorApprovePlan" disabled title="Approve the written plan. Queues a run unless planning-only.">Approve plan</button></section>
 <section><h2>Supervise · Runs</h2><ul id="supervisorRuns"><li>No runs yet.</li></ul>
 <p>Approved runs start automatically about every 30 seconds. Only runs for the open thread are shown. Press Review on a finished run to open its task.</p>
 <p id="supervisorNote" role="status" aria-live="polite"></p></section>
@@ -90,18 +96,18 @@ new-3,Another imported issue,closed</textarea></label>
 <p id="approvalSubject">No task selected.</p>
 <p id="verdict">No candidate yet.</p>
 <ul id="approvalChecklist"><li>No checks yet.</li></ul>
-<div id="diffModeBar"><button id="diffModeSplit" class="secondary">Split: old vs new</button><button id="diffModeUnified" class="secondary">Unified</button></div>
+<div id="diffModeBar"><button id="diffModeSplit" class="secondary" title="Show old and new side by side.">Split: old vs new</button><button id="diffModeUnified" class="secondary" title="Show one unified diff.">Unified</button></div>
 <pre id="diff">No candidate yet.</pre>
 <div id="diffSplit" hidden></div>
 <h3>Validation evidence</h3><p id="validation-summary">Not validated.</p><details><summary>Show validation receipt</summary><pre id="evidence">Not validated.</pre></details>
 <p>Approval applies this candidate only to the separate local demo target. It does not push or deploy.</p>
-<button id="approve" disabled title="Apply this verified change to the local demo target only. No push or deploy.">Approve this verified change</button>
-<button id="revalidate" class="secondary" disabled title="Run a fresh validation. The previous approval becomes invalid.">Run fresh validation</button><button id="reject" class="secondary" disabled title="Reject this change. The demo target is left unchanged.">Reject change</button>
+<button id="approve" disabled aria-describedby="tip-approve">Approve this verified change</button><span class="toggletip-wrap"><button type="button" class="toggletip" id="tipBtn-approve" aria-expanded="false" aria-controls="tip-approve" aria-label="More about approving this change">?</button><span class="toggletip-bubble" id="tip-approve" role="status" hidden>Apply this verified change to the local demo target only. No push or deploy.</span></span>
+<button id="revalidate" class="secondary" disabled aria-describedby="tip-revalidate">Run fresh validation</button><span class="toggletip-wrap"><button type="button" class="toggletip" id="tipBtn-revalidate" aria-expanded="false" aria-controls="tip-revalidate" aria-label="More about fresh validation">?</button><span class="toggletip-bubble" id="tip-revalidate" role="status" hidden>Run a fresh validation. The previous approval becomes invalid.</span></span><button id="reject" class="secondary" disabled aria-describedby="tip-reject">Reject change</button><span class="toggletip-wrap"><button type="button" class="toggletip" id="tipBtn-reject" aria-expanded="false" aria-controls="tip-reject" aria-label="More about rejecting this change">?</button><span class="toggletip-bubble" id="tip-reject" role="status" hidden>Reject this change. The demo target is left unchanged.</span></span>
 <div id="question-block" hidden><h3>Owner question — work is parked, other runs continue</h3><p id="pending-question"></p><label>Your answer<textarea id="answer-text" rows="3"></textarea></label>
 <div class="dictate-row" data-dictate-for="answer-text" hidden><button id="dictate-answer" class="secondary" aria-pressed="false" title="Dictate into the answer using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and press Send.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-answer"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-answer" class="dictate-status" role="status" aria-live="polite"></span></div>
 <button id="send-answer" disabled title="Send your answer and resume the parked work.">Send answer and resume</button></div></section>
-<section><h2>Task progress</h2><p><span id="status">No task selected</span></p><p id="event-summary">Create a new task or select a saved task.</p><button id="eventHistory" class="secondary" hidden>Show all activity</button><ol id="events"></ol></section>
-<section><h2>Pending actions from Workbench</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
+<section><h2>Task progress</h2><p><span id="status">No task selected</span></p><p id="event-summary">Create a new task or select a saved task.</p><button id="eventHistory" class="secondary" hidden title="Toggle between latest and full activity.">Show all activity</button><ol id="events"></ol></section>
+<section><h2>Pending actions from Workbench</h2><button id="refreshExternal" class="secondary" disabled title="Reload pending Workbench actions.">Refresh</button>
 <p>External actions from AI Workbench or other connected tools appear here. Approve or reject the exact pending change.</p>
 <ul id="externalActions"><li>Connect to load pending actions.</li></ul></section>
 </div>
@@ -109,7 +115,7 @@ new-3,Another imported issue,closed</textarea></label>
 <section><h2>Worker &amp; machine</h2><p id="drainStatus">Worker status unknown.</p><p id="windowStatus">Window status unknown.</p><p id="agentsStatus">Agents status unknown.</p></section>
 <section><h2>Spending</h2><p id="allowance-summary">Connect to view this server's allowance.</p>
 <p id="allowance-note">Local reserved estimates are separate from provider credits and final billing.</p>
-<button id="refreshAllowance" class="secondary" disabled>Refresh spending</button></section>
+<button id="refreshAllowance" class="secondary" disabled title="Reload spending status.">Refresh spending</button></section>
 <section><h2>Sleep this PC</h2>
 <div id="power-block"><p>Owner only. Schedules a real workstation sleep you can cancel. Wake-on-LAN keeps working afterwards.</p>
 <label>Delay<select id="powerDelay" disabled title="How long to wait before this PC sleeps."><option value="60">1 minute</option><option value="300">5 minutes</option><option value="900">15 minutes</option><option value="3600">60 minutes</option></select></label>
@@ -117,4 +123,5 @@ new-3,Another imported issue,closed</textarea></label>
 <button id="powerCancel" class="secondary" disabled title="Cancel a scheduled sleep.">Cancel scheduled sleep</button>
 <p id="powerStatus">No sleep scheduled.</p></div></section>
 </div>
+<div id="tourOverlay" hidden><div class="tour-scrim"></div><div id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle"><p id="tourKicker">Guided tour · <span id="tourCount">1 of 6</span></p><h2 id="tourTitle">Welcome</h2><p id="tourText"></p><p><button id="tourBack" class="secondary" title="Go back one tour step.">Back</button><button id="tourNext" title="Go to the next tour step.">Next</button><button id="tourSkip" class="secondary" title="End the tour.">Skip tour</button></p></div></div>
 </main></body></html>

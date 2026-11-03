@@ -30,4 +30,27 @@ body{overflow-x:hidden}button{max-width:100%}
 @keyframes dictate-pulse{50%{opacity:.55}}
 .dictate-lang{display:inline-flex;gap:8px;align-items:center;margin:0;font-size:.9rem}
 .dictate-lang select{width:auto;margin-top:0;padding:10px}
-.dictate-status{font-size:.85rem;color:#a3c8ff;flex-basis:100%}
+.dictate-status{font-size:.85rem;color:#a3c8ff;flex-basis:100%}
+main{padding-left:max(18px, env(safe-area-inset-left, 0px));padding-right:max(18px, env(safe-area-inset-right, 0px));padding-bottom:max(70px, env(safe-area-inset-bottom, 0px))}
+button{min-height:24px;min-width:24px}summary{min-height:24px}
+#viewNav{position:sticky;top:0;z-index:60;background:#101725;padding-top:max(10px, env(safe-area-inset-top, 0px));padding-bottom:10px;border-bottom:1px solid #31415e}
+#quickBanner{background:#1d2a4a;border:1px solid #8ab5ff;border-radius:14px;padding:8px 20px;margin:0 0 16px}
+#quickBanner p{color:#e8eef9}
+.stepper{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0;padding:0}
+.stepper li{flex:1 1 100px;display:flex;align-items:center;gap:8px;background:#192337;border:1px solid #31415e;border-radius:10px;padding:10px 12px;color:#b5c3da;font-size:.9rem;min-height:24px}
+.step-dot{width:12px;height:12px;border-radius:50%;background:#344461;flex:none}
+.stepper li.done{color:#a3c8ff}.stepper li.done .step-dot{background:#8ae9a8}
+.stepper li.current{border-color:#8ab5ff;color:#e8eef9}.stepper li.current .step-dot{background:#8ab5ff}
+.toggletip-wrap{position:relative;display:inline-block;margin:5px 8px 5px 0}
+.toggletip{width:28px;height:28px;min-width:28px;min-height:28px;padding:0;border-radius:50%;margin:0;font-size:.85rem;line-height:1;background:#344461;color:#e8eef9}
+.toggletip[aria-expanded="true"]{background:#8ab5ff;color:#10203b}
+.toggletip-bubble{position:absolute;top:calc(100% + 6px);left:0;z-index:70;width:max-content;max-width:min(260px,70vw);background:#0b1220;border:1px solid #8ab5ff;border-radius:8px;padding:10px 12px;font-size:.85rem;color:#e8eef9;line-height:1.5}
+#tourOverlay{position:fixed;inset:0;z-index:100}
+#tourOverlay[hidden]{display:none}
+.tour-scrim{position:absolute;inset:0;background:rgba(4,8,16,.65)}
+#tourCard{position:fixed;z-index:101;background:#192337;border:1px solid #8ab5ff;border-radius:14px;padding:20px;max-width:min(340px,calc(100vw - 32px));box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#tourCard.tour-center{top:50%;left:50%;transform:translate(-50%,-50%)}
+#tourKicker{color:#8ab5ff;font-size:.8rem;letter-spacing:.08em;margin-top:0}
+.tour-highlight{outline:3px solid #8ab5ff !important;outline-offset:3px;border-radius:8px}
+@media (max-width:380px){main{padding-left:max(12px, env(safe-area-inset-left, 0px));padding-right:max(12px, env(safe-area-inset-right, 0px));padding-bottom:max(60px, env(safe-area-inset-bottom, 0px))}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important;scroll-behavior:auto !important}}
