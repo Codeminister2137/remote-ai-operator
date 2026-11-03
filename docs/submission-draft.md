@@ -4,6 +4,13 @@
 
 Remote AI Operator
 
+## Problem statement
+
+Build for Your World: personal tooling the author actually uses. This entry
+started as the author's own need — supervising real coding work from a phone
+while away from the PC — and the hosted demo, phone UI and agentic loop below
+are the working result, not a mock-up.
+
 ## Short description
 
 Supervise real Meta-powered coding from a phone, with controlled tools, retained
@@ -16,6 +23,27 @@ A remote agent needs more than chat: visible effects, controlled execution, reco
 that avoids repeating mutations, and a clear human decision before application.
 This standalone prototype demonstrates that complete supervised loop.
 
+## The agentic loop (entry narrative)
+
+Four stages, each visible in the served UI and each human-gated:
+
+1. **Supervisor plans** — the owner chats with the model in a planning
+   thread (Supervise view); the model drafts, the owner refines, then
+   **Write plan** renders a reviewable plan artifact.
+2. **Owner approves** — the exact plan bytes (or the exact code diff at
+   task level) are reviewed with host-observed evidence and approved with
+   a single-use, expiring nonce. Changed bytes invalidate approval.
+3. **Drain executes** — the bounded drain worker (`supervisor-drain`,
+   also running inside `serve` and as the hosted multi-subject sweeper)
+   reconciles interrupted jobs without replay and runs queued ones
+   oldest-first, stopping again at the human approval boundary.
+4. **Inbox notifies** — the owner is pulled back only when needed: the
+   🔔 inbox bell jumps to parked owner questions and run outcomes;
+   unattended/attended mail receipts cover terminal job events.
+
+The loop composes: a plan approval enqueues a run, the run stops at code
+approval, the approved code runs as the visible feature outcome.
+
 ## What we built during the event
 
 A new independent Python application: Meta Responses tool adapter, scoped coding
@@ -25,6 +53,31 @@ single-writer durable hosted deployment on Modal. A small issue-tracker CSV impo
 provides a visible feature outcome. Existing
 private-product implementation is not included or required. Dependencies retain
 their own licenses; the original repository is Apache-2.0. See BUILD_LOG.md and DEMO.md.
+
+This entry was built with Muse Code: the agentic coding assistant authored,
+tested and iterated the implementation under the author's direction, with every
+change reviewed by the author before landing.
+
+## Provenance: event-built vs prior
+
+Every major feature, labelled. Only event-built work is part of the judged
+runtime; prior work is excluded infrastructure the demo neither needs nor shows
+to judges.
+
+| Feature | Provenance | Notes |
+| --- | --- | --- |
+| Meta Responses tool adapter, scoped controller | Event-built (Nov 2026) | `meta.py`, `control.py`; BUILD_LOG-dated |
+| Task/event store, allowance ledger, reconciliation | Event-built (Nov 2026) | Durable receipts, exact-source approval |
+| Isolated validation (Docker + Modal Sandbox) | Event-built (Nov 2026) | Live-accepted on both runners |
+| Served UI: wizard, chat, review, split diff, evidence | Event-built (Nov 2026) | `app.js` / `index.html`, incl. loop3 branches |
+| Inbox bell + owner-question parking | Event-built (Nov 2026) | `ask_owner` op, bell jump-to-unread |
+| Supervisor threads, plans, drain worker, hosted sweeper | Event-built (Nov 2026) | `supervisor.py`, `supervisor_runner.py` |
+| Dictation (Meta STT + Web Speech fallback) | Event-built (Nov 2026) | `stt.py`; audio never persisted |
+| PL→EN server-side normalization | Event-built (Nov 2026) | `translate.py`; source preserved |
+| Judge accounts, self-grants, hosted sessions, Modal deploy | Event-built (Nov 2026) | ADR-0004/0005, single-writer volume |
+| AI Workbench predecessor product | Prior — excluded | Private product; not in this tree, not required |
+| Pending-actions bridge (`external_actions.py`) | Prior surface — hidden from judges | Neutral contract for Workbench-side callers; judge sessions hide the section |
+| Window/agent activity file (`window-status.json`) | Prior producer — hidden from judges | Reader is event-built; the producing agent is external; judge sessions hide the section |
 
 ## Meaningful use of Meta tooling
 
@@ -66,7 +119,8 @@ Complete runnable source, lockfile, sample project, protected tests and configur
 examples are prepared. An offline scripted mode exercises control flow without
 provider credits and is visibly labelled; it is not evidence of Meta authorship.
 Live use requires an authorized Meta key, verified credits and a finite private grant.
-Follow docs/reviewer-guide.md.
+Follow docs/reviewer-guide.md, or the 5-minute path in docs/judge-card.md
+(code → wizard → sample → approve → try-it).
 
 A hosted scripted demo is deployed at
 `https://kubajaworski999--hosted.us-east.modal.run` and is live-verified (access
