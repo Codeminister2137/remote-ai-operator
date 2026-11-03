@@ -253,6 +253,7 @@ async function refreshExternalActions() {
   }));
 }
 element("refreshExternal").onclick = () => guarded(refreshExternalActions);
+let diffMode = "split"; // Declared before first use: applyDiffMode() runs at load below.
 element("diffModeSplit").onclick = () => { diffMode = "split"; applyDiffMode(); };
 element("diffModeUnified").onclick = () => { diffMode = "unified"; applyDiffMode(); };
 applyDiffMode();
@@ -412,7 +413,6 @@ function parseUnifiedDiff(text) {
   return files.filter((f) => f.left.length || f.right.length);
 }
 // ==split-parser-end==
-let diffMode = "split";
 function renderDiffViews(text, emptyText) {
   element("diff").textContent = text || emptyText;
   const box = element("diffSplit");
