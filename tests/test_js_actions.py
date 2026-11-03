@@ -1,7 +1,8 @@
 """UI behavior checks: approve gating, submit reasons, hosted plan note.
 
 Executes the real ``app.js`` against DOM stubs and drives ``actions()``
-states (frontend-audit batch, Nov 3).
+states (frontend-audit batch, Nov 3). Also covers mode-aware key-note
+funding copy and inline run/supervision scope hints.
 """
 
 import shutil

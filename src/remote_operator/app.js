@@ -1173,8 +1173,15 @@ function displayMode(configuration) {
      "Owner credential stays in page memory. Remote access is not configured.");
 }
 function keyNote() {
+  const baseten = selectedMode !== null && selectedMode.mode === "baseten";
   if (!modelRouteConfigured) {
-    element("key-note").textContent = "No Meta model route is configured on this host. Every task runs the fixed offline reference.";
+    element("key-note").textContent = baseten ?
+      "No Baseten model route is configured on this host. Every task runs the fixed offline reference." :
+      "No Meta model route is configured on this host. Every task runs the fixed offline reference.";
+    return;
+  }
+  if (baseten) {
+    element("key-note").textContent = "Baseten mode: inference is funded by the event Baseten key, not your key.";
     return;
   }
   element("key-note").textContent = sessionKeyAttached ?
