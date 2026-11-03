@@ -111,6 +111,13 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("innerHTML", javascript)
         self.assertNotIn("localStorage", javascript)
 
+    async def test_nav_shows_worker_status_pill(self):
+        page = (await self.client.get("/")).text
+        self.assertIn('id="workerPill"', page)
+        javascript = (await self.client.get("/app.js")).text
+        for marker in ("updateWorkerPill", "lastRunsActive", "pill-work", "pill-alert"):
+            self.assertIn(marker, javascript)
+
     async def test_mode_is_server_owned_and_queued_cancellation_is_authenticated(self):
         config = (await self.client.get("/api/config", headers=self.auth)).json()
         self.assertEqual(

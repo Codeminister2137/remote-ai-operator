@@ -25,6 +25,35 @@ let hiddenPollTicks = 0;
 let triedApproved = false;
 let currentView = "demo";
 let reviewContext = null; // {run_id, thread_id, thread_topic} when opened from a run.
+let lastDrain = null; // Latest /api/window drain health (owner serve only).
+let lastRunsActive = false; // Any supervised run executing.
+let lastAgentsActive = false; // Any reported agent on a task.
+function updateWorkerPill() {
+  const pill = element("workerPill");
+  if (!pill) return;
+  if (selectedMode === null) {
+    pill.textContent = "○ Offline";
+    pill.className = "secondary nav-action pill-off";
+    pill.title = "Not connected to the server.";
+    return;
+  }
+  if (lastDrain && lastDrain.alive === false) {
+    pill.textContent = "● Worker stalled";
+    pill.className = "secondary nav-action pill-alert";
+    pill.title = "The worker is not running. Queued work is stalled — see Activity.";
+    return;
+  }
+  const running = (task && ["running", "applying"].includes(task.status)) || lastRunsActive || lastAgentsActive;
+  if (running) {
+    pill.textContent = "● Working";
+    pill.className = "secondary nav-action pill-work";
+    pill.title = "Something is running. See Activity for details.";
+    return;
+  }
+  pill.textContent = "○ Idle";
+  pill.className = "secondary nav-action pill-idle";
+  pill.title = "Connected. Nothing is running.";
+}
 function switchView(name) {
   currentView = name;
   for (const view of ["demo", "supervise", "review", "activity"]) {
@@ -38,6 +67,7 @@ element("navDemo").onclick = () => switchView("demo");
 element("navSupervise").onclick = () => switchView("supervise");
 element("navReview").onclick = () => switchView("review");
 element("navActivity").onclick = () => switchView("activity");
+element("workerPill").onclick = () => switchView("activity");
 element("demoReviewCta").onclick = () => switchView("review");
 switchView("demo");
 const defaultPrompt = element("prompt").value;
@@ -196,6 +226,7 @@ function actions() {
   if (typeof supervisorActions === "function") supervisorActions();
   renderWizard();
   if (typeof updateStepper === "function") updateStepper();
+  updateWorkerPill();
 }
 async function recentTasks() {
   const session = sessionRevision;
@@ -262,14 +293,18 @@ async function refreshWindowStatus() {
     "Agents: none active.";
   element("agentsStatus").title = agents.length ?
     "Raw: " + agents.map((a) => a.name + "=" + (a.status || "?")).join("; ") : "";
+  lastAgentsActive = agents.some((a) => (a.task || "idle") !== "idle");
   const health = status.drain;
+  lastDrain = health || null;
   if (!health || !health.alive) {
     element("drainStatus").textContent = "Worker: NOT draining. Queued runs are stalled; restart serve on the PC.";
+    updateWorkerPill();
     return;
   }
   const ago = health.last_pass === null ? "never" : Math.max(0, Math.round(Date.now() / 1000 - health.last_pass)) + "s ago";
   element("drainStatus").textContent = "Worker: draining, last pass " + ago +
     " (passes " + health.passes + ", errors " + health.errors + ", restarts " + health.restarts + ", serve PID " + status.serve_pid + ").";
+  updateWorkerPill();
 }
 async function refreshExternalActions() {
   const session = sessionRevision;
@@ -699,6 +734,8 @@ async function loadSupervisorRuns() {
   if (session !== sessionRevision || selectedMode === null) return;
   const all = Array.isArray(payload) ? payload : (payload.runs || []);
   const runs = supervisorThreadId ? all.filter((run) => run.thread_id === supervisorThreadId) : all;
+  lastRunsActive = all.some((run) => ["running", "applying"].includes(run.status));
+  updateWorkerPill();
   const list = element("supervisorRuns");
   if (!runs.length) {
     const empty = document.createElement("li");
