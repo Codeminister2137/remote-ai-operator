@@ -222,6 +222,26 @@ class MetaModel:
         self._prompt_digest = None
         self.last_receipt = None
 
+    def session_credential(self):
+        """Resolve the current credential for a metered sibling call.
+
+        Reads the session key source (or the configured static key) without
+        retaining anything new; the caller must send it only in the
+        Authorization header and never log or store it.
+        """
+        if self._key_source is not None:
+            key = self._key_source()
+        else:
+            key = self._key
+        if not isinstance(key, str) or not key:
+            raise ValueError("Session credential unavailable")
+        return key
+
+    @property
+    def http_transport(self):
+        """Explicit HTTP transport override (None selects the default)."""
+        return self._transport
+
     def _redact(self, value):
         if isinstance(value, str):
             return value.replace(self._key, "[redacted]")

@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.body_limit import RequestBodyLimitMiddleware
 
 from remote_operator.control import Operator
@@ -24,6 +24,7 @@ from remote_operator.credentials import SessionCapacity, SessionUnavailable
 from remote_operator.external_actions import ExternalActionBridge
 from remote_operator.hosted import AccessRefused
 from remote_operator.scripted import ScriptedModel
+from remote_operator.translate import TranslationError, normalize_language, translator_from_model
 
 SESSION_COOKIE = "operator_session"
 SESSION_HEADER = "x-operator-request"
@@ -97,18 +98,27 @@ class PowerSleep(BaseModel):
     delay_seconds: int = Field(default=60, ge=10, le=3600)
 
 
-class AnswerInput(BaseModel):
+class LanguageInput(BaseModel):
+    """One author-tagged input; unknown tags are rejected with 422."""
+
     model_config = ConfigDict(extra="forbid")
+    language: str = Field(default="en", min_length=1, max_length=32)
+
+    @field_validator("language")
+    @classmethod
+    def _language_must_be_allowed(cls, value: str) -> str:
+        return normalize_language(value)
+
+
+class AnswerInput(LanguageInput):
     text: str = Field(min_length=1, max_length=2000)
 
 
-class ThreadTopic(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ThreadTopic(LanguageInput):
     topic: str = Field(min_length=1, max_length=4000)
 
 
-class ThreadMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ThreadMessage(LanguageInput):
     text: str = Field(min_length=1, max_length=4000)
 
 
@@ -164,6 +174,11 @@ class Principal:
     hosted: bool = False
     key_attached: bool = False
     external_actions: ExternalActionBridge | None = None
+
+
+def _translator_for(who: Principal):
+    """Metered translator for the principal's actor, or None when offline."""
+    return translator_from_model(who.model_factory())
 
 
 def _origin(public_origin):
@@ -253,6 +268,10 @@ def _base_app(*, public_origin, sessions):
     @app.exception_handler(ValueError)
     async def invalid_action(request, exc):
         return JSONResponse({"detail": str(exc)}, status_code=409)
+
+    @app.exception_handler(TranslationError)
+    async def translation_failed(request, exc):
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status, headers=exc.headers)
 
     @app.exception_handler(KeyError)
     async def unknown_task(request, exc):
@@ -377,7 +396,9 @@ def _task_routes(app, principal):
         """Answer a parked owner question and requeue the linked runs."""
         from remote_operator.supervisor_runner import SupervisorRunner
 
-        task = who.operator.answer(task_id, body.text)
+        task = who.operator.answer(
+            task_id, body.text, language=body.language, translator=_translator_for(who)
+        )
         resumed = SupervisorRunner(who.operator).resume_answered(task_id)
         return {"status": task["status"], "resumed_runs": [r["run_id"] for r in resumed]}
 
@@ -461,7 +482,8 @@ def _supervisor_routes(app, principal):
     @app.post("/api/supervisor/threads")
     def open_thread(body: ThreadTopic, who: Annotated[Principal, Depends(principal)]):
         """Open a supervisor planning thread."""
-        return Supervisor(who.operator).open_thread(body.topic)
+        supervisor = Supervisor(who.operator, translator=_translator_for(who))
+        return supervisor.open_thread(body.topic, language=body.language)
 
     @app.get("/api/supervisor/threads")
     def list_threads(
@@ -480,8 +502,10 @@ def _supervisor_routes(app, principal):
         thread_id: str, body: ThreadMessage, who: Annotated[Principal, Depends(principal)]
     ):
         """Append a chat message and generate the planning reply."""
-        supervisor = Supervisor(who.operator)
-        return supervisor.post_message(who.model_factory(), thread_id, body.text)
+        supervisor = Supervisor(who.operator, translator=_translator_for(who))
+        return supervisor.post_message(
+            who.model_factory(), thread_id, body.text, language=body.language
+        )
 
     @app.post("/api/supervisor/threads/{thread_id}/plan")
     def write_plan(thread_id: str, who: Annotated[Principal, Depends(principal)]):

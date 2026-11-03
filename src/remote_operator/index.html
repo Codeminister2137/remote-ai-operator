@@ -67,9 +67,10 @@ new-3,Another imported issue,closed</textarea></label>
 <button id="refreshSupervisor" class="secondary" disabled>Refresh threads</button>
 <ol id="supervisorTranscript"></ol>
 <label>Message<textarea id="supervisorInput" rows="3"></textarea></label>
+<label>Message language<select id="supervisorLang" data-send-lang-for="supervisorInput" title="Language of messages and new thread topics. Non-English text is translated to English on the server before planning; the original is preserved."><option value="en" selected>English</option><option value="pl">Polski</option></select></label>
 <div class="dictate-row" data-dictate-for="supervisorInput" hidden><button id="dictate-supervisor" class="secondary" aria-pressed="false" title="Dictate into the chat message using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and press Send.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-supervisor"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-supervisor" class="dictate-status" role="status" aria-live="polite"></span></div>
 <button id="supervisorSend" disabled>Send message</button>
-<h3>Plan</h3><pre id="supervisorPlan">No plan written.</pre>
+<h3>Plan</h3><p id="supervisorTranslationNote" role="status" aria-live="polite"></p><pre id="supervisorPlan">No plan written.</pre>
 <button id="supervisorWritePlan" class="secondary" disabled>Write plan</button></section>
 <section><h2>Supervise · Run settings</h2>
 <label>Run mode<select id="runMode" disabled title="Planning only approves without queuing work; Plan + implement queues a run on approval."><option value="implement">Plan + implement (queues a run on approval)</option><option value="planning">Planning only (approves, queues nothing)</option></select></label>

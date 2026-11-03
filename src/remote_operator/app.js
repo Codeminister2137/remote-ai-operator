@@ -287,7 +287,8 @@ element("powerCancel").onclick = () => guarded(async () => {
 });
 element("send-answer").onclick = () => guarded(async () => {
   const text = element("answer-text").value;
-  const out = await api("/api/tasks/" + element("taskId").value.trim() + "/answer", "POST", {text});
+  const language = dictateLangTag(element("dictate-lang-answer").value);
+  const out = await api("/api/tasks/" + element("taskId").value.trim() + "/answer", "POST", {text, language});
   element("answer-text").value = "";
   await refresh();
   message("Answer recorded. " + (out.resumed_runs.length ? out.resumed_runs.length + " run(s) resuming." : "Task paused; run it to resume."));
@@ -321,8 +322,45 @@ function renderSupervisorTranscript(history) {
   element("supervisorTranscript").replaceChildren(...history.map((turn) => {
     const item = document.createElement("li");
     item.textContent = turn.role + ": " + turn.text;
+    if (turn.role === "user" && turn.translated && typeof turn.source_text === "string") {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "Show original (" + String(turn.source_lang || "?").toUpperCase() + ")";
+      const source = document.createElement("p");
+      source.textContent = turn.source_text;
+      const meta = document.createElement("p");
+      meta.textContent = "Language: " + (turn.source_lang || "?") + " · Translator: " + (turn.translator || "?");
+      details.append(summary, source, meta);
+      item.append(details);
+    }
     return item;
   }));
+}
+function renderTranslationNote(thread) {
+  const note = element("supervisorTranslationNote");
+  const history = thread.history || [];
+  const untranslated = history.some((turn) => turn.role === "user" && !turn.translated &&
+    typeof turn.source_lang === "string" && turn.source_lang !== "en");
+  if (untranslated) {
+    note.textContent = "Contains untranslated non-English text — planning ran on source text.";
+    return;
+  }
+  const langs = new Set();
+  const engines = new Set();
+  if (typeof thread.prompt_lang === "string" && thread.prompt_lang !== "en" &&
+      thread.prompt_translator && thread.prompt_translator !== "none") {
+    langs.add(thread.prompt_lang.toUpperCase());
+    engines.add(thread.prompt_translator);
+  }
+  for (const turn of history) {
+    if (turn.role === "user" && turn.translated) {
+      langs.add(String(turn.source_lang || "?").toUpperCase());
+      engines.add(turn.translator || "?");
+    }
+  }
+  note.textContent = langs.size ?
+    "Includes text translated from " + [...langs].join(", ") + " via " + [...engines].join(", ") +
+    " — source preserved below; verify meaning before approving." : "";
 }
 async function loadSupervisorThreads() {
   const session = sessionRevision;
@@ -347,6 +385,7 @@ async function openSupervisorThread(id) {
   supervisorPlanNonce = approval && approval.nonce ? approval.nonce : "";
   element("supervisorThreads").value = id;
   renderSupervisorTranscript(detail.thread.history || []);
+  renderTranslationNote(detail.thread);
   element("supervisorPlan").textContent = detail.thread.plan ? detail.thread.plan.markdown : "No plan written.";
   if (detail.thread.status === "planned" && approval && typeof approval.expires === "number") {
     const remainingMs = approval.expires * 1000 - Date.now();
@@ -504,6 +543,10 @@ async function loadSupervisorRuns() {
   list.replaceChildren(...runs.map((run) => {
     const item = document.createElement("li");
     item.textContent = run.status + " · " + run.run_id.slice(0, 12) + " ";
+    const manifest = run.translation_manifest;
+    if (manifest && Array.isArray(manifest.langs) && manifest.langs.length) {
+      item.textContent += "(translated from " + manifest.langs.join(", ").toUpperCase() + ") ";
+    }
     const review = document.createElement("button");
     review.textContent = "Review"; review.className = "secondary";
     review.onclick = () => guarded(() => supervisorStep(async () => {
@@ -533,7 +576,7 @@ element("supervisorThreads").onchange = () => guarded(() => supervisorStep(async
 element("supervisorOpen").onclick = () => guarded(() => supervisorStep(async () => {
   const topic = element("supervisorNewTopic").value.trim();
   if (!topic) { supervisorNote("Enter a thread topic first."); return; }
-  const opened = await api("/api/supervisor/threads", "POST", {topic});
+  const opened = await api("/api/supervisor/threads", "POST", {topic, language: element("supervisorLang").value});
   element("supervisorNewTopic").value = "";
   await loadSupervisorThreads();
   await openSupervisorThread(opened.id);
@@ -542,7 +585,7 @@ element("supervisorSend").onclick = () => guarded(() => supervisorStep(async () 
   if (!supervisorThreadId) return;
   const text = element("supervisorInput").value.trim();
   if (!text) return;
-  await api("/api/supervisor/threads/" + supervisorThreadId + "/messages", "POST", {text});
+  await api("/api/supervisor/threads/" + supervisorThreadId + "/messages", "POST", {text, language: element("supervisorLang").value});
   element("supervisorInput").value = "";
   await openSupervisorThread(supervisorThreadId);
 }));
@@ -992,6 +1035,7 @@ const Dictation = (() => {
   return { supported, create, stopActive, setActive, clearActive };
 })();
 function dictateLangName(code) { return code === "pl-PL" ? "polski" : "English"; }
+function dictateLangTag(code) { return code === "pl-PL" ? "pl" : "en"; }
 function dictateErrorMessage(code) {
   switch (code) {
     case "not-allowed":
@@ -1079,6 +1123,8 @@ function wireDictation(fieldId, buttonId, langId, statusId) {
         // If the user typed during dictation, append to their edit instead of clobbering it.
         field.value = (field.value === lastRendered || field.value === base) ?
           joinDictation(base, finalText) : joinDictation(field.value, finalText);
+        const buddy = document.querySelector('[data-send-lang-for="' + fieldId + '"]');
+        if (buddy) buddy.value = dictateLangTag(lang.value); // Dictated text is tagged on send.
         status.textContent = "Dictation added (" + dictateLangName(lang.value) +
           "). Review and edit before sending. Nothing was sent.";
       } else if (status.textContent === "") {
