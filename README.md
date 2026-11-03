@@ -143,10 +143,13 @@ an owner-configured grant; without one the key endpoint refuses. Judges instead
 register with the access code, log in with their own password, and set their
 own finite limits against their own key; the server pins the model via
 `OPERATOR_JUDGE_MODEL` and the owner pays nothing (see docs/modal-hosting.md).
+Without an attached key, visitors can only run the free scripted reference —
+every real model call spends the visitor's own key under their own limits.
 
 This mode is a localhost preview of the session flow. A hosted judge deployment is
-live at `https://kubajaworski999--hosted.us-east.modal.run`; the access code is
-supplied separately and never committed. It uses the durable volume described
+live at `https://kubajaworski999--hosted.us-east.modal.run` with open entry: the
+visitor access code is `KwWLEbaTQ-YzSDqn4pqEz5hdnVHBShJz` (public by owner decision 2026-11-03 — entry is
+open to everyone; sessions stay isolated per visit). It uses the durable volume described
 in ADR-0005, written by one process at a time; `modal deploy --strategy recreate
 modal_app.py` is the only supported deploy. Logging out ends only that browser's
 visit: a kept token stays valid until expiry after a restart, so rotate the
