@@ -74,7 +74,7 @@ function startPolling() {
   progressTimer = setInterval(async () => {
     if (pollBusy) return;
     pollBusy = true;
-    try { await refresh(); await refreshExternalActions(); try { await loadSupervisorRuns(); } catch { /* Runs refresh is best-effort inside the task poll. */ } }
+    try { await refresh(); await refreshExternalActions(); try { await loadSupervisorRuns(); } catch { /* Runs refresh is best-effort inside the task poll. */ } try { await pollInbox(); } catch { /* Inbox refresh is best-effort inside the task poll. */ } }
     catch (error) { stopPolling(); message(error.message); }
     finally { pollBusy = false; }
   }, 1000);
@@ -317,12 +317,133 @@ function updatePlanSettingsNote() {
     "Approving now: " + mode + " " + supervision :
     "Approval settings will appear here once a plan is written.";
 }
+// ---- First-seen timestamps ----
+// The server stores no per-turn or per-event timestamps, so the page stamps
+// each item with the local time it was first shown. Times are stable within
+// this page session and labelled as first-seen via each <time> title.
+const turnSeenAt = new Map();
+const eventSeenAt = new Map();
+function seenTime(map, key) {
+  let at = map.get(key);
+  if (!at) {
+    at = Date.now();
+    if (map.size > 2000) map.delete(map.keys().next().value);
+    map.set(key, at);
+  }
+  return at;
+}
+function seenTimeElement(map, key) {
+  const at = seenTime(map, key);
+  const when = document.createElement("time");
+  when.dateTime = new Date(at).toISOString();
+  when.title = "First shown by this page at " + new Date(at).toLocaleString() +
+    ". The server keeps no per-message timestamps.";
+  when.textContent = new Date(at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  return when;
+}
+// ---- Inbox bell (GET /api/supervisor/inbox, same tick as the task poll) ----
+let inboxCursor = 0;
+let inboxItems = []; // oldest first, capped
+let inboxAckSeq = 0;
+let ownerFloorSeq = -1; // owner messages at/below the connect-time tip are history, not unread
+const threadAckSeq = new Map(); // thread_id -> seq acked by opening the thread
+const taskAckSeq = new Map(); // task_id -> seq acked by opening the task
+function inboxUnread() {
+  return inboxItems.filter((item) =>
+    (item.type === "owner_message" || item.type === "parked_question") &&
+    item.seq > inboxAckSeq &&
+    (item.type !== "owner_message" || (item.seq > ownerFloorSeq &&
+      item.thread_id !== supervisorThreadId && (threadAckSeq.get(item.thread_id) || 0) < item.seq)) &&
+    (item.type !== "parked_question" || (!item.answered && (taskAckSeq.get(item.task_id) || 0) < item.seq)));
+}
+async function pollInbox() {
+  const session = sessionRevision;
+  if (selectedMode === null) return;
+  const data = await api("/api/supervisor/inbox?since=" + inboxCursor);
+  if (session !== sessionRevision || selectedMode === null) return;
+  if (ownerFloorSeq < 0 && typeof data.cursor === "number") ownerFloorSeq = data.cursor;
+  if (Array.isArray(data.items) && data.items.length) {
+    inboxItems.push(...data.items);
+    if (inboxItems.length > 50) inboxItems.splice(0, inboxItems.length - 50);
+  }
+  if (typeof data.cursor === "number") inboxCursor = data.cursor;
+  renderBell();
+}
+function renderBell() {
+  const count = inboxUnread().length;
+  const badge = element("inboxCount");
+  badge.hidden = count === 0;
+  badge.textContent = count > 9 ? "9+" : String(count);
+  element("inboxBell").setAttribute("aria-label",
+    count ? "Inbox: " + count + " unread. Activate to jump to the newest unread item." : "Inbox: clear.");
+}
+element("inboxBell").onclick = () => guarded(async () => {
+  if (selectedMode === null) { message("Connect first: the inbox needs an established session."); return; }
+  try { await pollInbox(); } catch { /* Jump with the items already held. */ }
+  const unread = inboxUnread();
+  const target = unread[unread.length - 1] || inboxItems[inboxItems.length - 1];
+  if (!target) { message("Inbox is clear. Nothing needs you."); return; }
+  inboxAckSeq = Math.max(inboxAckSeq, target.seq);
+  if (target.type === "owner_message") {
+    await loadSupervisorThreads();
+    await openSupervisorThread(target.thread_id);
+    switchView("supervise");
+    message("Jumped to thread '" + (target.topic || target.thread_id.slice(0, 12)) + "'.");
+  } else if (target.type === "parked_question") {
+    await chooseTask(target.task_id);
+    switchView("review");
+    message("Jumped to the parked task. Answer the owner question in the Review view to resume it.");
+  } else if (target.run_id) {
+    const detail = await api("/api/supervisor/runs/" + target.run_id);
+    if (detail.task_id) {
+      await chooseTask(detail.task_id);
+      switchView("review");
+      message("Jumped to run " + target.run_id.slice(0, 12) + " (" + target.status + ").");
+    } else if (target.thread_id) {
+      await loadSupervisorThreads();
+      await openSupervisorThread(target.thread_id);
+      switchView("supervise");
+      message("Run " + target.run_id.slice(0, 12) + " has no linked task yet; opened its thread.");
+    }
+  }
+  renderBell();
+});
+let typingRow = null;
+function showTyping() {
+  hideTyping();
+  const list = element("supervisorTranscript");
+  typingRow = document.createElement("li");
+  typingRow.className = "chat-msg chat-assistant chat-typing";
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble typing-dots";
+  bubble.setAttribute("aria-label", "Assistant is typing");
+  for (let i = 0; i < 3; i++) bubble.append(document.createElement("span"));
+  typingRow.append(bubble);
+  list.append(typingRow);
+  list.scrollTop = list.scrollHeight;
+}
+function hideTyping() {
+  if (typingRow) { typingRow.remove(); typingRow = null; }
+}
 function renderSupervisorTranscript(history) {
-  element("supervisorTranscript").replaceChildren(...history.map((turn) => {
+  typingRow = null; // replaceChildren below drops any typing row; clear the stale ref.
+  element("supervisorTranscript").replaceChildren(...history.map((turn, index) => {
+    const mine = turn.role === "user";
     const item = document.createElement("li");
-    item.textContent = turn.role + ": " + turn.text;
+    item.className = "chat-msg " + (mine ? "chat-user" : "chat-assistant");
+    const who = document.createElement("span");
+    who.className = "chat-who";
+    who.textContent = mine ? "You" : "Assistant" + (turn.route ? " · " + turn.route : "");
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    bubble.textContent = turn.text;
+    const when = seenTimeElement(turnSeenAt,
+      supervisorThreadId + ":" + index + ":" + turn.role + ":" + String(turn.text).length);
+    when.className = "chat-time";
+    item.append(who, bubble, when);
     return item;
   }));
+  element("supervisorTranscript").scrollTop = element("supervisorTranscript").scrollHeight;
 }
 async function loadSupervisorThreads() {
   const session = sessionRevision;
@@ -359,6 +480,8 @@ async function openSupervisorThread(id) {
   } else {
     supervisorNote("Thread open. Chat to refine requirements, then write the plan.");
   }
+  threadAckSeq.set(id, inboxCursor); // Opening a thread reads its owner-message items.
+  renderBell();
   supervisorActions();
 }
 function threadTopic(thread_id) {
@@ -542,9 +665,14 @@ element("supervisorSend").onclick = () => guarded(() => supervisorStep(async () 
   if (!supervisorThreadId) return;
   const text = element("supervisorInput").value.trim();
   if (!text) return;
-  await api("/api/supervisor/threads/" + supervisorThreadId + "/messages", "POST", {text});
-  element("supervisorInput").value = "";
-  await openSupervisorThread(supervisorThreadId);
+  showTyping();
+  try {
+    await api("/api/supervisor/threads/" + supervisorThreadId + "/messages", "POST", {text});
+    element("supervisorInput").value = "";
+    await openSupervisorThread(supervisorThreadId);
+  } finally {
+    hideTyping();
+  }
 }));
 element("supervisorWritePlan").onclick = () => guarded(() => supervisorStep(async () => {
   if (!supervisorThreadId) return;
@@ -568,9 +696,14 @@ function renderEvents() {
   const start = showAllEvents ? 0 : Math.max(0, taskEvents.length - 20);
   element("events").replaceChildren(...taskEvents.slice(start).map((event, offset) => {
     const item = document.createElement("li");
-    item.textContent = (start + offset + 1) + " · " + (eventNames[event.kind] || event.kind) + (event.payload.injected ? " (injected)" : "") +
+    item.className = "event-row";
+    const label = document.createElement("span");
+    label.textContent = (start + offset + 1) + " · " + (eventNames[event.kind] || event.kind) + (event.payload.injected ? " (injected)" : "") +
       (event.payload.name ? " · " + event.payload.name : "") +
       (event.kind === "transport_failed" && typeof event.payload.detail === "string" ? " · " + event.payload.detail : "");
+    const when = seenTimeElement(eventSeenAt, (task ? task.id : "") + ":" + event.sequence);
+    when.className = "event-time";
+    item.append(label, document.createTextNode(" "), when);
     return item;
   }));
   element("event-summary").textContent = !task ? "Create a new task or select a saved task." :
@@ -610,6 +743,8 @@ async function chooseTask(id) {
   element("taskId").value = id;
   element("issues").replaceChildren(); element("import-errors").replaceChildren();
   clearTaskView();
+  taskAckSeq.set(id, inboxCursor); // Opening a task reads its parked-question items.
+  renderBell();
   await refresh();
   if (task && typeof task.prompt === "string") element("prompt").value = task.prompt;
 }
@@ -816,6 +951,8 @@ async function loadMode(session) {
       if (replies && replies.value) await openSupervisorThread(replies.value);
     }
     await loadSupervisorRuns();
+    if (session !== sessionRevision) return;
+    try { await pollInbox(); } catch { /* Bell seeds on the next task tick. */ }
     if (session !== sessionRevision) return;
   } catch (error) {
     supervisorNote("Supervisor data unavailable: " + error.message);
