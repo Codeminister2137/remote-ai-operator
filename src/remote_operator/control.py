@@ -278,6 +278,17 @@ class Operator:
         finally:
             self.lock.release()
 
+    def _read_spec(self) -> str:
+        """Serve the registered task specification (read-only, never writable)."""
+        spec = self.seed.parent.parent / "docs" / "sample-task.md"
+        try:
+            text = spec.read_text(encoding="utf-8")
+        except OSError:
+            raise ValueError("Task specification is not available") from None
+        if len(text.encode()) > MAX_SOURCE_BYTES:
+            raise ValueError("Task specification exceeds size limit")
+        return text
+
     def _check_control(self, task_id, deadline):
         if self.store.cancelled(task_id):
             raise RunCancelled()
@@ -291,7 +302,18 @@ class Operator:
             expected = {"path"} if operation.name == "read_file" else {"path", "content"}
             if set(operation.arguments) != expected:
                 raise ValueError("Invalid file operation arguments")
-            name = admitted_file(operation.arguments["path"])
+            if operation.name == "read_file" and operation.arguments["path"] in {
+                "sample-task.md",
+                "docs/sample-task.md",
+            }:
+                return {"content": self._read_spec()}
+            try:
+                name = admitted_file(operation.arguments["path"])
+            except ValueError:
+                logger.debug(
+                    "rejected %s path: %r", operation.name, operation.arguments.get("path")
+                )
+                raise
             if operation.name == "read_file":
                 return {"content": read_named(workspace, name)}
             write_named(workspace, name, operation.arguments["content"])

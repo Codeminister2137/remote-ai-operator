@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 ENDPOINT = "https://api.meta.ai/v1/responses"
 INSTRUCTIONS = (
     "Implement the user's issue-import task in the registered synthetic repository. "
-    "Inspect issue_import.py, implement the documented feature, and run validation. "
+    "Inspect issue_import.py and sample-task.md (the task specification), "
+    "implement the documented feature, and run validation. "
     "The public API is import_issues(text, existing=()), where existing is a sequence of issue dicts. "
     "Return a dict with keys issues and errors (never a tuple): issues is a list of dicts "
     "with string id,title,status; errors is a list of dicts with integer row and string message. "
@@ -63,8 +64,9 @@ TOOLS = [
             "path": {
                 "type": "string",
                 "description": (
-                    "issue_import.py or a single-segment basename ending "
-                    ".js/.html; the host rejects anything else"
+                    "issue_import.py, sample-task.md (the task specification), "
+                    "or a single-segment basename ending .js/.html; "
+                    "the host rejects anything else"
                 ),
             }
         },
