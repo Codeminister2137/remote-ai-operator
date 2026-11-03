@@ -640,7 +640,11 @@ def create_app(
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
         """Return local deployment configuration."""
-        return {"mode": mode, "live_inference": mode == "meta", "https_origin": public_origin}
+        return {
+            "mode": mode,
+            "live_inference": mode in {"meta", "baseten"},
+            "https_origin": public_origin,
+        }
 
     @app.get("/api/drain", dependencies=[Depends(owner)])
     def drain_health():
