@@ -186,6 +186,20 @@ class HostedSessions:
     def key_for(self, token, subject):
         return self.sessions.key_for(token, subject=subject)
 
+    def subjects_with_keys(self):
+        """Return sorted subjects holding a live attached provider key."""
+        return self.sessions.subjects_with_keys()
+
+    def key_source_for_subject(self, subject):
+        """Return a per-call key borrower for ``subject``, or None without a key.
+
+        Used by the hosted drain worker, which resolves subjects from
+        workspace directories rather than request tokens. See
+        :meth:`SessionKeys.key_source_for_subject`.
+        """
+        valid_subject(subject)
+        return self.sessions.key_source_for_subject(subject)
+
     def close(self, token):
         """Revoke this session for the current process and drop its key.
 

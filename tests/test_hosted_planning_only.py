@@ -1,8 +1,10 @@
-"""Hosted planning-only enforcement: approve(execute=true) can never queue a run.
+"""Hosted planning-only safety net: without a drain, execute=true cannot queue.
 
-The hosted serve branch starts no drain worker, so a queued hosted job would sit
-in queued forever with no error. The hosted approve path therefore refuses
-execute=true with 409 and only records planning-only approvals (execute=false).
+When no hosted drain worker consumes runs, a queued hosted job would sit in
+queued forever with no error. The hosted approve path therefore refuses
+execute=true with 409 and only records planning-only approvals
+(execute=false). Hosted serve always runs the sweeper (see
+tests/test_hosted_drain.py); these tests pin the drain-disabled fallback.
 All model traffic is mocked; no inference, no network.
 """
 

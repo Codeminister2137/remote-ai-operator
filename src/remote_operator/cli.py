@@ -179,15 +179,22 @@ def main():
                 scoped = ScopedOperators(
                     operator.root / "visitors", seed, lambda: DockerValidator(checks)
                 )
+                sessions = HostedSessions(access_code, secret=session_secret)
+                from remote_operator.supervisor_runner import supervise_hosted_drain_worker
+
+                _, hosted_status = supervise_hosted_drain_worker(
+                    scoped, sessions, grant=grant, judge_model=judge_model
+                )
                 application = create_hosted_app(
                     scoped,
-                    HostedSessions(access_code, secret=session_secret),
+                    sessions,
                     grant,
                     public_origin=args.public_origin,
                     judge_accounts=JudgeAccounts(
                         operator.root / "visitors" / "judge_accounts.sqlite3"
                     ),
                     judge_model=judge_model,
+                    hosted_drain=hosted_status,
                 )
             else:
                 token = os.environ.get("OPERATOR_ACCESS_TOKEN", "")

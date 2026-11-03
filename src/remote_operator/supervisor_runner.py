@@ -20,6 +20,8 @@ import threading
 import time
 from pathlib import Path
 
+from remote_operator.credentials import SessionUnavailable
+from remote_operator.scripted import ScriptedModel
 from remote_operator.supervisor import RUNS_DIRNAME
 
 MAX_PROMPT_CHARS = 4000
@@ -28,6 +30,10 @@ OPERATOR_BUSY = "Another operator action is active"
 TASK_NOT_READY = "Task is not ready; reconcile uncertain effects first"
 TERMINAL_JOB = {"completed", "failed", "cancelled"}
 DRAIN_WORKER_INTERVAL_SECONDS = 30.0
+KEY_MISSING_NOTE = "Provider key detached; re-attach the key to resume"
+KEY_RESUMED_NOTE = "Key re-attached; resuming"
+HOSTED_MAX_SUBJECTS_PER_PASS = 32
+HOSTED_MAX_JOBS_PER_SUBJECT = 5
 # Unattended mails every terminal run outcome; attended mails only the run
 # events that need the owner (plus completed-after-questions, which always
 # mails when a sender is configured, in every mode).
@@ -197,6 +203,45 @@ class SupervisorRunner:
             outcomes.append({"run_id": job.get("run_id", path.stem), "status": "queued"})
         return outcomes
 
+    def resume_waiting_on_key(self) -> list[dict]:
+        """Requeue jobs parked for a missing provider key; the key is back."""
+        outcomes = []
+        for path in sorted(self._runs.glob("*.json")):
+            job = self._read_job(path)
+            if job is None or job.get("status") != "waiting_on_key":
+                continue
+            job["status"] = "queued"
+            job["note"] = KEY_RESUMED_NOTE
+            self._write_job(path, job)
+            outcomes.append({"run_id": job.get("run_id", path.stem), "status": "queued"})
+        return outcomes
+
+    def park_keyless_live_jobs(self) -> list[dict]:
+        """Park live-planned queued jobs while no provider key is attached.
+
+        Jobs whose planning thread used live inference are parked as
+        ``waiting_on_key`` so they are never silently downgraded to the
+        offline reference. Scripted-planned jobs are left queued for the
+        normal scripted drain. Parking never fails a job.
+        """
+        outcomes = []
+        for path in sorted(self._runs.glob("*.json")):
+            job = self._read_job(path)
+            if job is None or job.get("status") not in {"queued", "paused"}:
+                continue
+            if not _job_needs_live(self.operator, job):
+                continue
+            job["status"] = "waiting_on_key"
+            job["note"] = KEY_MISSING_NOTE
+            self._thread_event(
+                job, "run_parked", {"run_id": job.get("run_id", path.stem)}
+            )
+            self._write_job(path, job)
+            outcomes.append(
+                {"run_id": job.get("run_id", path.stem), "status": "waiting_on_key"}
+            )
+        return outcomes
+
     def drain(self, model, *, max_jobs: int = 10) -> list[dict]:
         """Run up to ``max_jobs`` queued jobs, oldest first; one worker only."""
         if type(max_jobs) is not int or not 1 <= max_jobs <= 100:
@@ -249,6 +294,11 @@ class SupervisorRunner:
             task = self.operator.run(task_id, model)
         except TimeoutError as exc:
             return self._after_timeout(path, job, task_id, str(exc))
+        except SessionUnavailable:
+            # Logout, revocation or expiry mid-drain: park the job so a
+            # re-attached key resumes it. Never a failure: the linked task is
+            # paused by the run boundary and resumes without replay.
+            return self._park_key_missing(path, job)
         except ValueError as exc:
             message = str(exc)
             if OPERATOR_BUSY in message or TASK_NOT_READY in message:
@@ -279,6 +329,18 @@ class SupervisorRunner:
         self._write_job(path, job)
         return {"run_id": job.get("run_id", path.stem), "status": "queued", "busy": True}
 
+    def _park_key_missing(self, path: Path, job: dict) -> dict:
+        """Park a job whose session key vanished mid-drain; never fails it."""
+        job["status"] = "waiting_on_key"
+        job["note"] = KEY_MISSING_NOTE
+        self._thread_event(job, "run_parked", {"run_id": job.get("run_id", path.stem)})
+        self._write_job(path, job)
+        return {
+            "run_id": job.get("run_id", path.stem),
+            "status": "waiting_on_key",
+            "key_missing": True,
+        }
+
     def _after_timeout(self, path: Path, job: dict, task_id: str, message: str) -> dict:
         if ALLOWANCE_EXHAUSTED in message:
             return self._finish_job(path, job, "failed", error=message)
@@ -296,6 +358,27 @@ class SupervisorRunner:
         return self._finish_job(
             path, job, "failed", error=f"Task needs owner review: {task['status']}"
         )
+
+
+def _job_needs_live(operator, job: dict) -> bool:
+    """Return True when the job's planning thread used live inference.
+
+    Best-effort routing hint: a missing or unreadable thread reads as False
+    (scripted drain) and never breaks the sweep.
+    """
+    try:
+        thread = operator.store.get(job.get("thread_id", ""))
+    except (KeyError, ValueError, OSError, sqlite3.Error):
+        return False
+    if not isinstance(thread, dict):
+        return False
+    history = thread.get("history") or []
+    return any(
+        isinstance(turn, dict)
+        and turn.get("role") == "assistant"
+        and turn.get("route") == "meta"
+        for turn in history
+    )
 
 
 class DrainWorkerStatus:
@@ -518,5 +601,281 @@ def supervise_drain_worker(
             stop.wait(interval_seconds)
 
     monitor = threading.Thread(target=_monitor, name="supervisor-drain-monitor", daemon=True)
+    monitor.start()
+    return monitor, holder
+
+
+class HostedDrainStatus(DrainWorkerStatus):
+    """Pass counters plus per-subject buckets for the hosted sweeper."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.subjects_swept = 0
+        self.subjects_drained = 0
+        self.subjects_skipped = 0
+        self.subjects_busy = 0
+        self.subjects_key_missing = 0
+        self._offset = 0
+
+    def record_hosted_pass(self, counts: dict) -> None:
+        with self._lock:
+            self.subjects_swept += counts.get("swept", 0)
+            self.subjects_drained += counts.get("drained", 0)
+            self.subjects_skipped += counts.get("skipped", 0)
+            self.subjects_busy += counts.get("busy", 0)
+            self.subjects_key_missing += counts.get("key_missing", 0)
+
+    def claim_slice(self, total: int, limit: int) -> list[int]:
+        """Return up to ``limit`` rotating indices over ``total`` subjects."""
+        with self._lock:
+            if total <= 0:
+                return []
+            start = self._offset % total
+            taken = min(limit, total)
+            indices = [(start + index) % total for index in range(taken)]
+            self._offset = (start + taken) % total
+            return indices
+
+    def snapshot(self, alive: bool) -> dict:
+        # Inline the base fields: super().snapshot() would re-acquire the
+        # non-reentrant lock.
+        with self._lock:
+            return {
+                "alive": alive,
+                "last_pass": self.last_pass,
+                "passes": self.passes,
+                "errors": self.errors,
+                "restarts": self.restarts,
+                "subjects_swept": self.subjects_swept,
+                "subjects_drained": self.subjects_drained,
+                "subjects_skipped": self.subjects_skipped,
+                "subjects_busy": self.subjects_busy,
+                "subjects_key_missing": self.subjects_key_missing,
+            }
+
+
+def _check_hosted_budgets(max_subjects: int, max_jobs_per_subject: int) -> None:
+    if type(max_subjects) is not int or not 1 <= max_subjects <= 256:
+        raise ValueError("max_subjects must be an integer between 1 and 256")
+    if type(max_jobs_per_subject) is not int or not 1 <= max_jobs_per_subject <= 100:
+        raise ValueError("max_jobs_per_subject must be an integer between 1 and 100")
+
+
+def _hosted_grant(operator, subject, grant, judge_model):
+    """Resolve the shared owner grant first, else the subject's judge self-grant."""
+    if grant is not None:
+        return grant
+    if judge_model is None or not subject or not subject.startswith("judge-"):
+        return None
+    from remote_operator.judge_grants import JudgeGrantBridge
+
+    try:
+        return JudgeGrantBridge(operator.store).effective(subject, judge_model)
+    except Exception:  # noqa: BLE001 - unreadable grant reads as absent
+        logger.debug("judge grant unreadable; falling back to scripted drain")
+        return None
+
+
+def _hosted_actor(operator, active_grant, key_source, actor_factory):
+    if actor_factory is not None:
+        return actor_factory(operator.store, key_source)
+    from remote_operator.meta import MetaModel
+
+    return MetaModel("", active_grant, operator.store, key_source=key_source)
+
+
+def _sweep_subject(scoped, sessions, directory, *, grant, judge_model, actor_factory,
+                   max_jobs_per_subject) -> tuple[str, dict]:
+    """Drain one subject workspace; returns (bucket, detail).
+
+    Sequential reconcile, key-gated drain, refresh against that subject's own
+    lock only. Never holds two subject locks: each operator call acquires and
+    releases before the next begins.
+    """
+    subject = scoped.subject_for_directory(directory)
+    operator = scoped.operator_for_directory(directory)
+    runner = SupervisorRunner(operator)
+    runner.reconcile_jobs()
+    active = _hosted_grant(operator, subject, grant, judge_model)
+    key_source = sessions.key_source_for_subject(subject) if subject else None
+    key_missing = False
+    if active is not None and key_source is not None:
+        runner.resume_waiting_on_key()
+
+        def build():
+            return _hosted_actor(operator, active, key_source, actor_factory)
+    else:
+        parked = runner.park_keyless_live_jobs()
+        key_missing = bool(parked)
+        build = ScriptedModel
+    outcomes = []
+    for _ in range(max_jobs_per_subject):
+        batch = runner.drain(build(), max_jobs=1)
+        if not batch:
+            break
+        outcomes.extend(batch)
+        if any(outcome.get("key_missing") for outcome in batch):
+            key_missing = True
+        if batch[0].get("busy"):
+            break
+    runner.refresh_waiting()
+    busy = any(outcome.get("busy") for outcome in outcomes)
+    drained = any(outcome.get("status") not in {"queued"} for outcome in outcomes)
+    bucket = "busy" if busy else "drained" if drained else "swept"
+    return bucket, {"outcomes": outcomes, "key_missing": key_missing}
+
+
+def sweep_hosted_once(
+    scoped,
+    sessions,
+    *,
+    grant=None,
+    judge_model=None,
+    actor_factory=None,
+    max_subjects: int = HOSTED_MAX_SUBJECTS_PER_PASS,
+    max_jobs_per_subject: int = HOSTED_MAX_JOBS_PER_SUBJECT,
+    status: HostedDrainStatus | None = None,
+) -> dict:
+    """Drain queued hosted jobs across subject workspaces, one pass.
+
+    One daemon sweeper iterates subject directories round-robin with bounded
+    per-pass budgets; per-subject passes run sequentially so the existing
+    single-writer-per-directory invariant holds. A busy or unreadable subject
+    is skipped with a counter and never stalls the sweep. Scripted-planned
+    jobs drain on the labelled offline reference; live-planned jobs without
+    an attached key park as ``waiting_on_key`` and resume on re-attach.
+    Outcomes surface through each subject's own run-status APIs; no mail.
+    """
+    _check_hosted_budgets(max_subjects, max_jobs_per_subject)
+    try:
+        entries = sorted(scoped.root.iterdir())
+    except OSError:
+        entries = []
+    directories = [path for path in entries if path.is_dir()]
+    if isinstance(status, HostedDrainStatus):
+        picked = [directories[index] for index in status.claim_slice(len(directories), max_subjects)]
+    else:
+        picked = directories[:max_subjects]
+    counts = {"swept": 0, "drained": 0, "skipped": 0, "busy": 0, "key_missing": 0}
+    for directory in picked:
+        try:
+            bucket, detail = _sweep_subject(
+                scoped,
+                sessions,
+                directory,
+                grant=grant,
+                judge_model=judge_model,
+                actor_factory=actor_factory,
+                max_jobs_per_subject=max_jobs_per_subject,
+            )
+        except Exception:  # one subject must not stall the sweep
+            logger.exception("hosted drain skipped a subject workspace")
+            counts["skipped"] += 1
+            continue
+        counts["swept"] += 1
+        if bucket == "busy":
+            counts["busy"] += 1
+        elif bucket == "drained":
+            counts["drained"] += 1
+        if detail["key_missing"]:
+            counts["key_missing"] += 1
+    if isinstance(status, HostedDrainStatus):
+        status.record_hosted_pass(counts)
+    return counts
+
+
+def start_hosted_drain_worker(
+    scoped,
+    sessions,
+    *,
+    grant=None,
+    judge_model=None,
+    actor_factory=None,
+    interval_seconds: float = DRAIN_WORKER_INTERVAL_SECONDS,
+    max_subjects: int = HOSTED_MAX_SUBJECTS_PER_PASS,
+    max_jobs_per_subject: int = HOSTED_MAX_JOBS_PER_SUBJECT,
+    stop_event: threading.Event | None = None,
+    status: HostedDrainStatus | None = None,
+) -> threading.Thread:
+    """Sweep hosted subject workspaces in a daemon thread while serve lives.
+
+    Mirrors :func:`start_drain_worker`: the first pass runs immediately
+    (startup backlog after reboot or wake), then repeats every
+    ``interval_seconds``. One bad pass is logged and skipped; the thread only
+    stops on ``stop_event`` or process exit.
+    """
+    _check_interval(interval_seconds)
+    _check_hosted_budgets(max_subjects, max_jobs_per_subject)
+    stop = stop_event or threading.Event()
+
+    def _loop() -> None:
+        while not stop.is_set():
+            try:
+                sweep_hosted_once(
+                    scoped,
+                    sessions,
+                    grant=grant,
+                    judge_model=judge_model,
+                    actor_factory=actor_factory,
+                    max_subjects=max_subjects,
+                    max_jobs_per_subject=max_jobs_per_subject,
+                    status=status,
+                )
+            except Exception:
+                logger.exception("hosted drain pass failed")
+                if status is not None:
+                    status.record_pass(False)
+            else:
+                if status is not None:
+                    status.record_pass(True)
+            stop.wait(interval_seconds)
+
+    thread = threading.Thread(target=_loop, name="hosted-drain", daemon=True)
+    thread.start()
+    return thread
+
+
+def supervise_hosted_drain_worker(
+    scoped,
+    sessions,
+    *,
+    grant=None,
+    judge_model=None,
+    actor_factory=None,
+    interval_seconds: float = DRAIN_WORKER_INTERVAL_SECONDS,
+    max_subjects: int = HOSTED_MAX_SUBJECTS_PER_PASS,
+    max_jobs_per_subject: int = HOSTED_MAX_JOBS_PER_SUBJECT,
+    stop_event: threading.Event | None = None,
+    status: HostedDrainStatus | None = None,
+) -> tuple[threading.Thread, HostedDrainStatus]:
+    """Keep one hosted drain worker alive, restarting it when its thread dies."""
+    _check_interval(interval_seconds)
+    _check_hosted_budgets(max_subjects, max_jobs_per_subject)
+    holder = status or HostedDrainStatus()
+    stop = stop_event or threading.Event()
+    state: dict = {"worker": None}
+
+    def _monitor() -> None:
+        while not stop.is_set():
+            worker = state["worker"]
+            if worker is None or not worker.is_alive():
+                if worker is not None:
+                    holder.record_restart()
+                    logger.warning("hosted drain worker died; restarting")
+                state["worker"] = start_hosted_drain_worker(
+                    scoped,
+                    sessions,
+                    grant=grant,
+                    judge_model=judge_model,
+                    actor_factory=actor_factory,
+                    interval_seconds=interval_seconds,
+                    max_subjects=max_subjects,
+                    max_jobs_per_subject=max_jobs_per_subject,
+                    stop_event=stop,
+                    status=holder,
+                )
+            stop.wait(interval_seconds)
+
+    monitor = threading.Thread(target=_monitor, name="hosted-drain-monitor", daemon=True)
     monitor.start()
     return monitor, holder

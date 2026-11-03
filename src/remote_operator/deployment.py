@@ -80,6 +80,9 @@ def build_hosted_application(
     subject; the Modal entry passes a Modal Sandbox validator, local previews pass
     Docker. Without a ``grant`` the hosted app stays on the labelled scripted
     reference and refuses key attachment unless a judge configured self-limits.
+    A supervised multi-subject drain sweeper starts with the app (sequential
+    per-subject passes, so the single-writer discipline holds) and
+    execute=true approvals queue into it.
     """
     from remote_operator.judge_accounts import JudgeAccounts
 
@@ -90,15 +93,22 @@ def build_hosted_application(
         raise ValueError("Hosted deployment requires the registered sample and checks")
     durable = volume.commit if volume is not None else None
     scoped = ScopedOperators(runtime_root / "visitors", seed, validator_factory, durable=durable)
+    sessions = HostedSessions(access_code, secret=session_secret)
+    from remote_operator.supervisor_runner import supervise_hosted_drain_worker
+
+    _, hosted_status = supervise_hosted_drain_worker(
+        scoped, sessions, grant=grant, judge_model=judge_model
+    )
     application = create_hosted_app(
         scoped,
-        HostedSessions(access_code, secret=session_secret),
+        sessions,
         grant,
         public_origin=public_origin,
         judge_accounts=JudgeAccounts(
             runtime_root / "visitors" / "judge_accounts.sqlite3", after_commit=durable
         ),
         judge_model=judge_model,
+        hosted_drain=hosted_status,
     )
     if volume is not None:
         commit_on_shutdown(application, volume.commit)
