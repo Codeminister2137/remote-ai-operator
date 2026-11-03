@@ -4,8 +4,8 @@
 judge URL; the access code is supplied separately and never committed.
 
 > Live URL: `https://kubajaworski999--hosted.us-east.modal.run`
-> (scripted reference verified live; judge-funded Meta mode needs your key —
-> see minute 2 below).
+> (the offline reference runs without anything from you; real AI mode
+> needs your key — see minute 2 below).
 
 ## The 5-minute path
 
@@ -16,8 +16,8 @@ Clone or browse the standalone tree (Apache-2.0, no private packages):
 - Entry points: `src/remote_operator/cli.py` (`serve`, `serve --hosted`,
   `demo`, `supervisor-drain`), `modal_app.py` (hosted deploy).
 - The loop in four files: `supervisor.py` (plans), `control.py` + `web.py`
-  (human approval), `supervisor_runner.py` (drain executes),
-  `hosted.py` + `app.js` inbox bell (notifies).
+  (human approval), `supervisor_runner.py` (the worker that runs approved
+  work), `hosted.py` + `app.js` inbox bell (notifies).
 - Provenance: `BUILD_LOG.md` (dated event work),
   [submission draft](submission-draft.md) (event-built vs prior labels).
 
@@ -25,39 +25,40 @@ Clone or browse the standalone tree (Apache-2.0, no private packages):
 
 Open the hosted URL. The **Setup wizard — 4 steps** tracks:
 
-1. **Code** — enter the demo access code, open your private session.
+1. **Code** — enter the demo access code, open your private visit.
 2. **Account** — register your judge account, then log in
    (username 3–32 chars, password 8+; inline hints validate as you type).
 3. **Limits** — save spending limits (defaults: 10 requests, $2.50).
-4. **Key or scripted** — attach your Meta key for real AI, or
+4. **Key or offline** — attach your Meta key for real AI, or
    **Continue without a key** for the free offline reference.
 
 Each step has a **Go to …** button that opens the Access panel and focuses
 the right field. The Access panel collapses once connected.
 
-No-key path stays fully usable: scripted reference, sample review,
-approval, CSV try-it — zero cost, zero model calls.
+No-key path stays fully usable: offline reference, sample review,
+approval, sample import run — zero cost, zero AI calls.
 
 ### 2:30–3:30 · Sample
 
 In the Demo view, step 2, press **Load sample review**. It reuses one of
-your validated saved tasks when available; on a cold start it creates and
-runs the sample task for you (first run validates, takes a minute or two).
-You land in the Review view with a real diff and real validation evidence.
+your validated saved tasks when available; on a first visit it creates and
+runs the sample task for you (first run checks everything, takes a minute
+or two). You land in the Review view with a real proposed change and real
+check results.
 
 ### 3:30–4:30 · Approve
 
 In the Review view:
 
-- **Split diff** (Split: old vs new / Unified toggle) — the exact candidate
-  change.
-- **Evidence card** — `PASS n/7 checks · runner · duration · exit code`;
-  raw receipt stays one click away under “Show validation receipt”.
-- **Approval checklist** — PASS/FAIL rows binding candidate bytes, base,
-  validation evidence, runner policy and expiry.
-- **Review window chip** (footer) — live countdown to approval expiry.
+- **Two views of the exact change** (side-by-side / one-list toggle).
+- **Evidence card** — how many of the 7 safety checks passed, where they
+  ran, how long they took; the full technical receipt stays one click
+  away under “Show validation receipt”.
+- **Approval checklist** — rows confirming the exact change, what it was
+  checked against, and when the approval expires.
+- **Countdown chip** (footer) — time left to approve.
 - Press **Approve this verified change**, or **Run fresh validation** if
-  the window expired, **Reject change** to refuse.
+  the time ran out, **Reject change** to refuse.
 
 Nothing is pushed or deployed: approval applies one reviewed source file
 to the separate local demo target only.
@@ -65,41 +66,42 @@ to the separate local demo target only.
 ### 4:30–5:00 · Try it
 
 Press **Try it in Demo step 3** (or scroll to Demo step 3 yourself).
-**Run approved import** executes the applied importer on the sample CSV:
+**Run approved import** runs the applied importer on the sample rows:
 2 accepted issues, 2 row errors (duplicate ID + missing title). The
-**sample gallery** offers one-click inputs — Happy path (3/0), Edge cases
-(1/4), All invalid (0/4) — each labelled with expected counts.
+**sample inputs** offer one-click data — All valid (3 accepted,
+0 errors), Tricky rows (1 accepted, 4 errors), All broken (0 accepted,
+4 errors) — each labelled with expected counts.
 
 ## What to look at (reviewer checklist)
 
-- Exact-change approval: approve binds candidate digest, base digest,
-  validation evidence, runner policy and a 10-minute expiry. Change any
-  input and the approval is refused — try editing state, then approving.
-- Host-observed evidence: 7 protected checks run in an isolated runner
-  (Docker locally, Modal Sandbox hosted); the model never touches the
-  verdict.
-- Recovery without replay: enable “Inject one transport failure”, run,
-  and watch recovery retain the saved edit instead of repeating it.
-- Isolation: a second visitor session (private window + same access code)
-  sees an empty task list and gets 404 for your task IDs.
+- Exact-change approval: approving locks in the exact change, what it was
+  checked against, and a 10-minute deadline. Change anything and the
+  approval is refused — try editing, then approving.
+- Independent checks: 7 safety checks run in an isolated test box
+  (Docker on a PC, Modal Sandbox when hosted); the AI never grades its
+  own work.
+- Safe retries: switch on “Inject one transport failure”, run, and watch
+  the retry keep the saved work instead of doing it twice.
+- Privacy: a second visitor (private window + same access code)
+  sees an empty task list and none of your work.
 - The loop, end to end: Supervise view — thread, chat, write plan, run
-  settings, approve plan — then the drain runs it and the 🔔 **Inbox bell**
-  jumps you to parked questions and run outcomes.
-- Judge sessions hide owner-only surfaces (Worker & machine, Workbench
-  actions). The footer build chip names the serving commit.
+  settings, approve plan — then the worker runs it and the 🔔 **Inbox bell**
+  takes you to waiting questions and run results.
+- Judge visits hide owner-only areas (Worker & machine, Workbench
+  actions). The footer names the exact served version, for bug reports.
 
 ## Where keys and grants live
 
 | Secret / limit | Where | Notes |
 | --- | --- | --- |
-| Demo access code | Supplied out-of-band; entered once | Never in the repo; opens a signed session cookie |
-| Judge password | `visitors/judge_accounts.sqlite3` (salted hash) | Stable `judge-<name>` subject keeps your tasks |
-| Meta API key | “Your model key”, session-only | Never persisted, never identity, detach anytime |
+| Demo access code | Supplied separately; entered once | Never in the repo; opens your private signed-in visit |
+| Judge password | Stored on the server as a salted hash, never in plain text | Your judge name keeps your tasks separate |
+| Meta API key | “Your model key”, this visit only | Never saved, never your identity, remove anytime |
 | Spending limits | Judge grant (Max requests + Approved USD) | You set them; you pay; owner pays nothing |
-| Model | Server-pinned `OPERATOR_JUDGE_MODEL` | Judges cannot change the model |
-| Owner grant | Private server config (not deployed for judges) | Would take precedence if ever enabled |
+| Model | Fixed by the server | Judges cannot change the model |
+| Owner grant | Private server setting (judges never see it) | — |
 
-Scripted mode needs none of this: no key, no grant, no spend.
+The offline reference needs none of this: no key, no grant, no spend.
 
 ## Screenshots
 
@@ -107,21 +109,18 @@ Scripted mode needs none of this: no key, no grant, no spend.
 > (`chromium` absent), so screenshots were not captured here.
 > Suggested captures from the hosted URL at phone width (390px):
 > (1) setup wizard at step 3 with inline limit hints;
-> (2) Review view with split diff + evidence card + approval checklist;
+> (2) Review view with side-by-side change + evidence card + approval checklist;
 > (3) Demo step 3 after “Run approved import” (2 accepted / 2 errors);
 > (4) Supervise chat with bubbles + 🔔 inbox badge;
-> (5) dictation button naming the Meta backend in Meta mode.
+> (5) dictation button naming which transcription it uses (Meta or browser).
 
-## Loop3 branch map (merge status for the parent)
+## Loop3 branch map (shipped on main)
 
-UI described above spans unmerged `loop3/*` branches on top of `main`
-(`44244e3`): `onboard` (wizard, sample review, CSV gallery),
-`bellchat` (inbox bell, chat bubbles, typing indicator),
-`reviewloop` (evidence card, window/build chips, humanized statuses,
-judge visibility, try-it shortcut), `h1a` (hosted multi-subject drain
-sweeper, `waiting_on_key`), `stt` (Meta transcription backend with
-auto-slice dictation, Web Speech fallback), `translate` (server-side
-PL→EN normalization at ingestion), `openweights` (Baseten model-mode on
-Muse Spark Open for the open-weights bonus, exact-model grant, key
-separation — see docs/openweights-verification.md).
-Merge all before pointing judges at this card.
+UI described above is merged to `main`: `onboard` (wizard, sample review,
+sample inputs), `bellchat` (inbox bell, chat bubbles, typing indicator),
+`reviewloop` (evidence card, countdown/build chips, plain statuses,
+judge visibility, try-it shortcut), `h1a` (hosted multi-visitor worker),
+`stt` (Meta transcription with auto-slice dictation, browser speech
+fallback), `translate` (server-side PL→EN normalization at ingestion),
+`openweights` (Baseten model-mode on Muse Spark Open for the open-weights
+bonus — see docs/openweights-verification.md).

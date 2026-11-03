@@ -481,13 +481,18 @@ function renderSupervisorTranscript(history) {
       const source = document.createElement("p");
       source.textContent = turn.source_text;
       const meta = document.createElement("p");
-      meta.textContent = "Language: " + (turn.source_lang || "?") + " · Translator: " + (turn.translator || "?");
+      meta.textContent = "Language: " + (turn.source_lang || "?") + " · Translator: " + translatorName(turn.translator);
+      meta.title = "Translator: " + (turn.translator || "?");
       details.append(summary, source, meta);
       item.append(details);
     }
     return item;
   }));
   element("supervisorTranscript").scrollTop = element("supervisorTranscript").scrollHeight;
+}
+function translatorName(id) {
+  if (typeof id === "string" && id.startsWith("meta:")) return "Meta AI";
+  return id || "?";
 }
 function renderTranslationNote(thread) {
   const note = element("supervisorTranslationNote");
@@ -503,12 +508,12 @@ function renderTranslationNote(thread) {
   if (typeof thread.prompt_lang === "string" && thread.prompt_lang !== "en" &&
       thread.prompt_translator && thread.prompt_translator !== "none") {
     langs.add(thread.prompt_lang.toUpperCase());
-    engines.add(thread.prompt_translator);
+    engines.add(translatorName(thread.prompt_translator));
   }
   for (const turn of history) {
     if (turn.role === "user" && turn.translated) {
       langs.add(String(turn.source_lang || "?").toUpperCase());
-      engines.add(turn.translator || "?");
+      engines.add(translatorName(turn.translator));
     }
   }
   note.textContent = langs.size ?
@@ -1091,11 +1096,11 @@ element("copyTaskLink").onclick = () => guarded(async () => {
 function displayMode(configuration) {
   updateBuildChip();
   const liveBanner = configuration.mode === "baseten" ?
-    "BASETEN MODE · Muse Spark Open inference" : "META MODE · Real AI coding";
+    "Muse Spark Open · live AI answers (Baseten)" : "Meta AI · live coding with your key";
   metaSttPreferred = configuration.live_inference === true;
   refreshDictationBackends();
   document.querySelector(".notice").textContent = configuration.live_inference ?
-    liveBanner : "SCRIPTED OFFLINE REFERENCE · No Meta inference";
+    liveBanner : "Offline reference · no AI calls, no cost";
   element("access-note").textContent = hosted ?
     "Hosted demo. Your task list, spending and key belong to this private session only." :
     (configuration.https_origin ? "HTTPS origin configured. Owner credential stays in page memory." :
@@ -1289,7 +1294,7 @@ element("grantSave").onclick = () => guarded(async () => {
     if (session === sessionRevision) message("Spending limits saved. Attach your key to run real inference.");
   } finally { busy = false; actions(); }
 });
-/* ---- Onboarding: wizard, inline validation, sample review, CSV gallery ---- */
+/* ---- Onboarding: wizard, inline validation, sample review, sample inputs ---- */
 function judgeSignupValid() {
   const name = element("judgeName").value.trim();
   const password = element("judgePassword").value;
@@ -1403,11 +1408,11 @@ element("sampleReview").onclick = () => guarded(async () => {
 });
 const csvSamples = {
   happy: {text: "id,title,status\nalpha,First issue,open\nbeta,Second issue,closed\ngamma,Third issue,OPEN",
-    expect: "Happy path: expect 3 accepted, 0 row errors."},
+    expect: "All valid: expect 3 accepted, 0 row errors."},
   edges: {text: "id,title,status\nexisting,Clashes with seeded issue,open\nedge-1,,closed\nedge-2,Bad status row,pending\nedge-3,Valid after failures,closed\nedge-3,Duplicate within file,open",
-    expect: "Edge cases: expect 1 accepted, 4 row errors (rows 2–4 and 6: duplicate, missing title, bad status, duplicate)."},
+    expect: "Tricky rows: expect 1 accepted, 4 row errors (rows 2–4 and 6: duplicate, missing title, bad status, duplicate)."},
   invalid: {text: "id,title,status\n,Missing id,open\nx,,closed\ny,Bad status,waiting\nexisting,Seeded duplicate,open",
-    expect: "All invalid: expect 0 accepted, 4 row errors."}
+    expect: "All broken: expect 0 accepted, 4 row errors."}
 };
 function loadCsvSample(kind) {
   element("csv").value = csvSamples[kind].text;
@@ -1676,7 +1681,7 @@ const tourSteps = [
   {anchor: "onboard-wizard", view: null, title: "Setup wizard",
    text: "Four steps to a working session: demo access code, judge account, spending limits, then your Meta key — or continue with the free scripted reference. The progress line shows where you are."},
   {anchor: "sampleReview", view: "demo", title: "Sample review",
-   text: "Load a ready-made validated task to practice the review loop. Below, the CSV gallery (happy path, edge cases, all invalid) gives one-click inputs for trying the feature."},
+   text: "Load a ready-made validated task to practice the review loop. Below, the sample inputs (all valid, tricky, or all broken rows) give one-click data for trying the feature."},
   {anchor: "approve", view: "review", title: "The one approval place",
    text: "Read the diff and the validation report, then approve. Approval applies this candidate only to the separate local demo target — never a push or deploy."},
   {anchor: "tryApproved", view: "review", title: "Try the approved feature",

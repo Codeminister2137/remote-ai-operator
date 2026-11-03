@@ -14,11 +14,13 @@ docker pull python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a
 uv run --locked remote-ai-operator demo --inject-failure
 ```
 
-The CLI prints a fresh task record, diff, validation evidence and exact-action nonce.
-Expected status: awaiting_approval; passed: true and 7 protected checks. The actor is
-explicitly SCRIPTED OFFLINE REFERENCE. This proves controller behaviour, not live
-Meta authorship. Review first; use the printed ID/nonce with the review and approve
-commands in README.md. Never paste approval nonces into public issues or logs.
+The CLI prints a fresh task record, the proposed change, check results and a
+one-time approval code (nonce). Expected outcome: status awaiting_approval
+(waiting for approval); passed: true and 7 safety checks. The author is
+explicitly the offline reference, never Meta. This proves app behaviour, not
+live Meta authorship. Review first; use the printed ID and approval code with
+the review and approve commands in README.md. Never paste approval codes into
+public issues or logs.
 
 Each task gets separate candidate and target directories. Start a new task for a
 fresh seed instead of deleting past evidence. A paused task is a safe stop, not a
@@ -59,17 +61,18 @@ owner's PC or private source. See docs/modal-hosting.md and ADR-0004/0005.
 
 The same mode runs locally: set OPERATOR_VISITOR_CODE and OPERATOR_SESSION_SECRET, then
 `remote-ai-operator serve --hosted`. It issues a signed, server-generated visitor
-session and isolates visitor task stores. The Modal deployment adds single-writer
-durable state with an explicit `--strategy recreate` deploy; with a stable signing
-secret and runtime root a restart resumes the subject and its recorded task state.
-Logout is process-local.
+visit and keeps each visitor's tasks separate. The Modal deployment adds durable
+state written by one process at a time, with an explicit `--strategy recreate`
+deploy; with a stable signing secret and runtime folder a restart resumes the
+visit and its recorded tasks. Logging out ends only that browser's session.
 
 ## Real Meta and automated checks
 
 For live Meta coding, follow docs/meta-tooling.md. Supply your own authorized key,
 verified credits, current price assumptions and finite private grant. The example
-grant is deliberately inactive. The phone spending panel is read-only; edit private
-configuration deliberately on the server. Never use a new grant to erase usage.
+grant is deliberately inactive. Owners set spending limits in the server's private
+configuration; judges set their own limits in the app (Limits step) against their
+own key. Never use a new grant to erase usage.
 See docs/live-acceptance.md for completed real-model evidence and its limitations.
 
 Run the automated commands in README.md; enable OPERATOR_DOCKER_TESTS=1 for actual
