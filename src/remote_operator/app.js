@@ -108,6 +108,12 @@ async function refreshAllowance() {
     element("allowance-summary").textContent = money(snapshot.remaining_usd_estimate) + " remaining of " +
       money(snapshot.limit_usd) + "; " + money(snapshot.reserved_usd_estimate) + " reserved. Requests: " +
       snapshot.requests_used + "/" + snapshot.requests_limit + ".";
+    if (snapshot.operations && snapshot.operations.chat && snapshot.operations.audio) {
+      const chat = snapshot.operations.chat, audio = snapshot.operations.audio;
+      element("allowance-summary").textContent += " Chat: " + money(chat.reserved_usd_estimate) +
+        " reserved (" + chat.requests_used + " req). Audio: " + money(audio.reserved_usd_estimate) +
+        " reserved (" + audio.requests_used + " req).";
+    }
     element("allowance-note").textContent = (snapshot.expired ? "Allowance expired. " : "") +
       "This server's local estimates include failed calls; they are not provider credit balance or final billing. " +
       "Expires " + new Date(snapshot.expires_at * 1000).toLocaleString() + ".";
@@ -758,6 +764,8 @@ element("preview").onclick = () => guarded(async () => {
   message(result.issues.length + " issues accepted; " + result.errors.length + " row errors. Applied source: " + result.target_digest.slice(0,12));
 });
 function displayMode(configuration) {
+  metaSttPreferred = configuration.live_inference === true;
+  refreshDictationBackends();
   document.querySelector(".notice").textContent = configuration.live_inference ?
     "META MODE · Real AI coding" : "SCRIPTED OFFLINE REFERENCE · No Meta inference";
   element("access-note").textContent = hosted ?
@@ -971,9 +979,16 @@ element("taskId").addEventListener("input", () => {
   } catch { /* Local deployment: wait for the owner token. */ }
 })();
 actions();
-/* ---- Dictation v1: Web Speech API textarea filler (client-only) ----
-   Fills the paired textarea only; never sends. Rows stay hidden unless
-   the browser exposes SpeechRecognition (standard or webkit prefix). */
+/* ---- Dictation: Meta transcription first, Web Speech fallback ----
+   Fills the paired textarea only; never sends. When a key route is live
+   (metaSttPreferred) and the browser can record, clips are transcribed by
+   Meta over the shared allowance in ~55s slices; otherwise, or when Meta
+   fails before any text arrives, the Web Speech path is used. The button
+   always names the backend actually used. Rows stay hidden unless at
+   least one backend is available. */
+let metaSttPreferred = false;
+const dictationWires = [];
+const META_SLICE_MS = 55000;
 const Dictation = (() => {
   const Recognition = typeof window !== "undefined" &&
     (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -991,6 +1006,28 @@ const Dictation = (() => {
   function clearActive(stop) { if (activeStop === stop) activeStop = null; }
   return { supported, create, stopActive, setActive, clearActive };
 })();
+const MetaStt = (() => {
+  function supported() {
+    return typeof MediaRecorder !== "undefined" &&
+      !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+  function active() { return metaSttPreferred && supported(); }
+  return { supported, active };
+})();
+function refreshDictationBackends() {
+  for (const ctx of dictationWires) {
+    if (ctx.busy) continue; // A live session keeps its backend label.
+    if (MetaStt.active() || (!Dictation.supported() && MetaStt.supported())) {
+      ctx.button.textContent = "🎤 Dictate (Meta)";
+      ctx.button.title = "Dictate into the " + ctx.noun + " using Meta speech-to-text " +
+        "(uses your allowance). Audio is transcribed by Meta, not your browser vendor. " +
+        "Dictation only fills the field - you review and send.";
+    } else if (Dictation.supported()) {
+      ctx.button.textContent = "🎤 Dictate (browser speech recognition)";
+      ctx.button.title = ctx.browserTitle;
+    }
+  }
+}
 function dictateLangName(code) { return code === "pl-PL" ? "polski" : "English"; }
 function dictateErrorMessage(code) {
   switch (code) {
@@ -1015,97 +1052,264 @@ function joinDictation(head, tail) {
   if (!head) return tail;
   return /\s$/.test(head) ? head + tail : head + " " + tail;
 }
-function wireDictation(fieldId, buttonId, langId, statusId) {
-  const row = document.querySelector('[data-dictate-for="' + fieldId + '"]');
-  if (!Dictation.supported() || !row) return; // Row stays hidden: typed input unaffected.
-  const field = element(fieldId);
-  const button = element(buttonId);
-  const lang = element(langId);
-  const status = element(statusId);
-  row.hidden = false;
-  let rec = null;
-  let base = "";
-  let finalText = "";
-  let lastRendered = null;
+function startBrowserDictation(ctx) {
+  const field = ctx.field, button = ctx.button, lang = ctx.lang, status = ctx.status;
   function setRecording(on) {
     button.classList.toggle("recording", on);
     button.setAttribute("aria-pressed", on ? "true" : "false");
     button.textContent = on ? "Stop dictation" : "🎤 Dictate (browser speech recognition)";
   }
-  function stop() {
-    if (rec) { try { rec.stop(); } catch { /* stop() after end is harmless. */ } }
+  Dictation.stopActive(); // Only one dictation session at a time.
+  ctx.base = field.value;
+  ctx.finalText = "";
+  ctx.lastRendered = null;
+  status.textContent = "";
+  let session;
+  try {
+    session = Dictation.create();
+  } catch {
+    status.textContent = "Dictation unavailable in this browser. Type instead.";
+    return;
   }
-  button.onclick = () => {
-    if (rec) { stop(); return; } // Toggle off; onend commits the transcript.
-    Dictation.stopActive(); // Only one dictation session at a time.
-    base = field.value;
-    finalText = "";
-    lastRendered = null;
-    status.textContent = "";
-    let session;
-    try {
-      session = Dictation.create();
-    } catch {
-      status.textContent = "Dictation unavailable in this browser. Type instead.";
-      return;
+  ctx.rec = session;
+  ctx.stopBrowser = () => {
+    if (ctx.rec) { try { ctx.rec.stop(); } catch { /* stop() after end is harmless. */ } }
+  };
+  Dictation.setActive(ctx.stopBrowser);
+  session.lang = lang.value;
+  session.interimResults = true;
+  session.continuous = false; // Single utterance; the platform end-points on silence.
+  session.maxAlternatives = 1;
+  session.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const chunk = event.results[i][0].transcript;
+      if (event.results[i].isFinal) ctx.finalText += chunk;
+      else interim += chunk;
     }
-    rec = session;
-    Dictation.setActive(stop);
-    session.lang = lang.value;
-    session.interimResults = true;
-    session.continuous = false; // Single utterance; the platform end-points on silence.
-    session.maxAlternatives = 1;
-    session.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const chunk = event.results[i][0].transcript;
-        if (event.results[i].isFinal) finalText += chunk;
-        else interim += chunk;
-      }
-      lastRendered = joinDictation(base, finalText + interim); // Interim shown live, provisional.
-      field.value = lastRendered;
-    };
-    session.onerror = (event) => {
-      const note = dictateErrorMessage(event.error || "unknown");
-      if (note) {
-        status.textContent = note;
-        message(note);
-      }
-    };
-    session.onend = () => {
-      Dictation.clearActive(stop);
-      const captured = finalText.trim() !== "";
-      if (captured) {
-        // If the user typed during dictation, append to their edit instead of clobbering it.
-        field.value = (field.value === lastRendered || field.value === base) ?
-          joinDictation(base, finalText) : joinDictation(field.value, finalText);
-        status.textContent = "Dictation added (" + dictateLangName(lang.value) +
-          "). Review and edit before sending. Nothing was sent.";
-      } else if (status.textContent === "") {
-        status.textContent = "No speech captured; field unchanged.";
-        field.value = base;
-      } else if (lastRendered !== null) {
-        field.value = base; // Partial interim was shown; restore the pre-dictation text.
-      } // Else an error note is already shown; keep it and leave the field alone.
-      rec = null;
-      setRecording(false);
-      field.focus();
-    };
-    setRecording(true);
-    status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
-    try {
-      session.start();
-    } catch (error) {
-      Dictation.clearActive(stop);
-      rec = null;
-      setRecording(false);
-      field.value = base;
-      status.textContent = "Could not start dictation (" +
-        (error && error.message ? error.message : "mic unavailable") +
-        "). Check mic permission and HTTPS, then try again.";
+    ctx.lastRendered = joinDictation(ctx.base, ctx.finalText + interim); // Interim live, provisional.
+    field.value = ctx.lastRendered;
+  };
+  session.onerror = (event) => {
+    const note = dictateErrorMessage(event.error || "unknown");
+    if (note) {
+      status.textContent = note;
+      message(note);
     }
   };
+  session.onend = () => {
+    Dictation.clearActive(ctx.stopBrowser);
+    const captured = ctx.finalText.trim() !== "";
+    if (captured) {
+      // If the user typed during dictation, append to their edit instead of clobbering it.
+      field.value = (field.value === ctx.lastRendered || field.value === ctx.base) ?
+        joinDictation(ctx.base, ctx.finalText) : joinDictation(field.value, ctx.finalText);
+      status.textContent = "Dictation added (" + dictateLangName(lang.value) +
+        "). Review and edit before sending. Nothing was sent.";
+    } else if (status.textContent === "") {
+      status.textContent = "No speech captured; field unchanged.";
+      field.value = ctx.base;
+    } else if (ctx.lastRendered !== null) {
+      field.value = ctx.base; // Partial interim was shown; restore the pre-dictation text.
+    } // Else an error note is already shown; keep it and leave the field alone.
+    ctx.rec = null;
+    setRecording(false);
+    field.focus();
+  };
+  setRecording(true);
+  status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
+  try {
+    session.start();
+  } catch (error) {
+    Dictation.clearActive(ctx.stopBrowser);
+    ctx.rec = null;
+    setRecording(false);
+    field.value = ctx.base;
+    status.textContent = "Could not start dictation (" +
+      (error && error.message ? error.message : "mic unavailable") +
+      "). Check mic permission and HTTPS, then try again.";
+  }
 }
-wireDictation("prompt", "dictate-prompt", "dictate-lang-prompt", "dictate-status-prompt");
-wireDictation("supervisorInput", "dictate-supervisor", "dictate-lang-supervisor", "dictate-status-supervisor");
-wireDictation("answer-text", "dictate-answer", "dictate-lang-answer", "dictate-status-answer");
+function dictateShortLang(tag) {
+  const short = (tag || "en-US").split("-")[0].toLowerCase();
+  return short === "pl" ? "pl" : "en";
+}
+async function transcribeSlice(blob, index, shortLang, inputHint) {
+  const form = new FormData();
+  form.append("audio", blob, "slice" + index + ((blob.type || "").includes("mp4") ? ".mp4" : ".webm"));
+  form.append("language", shortLang);
+  if (inputHint) form.append("input", inputHint);
+  const headers = {};
+  if (hosted) headers["X-Operator-Request"] = "1";
+  else headers["Authorization"] = "Bearer " + element("token").value;
+  const options = {method: "POST", headers, credentials: "same-origin", body: form};
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    options.signal = AbortSignal.timeout(75000);
+  }
+  let response;
+  try {
+    response = await fetch("/api/stt/transcribe", options);
+  } catch (error) {
+    throw new Error("Meta transcription unreachable (" +
+      (error && error.name ? error.name : "network") + ").");
+  }
+  if (!response.ok) {
+    let detail = "";
+    try { detail = (await response.json()).detail || ""; }
+    catch {
+      try { detail = (await response.text()).slice(0, 300); }
+      catch { detail = ""; }
+    }
+    throw new Error("Meta transcription refused (HTTP " + response.status + ")" +
+      (detail ? ": " + detail : ""));
+  }
+  return response.json();
+}
+async function dictateViaMeta(ctx) {
+  const field = ctx.field, button = ctx.button, lang = ctx.lang, status = ctx.status;
+  ctx.busy = true; // Set synchronously: a second click during mic prompt is ignored.
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({audio: true});
+  } catch {
+    ctx.busy = false;
+    if (Dictation.supported()) {
+      status.textContent = "Microphone unavailable for Meta recording; using browser speech instead.";
+      startBrowserDictation(ctx);
+    } else {
+      status.textContent = "Microphone blocked. Allow mic access for this page (HTTPS required), then try again.";
+    }
+    return;
+  }
+  const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) => {
+    try { return MediaRecorder.isTypeSupported(type); } catch { return false; }
+  }) || "";
+  Dictation.stopActive(); // Only one dictation session at a time.
+  const base = field.value;
+  const shortLang = dictateShortLang(lang.value);
+  let accumulated = "";
+  let slices = 0;
+  let stopping = false;
+  let recorder = null;
+  let chain = Promise.resolve();
+  let failed = null;
+  function setRecording(on) {
+    button.classList.toggle("recording", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.textContent = on ? "Stop dictation" : "🎤 Dictate (Meta)";
+  }
+  function stop() {
+    stopping = true;
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch { /* Already stopped. */ }
+    }
+  }
+  Dictation.setActive(stop);
+  const dispatch = button.onclick;
+  button.onclick = () => stop();
+  setRecording(true);
+  function recordSlice() {
+    return new Promise((resolve) => {
+      const chunks = [];
+      try {
+        recorder = mime ? new MediaRecorder(stream, {mimeType: mime}) : new MediaRecorder(stream);
+      } catch {
+        resolve(null);
+        return;
+      }
+      const timer = setTimeout(() => {
+        if (recorder.state !== "inactive") { try { recorder.stop(); } catch { /* Raced. */ } }
+      }, META_SLICE_MS);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        clearTimeout(timer);
+        recorder = null;
+        if (stopping) status.textContent = "Finishing Meta transcription...";
+        resolve(new Blob(chunks, {type: (mime.split(";")[0] || "audio/webm")}));
+      };
+      recorder.onerror = () => {
+        clearTimeout(timer);
+        recorder = null;
+        resolve(new Blob(chunks, {type: "audio/webm"}));
+      };
+      try { recorder.start(); }
+      catch { clearTimeout(timer); recorder = null; resolve(null); }
+    });
+  }
+  while (!stopping && !failed) {
+    const slice = ++slices;
+    status.textContent = "Recording with Meta (slice " + slice + ", up to 55s each)... Press Stop to finish.";
+    const blob = await recordSlice();
+    if (!blob) { failed = failed || new Error("Recording failed."); break; }
+    if (blob.size < 1024) continue; // Instant stop; nothing worth billing.
+    status.textContent = "Transcribing slice " + slice + " with Meta... Press Stop to finish.";
+    chain = chain.then(async () => {
+      if (failed) return;
+      const result = await transcribeSlice(blob, slice, shortLang, ctx.inputHint);
+      const text = ((result && result.text) || "").trim();
+      if (text) {
+        accumulated = accumulated ? accumulated + " " + text : text;
+        field.value = joinDictation(base, accumulated);
+      }
+    }).catch((error) => { failed = failed || error; stop(); });
+  }
+  await chain;
+  function finish() {
+    Dictation.clearActive(stop);
+    for (const track of stream.getTracks()) { try { track.stop(); } catch { /* Best-effort. */ } }
+    ctx.busy = false;
+    setRecording(false);
+    button.onclick = dispatch;
+    refreshDictationBackends();
+    field.focus();
+  }
+  if (failed && !accumulated && Dictation.supported()) {
+    finish();
+    status.textContent = failed.message + " Using browser speech instead.";
+    message(failed.message + " Using browser speech instead.");
+    startBrowserDictation(ctx);
+    return;
+  }
+  if (accumulated) {
+    field.value = joinDictation(base, accumulated);
+    status.textContent = "Dictation added (Meta, " + dictateLangName(lang.value) +
+      (failed ? "; stopped early: " + failed.message : "") +
+      "). Review and edit before sending. Nothing was sent.";
+    if (failed) message(failed.message);
+  } else if (failed) {
+    status.textContent = failed.message + " Field unchanged.";
+    field.value = base;
+  } else {
+    status.textContent = "No speech captured; field unchanged.";
+    field.value = base;
+  }
+  finish();
+}
+function wireDictation(fieldId, buttonId, langId, statusId, noun, inputHint) {
+  const row = document.querySelector('[data-dictate-for="' + fieldId + '"]');
+  if (!row) return;
+  if (!Dictation.supported() && !MetaStt.supported()) return; // Row stays hidden.
+  const ctx = {
+    row, field: element(fieldId), button: element(buttonId), lang: element(langId),
+    status: element(statusId), noun, inputHint, browserTitle: element(buttonId).title,
+    busy: false, rec: null, stopBrowser: null, base: "", finalText: "", lastRendered: null,
+  };
+  dictationWires.push(ctx);
+  row.hidden = false;
+  ctx.button.onclick = () => {
+    if (ctx.busy) return; // A Meta session replaces this handler while recording.
+    if (ctx.rec) { ctx.stopBrowser(); return; } // Toggle browser session off.
+    if (MetaStt.active()) dictateViaMeta(ctx);
+    else if (Dictation.supported()) startBrowserDictation(ctx);
+    else {
+      ctx.status.textContent = "Transcription unavailable: attach a provider key for Meta dictation.";
+      message("Transcription unavailable: attach a provider key for Meta dictation.");
+    }
+  };
+  refreshDictationBackends();
+}
+wireDictation("prompt", "dictate-prompt", "dictate-lang-prompt", "dictate-status-prompt", "request", null);
+wireDictation("supervisorInput", "dictate-supervisor", "dictate-lang-supervisor", "dictate-status-supervisor", "chat message", "supervisor");
+wireDictation("answer-text", "dictate-answer", "dictate-lang-answer", "dictate-status-answer", "answer", "answer");

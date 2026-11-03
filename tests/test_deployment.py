@@ -255,6 +255,9 @@ class HostedDeploymentTests(unittest.IsolatedAsyncioTestCase):
 
 class SchemaTests(unittest.TestCase):
     def test_task_store_schema_still_matches_the_local_store(self):
+        # allowance_ops is the intentional additive ledger for the
+        # spend-by-operation display; existing tables are untouched and old
+        # databases gain it on open via CREATE TABLE IF NOT EXISTS.
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "tasks.sqlite3"
             Store(path)
@@ -268,4 +271,7 @@ class SchemaTests(unittest.TestCase):
                 }
             finally:
                 db.close()
-        self.assertEqual(names - {"sqlite_sequence"}, {"tasks", "allowances", "controls", "events"})
+        self.assertEqual(
+            names - {"sqlite_sequence"},
+            {"tasks", "allowances", "controls", "events", "allowance_ops"},
+        )

@@ -196,6 +196,8 @@ def main():
                 from remote_operator.supervisor_runner import supervise_drain_worker
 
                 monitor, drain_status = supervise_drain_worker(operator, factory)
+                stt_grant = load_grant(args) if args.model_mode == "meta" else None
+                stt_key = os.environ.get("META_API_KEY", "") if stt_grant is not None else ""
                 application = create_app(
                     operator,
                     token,
@@ -204,6 +206,8 @@ def main():
                     public_origin=args.public_origin,
                     allowance_status=allowance_status,
                     drain_snapshot=lambda: drain_status.snapshot(monitor.is_alive()),
+                    stt_grant=stt_grant,
+                    stt_key=stt_key,
                 )
             uvicorn.run(
                 application,

@@ -17,13 +17,17 @@ from urllib.parse import urlsplit
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.middleware.body_limit import RequestBodyLimitMiddleware
+from starlette.middleware.body_limit import (
+    RequestBodyLimitMiddleware,
+    RequestBodyLimitResponder,
+)
 
 from remote_operator.control import Operator
 from remote_operator.credentials import SessionCapacity, SessionUnavailable
 from remote_operator.external_actions import ExternalActionBridge
 from remote_operator.hosted import AccessRefused
 from remote_operator.scripted import ScriptedModel
+from remote_operator.stt import STT_BODY_MAX_BYTES
 
 SESSION_COOKIE = "operator_session"
 SESSION_HEADER = "x-operator-request"
@@ -61,6 +65,24 @@ class BufferedBodies:
             return await receive()
 
         await self.app(scope, replay, send)
+
+
+class PathAwareBodyLimit(RequestBodyLimitMiddleware):
+    """Keep the 8 KB cap everywhere except the audio upload route.
+
+    Transcription clips legitimately reach megabytes; only `/api/stt/*` gets
+    the higher audio allowance, enforced again per-part by the route itself.
+    """
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        limit = (
+            STT_BODY_MAX_BYTES
+            if scope.get("path", "").startswith("/api/stt/")
+            else self.max_body_size
+        )
+        await RequestBodyLimitResponder(self.app, limit)(scope, receive, send)
 
 
 class Submission(BaseModel):
@@ -164,6 +186,8 @@ class Principal:
     hosted: bool = False
     key_attached: bool = False
     external_actions: ExternalActionBridge | None = None
+    grant: object | None = None
+    key_source: object | None = None
 
 
 def _origin(public_origin):
@@ -291,7 +315,7 @@ def _base_app(*, public_origin, sessions):
         )
 
     app.add_middleware(BufferedBodies)
-    app.add_middleware(RequestBodyLimitMiddleware, max_body_size=8192)
+    app.add_middleware(PathAwareBodyLimit, max_body_size=8192)
     return app
 
 
@@ -594,6 +618,47 @@ def _external_action_routes(app, principal):
         return who.external_actions.cancel(action_id).to_dict()
 
 
+def _stt_routes(app, principal, stt_transport=None):
+    """Register the Meta transcription route (never persists audio or text)."""
+    from remote_operator.stt import SttFailure, parse_transcribe_form, transcribe_audio
+
+    @app.post("/api/stt/transcribe")
+    async def transcribe(request: Request, who: Annotated[Principal, Depends(principal)]):
+        """Transcribe one dictation clip with the caller's own Meta key."""
+        if who.grant is None or who.key_source is None or not who.key_attached:
+            raise HTTPException(
+                409, "Transcription unavailable; attach a provider key or use browser dictation"
+            )
+        try:
+            audio, audio_type, language = parse_transcribe_form(
+                request.headers.get("content-type", ""), await request.body()
+            )
+        except SttFailure as exc:
+            raise HTTPException(exc.http_status, exc.detail) from None
+        try:
+            key = who.key_source()
+        except SessionUnavailable:
+            raise HTTPException(401, "Visitor session required") from None
+        if not isinstance(key, str) or not key:
+            raise HTTPException(
+                409, "Transcription unavailable; attach a provider key or use browser dictation"
+            )
+        try:
+            return await asyncio.to_thread(
+                transcribe_audio,
+                key_source=lambda: key,
+                grant=who.grant,
+                store=who.operator.store,
+                audio_bytes=audio,
+                content_type=audio_type,
+                language=language,
+                transport=stt_transport,
+            )
+        except SttFailure as exc:
+            headers = {"Retry-After": exc.retry_after} if exc.retry_after else None
+            raise HTTPException(exc.http_status, exc.detail, headers=headers) from None
+
+
 def create_app(
     operator: Operator,
     access_token: str,
@@ -603,6 +668,9 @@ def create_app(
     public_origin=None,
     allowance_status=None,
     drain_snapshot=None,
+    stt_grant=None,
+    stt_key="",
+    stt_transport=None,
 ) -> FastAPI:
     """Create the local single-owner FastAPI application.
 
@@ -613,6 +681,9 @@ def create_app(
         mode: Human-readable execution mode label.
         public_origin: Optional explicit HTTPS origin for proxy deployments.
         allowance_status: Optional callable returning allowance metadata.
+        stt_grant: Optional finite grant backing transcription spend.
+        stt_key: Owner Meta key used only for the transcription route.
+        stt_transport: Optional HTTPX transport for transcription (tests).
 
     Returns:
         Configured FastAPI app with owner authentication and task routes.
@@ -623,6 +694,7 @@ def create_app(
     app = _base_app(public_origin=public_origin, sessions=None)
 
     external = ExternalActionBridge(operator.store)
+    stt_ready = stt_grant is not None and isinstance(stt_key, str) and bool(stt_key)
 
     def owner(request: Request):
         """Authenticate the local owner via bearer token."""
@@ -630,12 +702,22 @@ def create_app(
         actual = request.headers.get("authorization", "")
         if not secrets.compare_digest(actual.encode(), expected.encode()):
             raise HTTPException(401, "Owner credential required")
-        return Principal(operator, model_factory, mode, allowance_status, external_actions=external)
+        return Principal(
+            operator,
+            model_factory,
+            mode,
+            allowance_status,
+            external_actions=external,
+            grant=stt_grant if stt_ready else None,
+            key_source=(lambda: stt_key) if stt_ready else None,
+            key_attached=stt_ready,
+        )
 
     _task_routes(app, owner)
     _external_action_routes(app, owner)
     _supervisor_routes(app, owner)
     _owner_routes(app, owner, drain_snapshot=drain_snapshot)
+    _stt_routes(app, owner, stt_transport)
 
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
@@ -661,6 +743,7 @@ def create_hosted_app(
     public_origin=None,
     judge_accounts=None,
     judge_model=None,
+    stt_transport=None,
 ):
     """Create the hosted multi-visitor FastAPI application.
 
@@ -678,6 +761,7 @@ def create_hosted_app(
         public_origin: Optional explicit HTTPS origin.
         judge_accounts: Optional judge credential store for BYOK evaluation.
         judge_model: Server-pinned model for judge self-grants, or None.
+        stt_transport: Optional HTTPX transport for transcription (tests).
 
     Returns:
         Configured FastAPI app with visitor authentication and task routes.
@@ -741,13 +825,18 @@ def create_hosted_app(
                 True,
                 True,
                 external,
+                active,
+                lambda: sessions.key_for(token, subject),
             )
-        return Principal(operator, ScriptedModel, "scripted", None, True, False, external)
+        return Principal(
+            operator, ScriptedModel, "scripted", None, True, False, external, active, None
+        )
 
     _task_routes(app, visitor)
     _external_action_routes(app, visitor)
     _supervisor_routes(app, visitor)
     _owner_routes(app, visitor)
+    _stt_routes(app, visitor, stt_transport)
 
     @app.get("/api/config")
     def configuration(request: Request):

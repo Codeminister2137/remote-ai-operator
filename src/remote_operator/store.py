@@ -31,6 +31,11 @@ class Store:
                     id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL,
                     requests INTEGER NOT NULL, reserved_usd TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS allowance_ops (
+                    grant_id TEXT NOT NULL, operation TEXT NOT NULL,
+                    requests INTEGER NOT NULL, reserved_usd TEXT NOT NULL,
+                    PRIMARY KEY (grant_id, operation)
+                );
                 CREATE TABLE IF NOT EXISTS controls (
                     task_id TEXT PRIMARY KEY, cancelled INTEGER NOT NULL DEFAULT 0
                 );
@@ -131,8 +136,34 @@ class Store:
             {"sequence": seq, "kind": kind, "payload": json.loads(body)} for seq, kind, body in rows
         ]
 
-    def reserve_allowance(self, grant_id, fingerprint, maximum, reservation, approved):
-        """Consume before sending; failed calls remain consumed across restarts."""
+    @staticmethod
+    def _operations(db, grant_id):
+        """Spend-by-operation split for one shared ledger row (always both keys)."""
+        rows = {
+            name: (used, spent)
+            for name, used, spent in db.execute(
+                "SELECT operation,requests,reserved_usd FROM allowance_ops WHERE grant_id=?",
+                (grant_id,),
+            ).fetchall()
+        }
+        return {
+            name: {
+                "requests_used": rows.get(name, (0, "0"))[0],
+                "reserved_usd_estimate": rows.get(name, (0, "0"))[1],
+            }
+            for name in ("chat", "audio")
+        }
+
+    def reserve_allowance(
+        self, grant_id, fingerprint, maximum, reservation, approved, *, operation="chat"
+    ):
+        """Consume before sending; failed calls remain consumed across restarts.
+
+        All operations share one request/USD bucket per grant; ``operation``
+        only tags the reservation for the spend-by-operation display.
+        """
+        if operation not in ("chat", "audio"):
+            raise ValueError("Unknown allowance operation")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
@@ -149,12 +180,23 @@ class Store:
                 "SET requests=excluded.requests,reserved_usd=excluded.reserved_usd",
                 (grant_id, fingerprint, used + 1, str(next_reserved)),
             )
+            split = db.execute(
+                "SELECT requests,reserved_usd FROM allowance_ops WHERE grant_id=? AND operation=?",
+                (grant_id, operation),
+            ).fetchone()
+            used_op, reserved_op = (split[0], Decimal(split[1])) if split else (0, Decimal(0))
+            db.execute(
+                "INSERT INTO allowance_ops VALUES (?,?,?,?) ON CONFLICT(grant_id,operation) "
+                "DO UPDATE SET requests=excluded.requests,reserved_usd=excluded.reserved_usd",
+                (grant_id, operation, used_op + 1, str(reserved_op + Decimal(reservation))),
+            )
             status = {
                 "requests_used": used + 1,
                 "requests_limit": maximum,
                 "reserved_usd_estimate": str(next_reserved),
                 "limit_usd": str(approved),
                 "remaining_usd_estimate": str(Decimal(approved) - next_reserved),
+                "operations": self._operations(db, grant_id),
             }
         self._durable()
         return status
@@ -165,6 +207,7 @@ class Store:
             row = db.execute(
                 "SELECT fingerprint,requests,reserved_usd FROM allowances WHERE id=?", (grant_id,)
             ).fetchone()
+            operations = self._operations(db, grant_id)
         if row and row[0] != fingerprint:
             raise ValueError("Consumed grant settings cannot be changed")
         used, reserved = (row[1], Decimal(row[2])) if row else (0, Decimal(0))
@@ -180,6 +223,7 @@ class Store:
             "reserved_usd_estimate": str(reserved),
             "limit_usd": str(limit),
             "remaining_usd_estimate": str(remaining),
+            "operations": operations,
         }
 
     def request_cancel(self, task_id):
