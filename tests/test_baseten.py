@@ -325,11 +325,8 @@ class BasetenContracts(unittest.TestCase):
         self.assertEqual(actor._redact({"k": "v"}), {"k": "v"})
 
     def test_protocol_failures_retry_twice_then_raise(self):
-        double = chat_response()
-        double["choices"][0]["message"]["tool_calls"].append(
-            double["choices"][0]["message"]["tool_calls"][0]
-        )
-        script = [double, double, chat_response()]
+        bad = chat_response(name="delete_everything")
+        script = [bad, bad, chat_response()]
         calls = []
 
         def serve(request):
@@ -343,10 +340,58 @@ class BasetenContracts(unittest.TestCase):
         self.assertEqual(ok_actor.last_receipt["attempts"], 3)
 
         fresh_grant = replace(self.grant, grant_id="retry-always-bad")
-        always_bad = self.actor(lambda request: httpx.Response(200, json=double), grant=fresh_grant)
+        always_bad = self.actor(lambda request: httpx.Response(200, json=bad), grant=fresh_grant)
         with self.assertRaises(BasetenFailure) as stopped:
             always_bad.next_operation([], prompt="task")
         self.assertEqual(stopped.exception.category, "protocol")
+
+    def test_parallel_calls_queue_without_new_requests(self):
+        double = chat_response()
+        second = dict(double["choices"][0]["message"]["tool_calls"][0])
+        second = {**second, "id": "call_2"}
+        double["choices"][0]["message"]["tool_calls"].append(second)
+        calls = []
+
+        def serve(request):
+            calls.append(request)
+            return httpx.Response(200, json=double)
+
+        actor = self.actor(serve)
+        first = actor.next_operation([], prompt="task")
+        self.assertEqual(first.call_id, "call_1")
+        continued = [
+            {
+                "name": first.name,
+                "arguments": first.arguments,
+                "call_id": first.call_id,
+                "result": {"content": "seed"},
+            }
+        ]
+        queued = actor.next_operation(continued, prompt="task")
+        self.assertEqual(queued.call_id, "call_2")
+        self.assertEqual(len(calls), 1)
+        self.assertIsNone(actor.last_receipt)
+
+    def test_queue_drops_on_foreign_history(self):
+        double = chat_response()
+        double["choices"][0]["message"]["tool_calls"].append(
+            double["choices"][0]["message"]["tool_calls"][0]
+        )
+        calls = []
+
+        def serve(request):
+            calls.append(request)
+            return httpx.Response(200, json=double)
+
+        actor = self.actor(serve)
+        actor.next_operation([], prompt="task")
+        self.assertEqual(len(actor._queued), 1)
+        foreign = [
+            {"name": "read_file", "arguments": {"path": "x"}, "call_id": "other-task", "result": {}}
+        ]
+        actor.next_operation(foreign, prompt="task")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(actor._queued), 1)
 
     def test_unknown_tool_and_malformed_calls_are_refused(self):
         payloads = [
@@ -354,11 +399,11 @@ class BasetenContracts(unittest.TestCase):
             {**chat_response(), "choices": []},
             content_response(["block", "content"]),
         ]
-        double = chat_response()
-        double["choices"][0]["message"]["tool_calls"].append(
-            double["choices"][0]["message"]["tool_calls"][0]
+        overfull = chat_response()
+        overfull["choices"][0]["message"]["tool_calls"] = (
+            overfull["choices"][0]["message"]["tool_calls"] * 9
         )
-        payloads.append(double)
+        payloads.append(overfull)
         ragged = chat_response()
         ragged["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = 42
         payloads.append(ragged)
