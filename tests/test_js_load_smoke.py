@@ -22,6 +22,7 @@ class JsLoadSmokeTests(unittest.TestCase):
             self.skipTest("node unavailable")
         proc = subprocess.run(
             [node, str(HARNESS)],
+            check=False,
             cwd=str(ROOT),
             capture_output=True,
             text=True,
