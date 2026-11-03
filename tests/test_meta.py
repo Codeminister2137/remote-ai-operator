@@ -277,11 +277,11 @@ class MetaContracts(unittest.TestCase):
             self.actor(grant=replace(self.grant, max_requests=6)).next_operation([], prompt="task")
         self.assertEqual(len(self.requests), 1)
 
-    def test_malformed_incomplete_and_parallel_outputs_are_not_executed(self):
+    def test_malformed_incomplete_and_overfull_outputs_are_not_executed(self):
         cases = [
             response(output=[]),
             response(status="incomplete", incomplete_details={"reason": "max_output_tokens"}),
-            response(output=[response()["output"][0]] * 2),
+            response(output=[response()["output"][0]] * 9),
             response(
                 output=[
                     {"type": "function_call", "call_id": "x", "name": "shell", "arguments": "{}"}
@@ -666,6 +666,37 @@ class MetaContracts(unittest.TestCase):
         actor._key = ""
         self.assertEqual(actor._redact("diagnostic text"), "diagnostic text")
         self.assertEqual(actor._redact({"k": "v"}), {"k": "v"})
+
+    def test_parallel_calls_queue_without_new_requests(self):
+        double = response()
+        second = dict(double["output"][0])
+        second["call_id"] = "call_2"
+        double["output"].append(second)
+        calls = []
+
+        def serve(request):
+            calls.append(request)
+            return httpx.Response(200, json=double)
+
+        actor = self.actor(serve)
+        first = actor.next_operation([], prompt="task")
+        self.assertEqual(first.call_id, "call_1")
+        continued = [
+            {
+                "name": first.name,
+                "arguments": first.arguments,
+                "call_id": first.call_id,
+                "result": {"content": "seed"},
+            }
+        ]
+        queued = actor.next_operation(continued, prompt="task")
+        self.assertEqual(queued.call_id, "call_2")
+        self.assertEqual(len(calls), 1)
+        self.assertIsNone(actor.last_receipt)
+        foreign = [{"name": "read_file", "arguments": {}, "call_id": "other", "result": {}}]
+        actor.next_operation(foreign, prompt="task")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(actor._queued), 1)
 
     def test_approval_granted_emits_debug_log_without_changing_semantics(self):
         op = self.actor().next_operation([], prompt="task")

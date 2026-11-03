@@ -228,6 +228,8 @@ class MetaModel:
         self._turns = []
         self._prompt_digest = None
         self.last_receipt = None
+        self._queued: list = []
+        self._queued_after = None
 
     def session_credential(self):
         """Resolve the current credential for a metered sibling call.
@@ -307,6 +309,15 @@ class MetaModel:
         return items
 
     def next_operation(self, history, *, prompt):
+        if self._queued:
+            want_len, want_call = self._queued_after
+            if len(history) == want_len + 1 and history and history[-1].get("call_id") == want_call:
+                name, arguments, call_id = self._queued.pop(0)
+                self.last_receipt = None
+                self._queued_after = (len(history), call_id)
+                return Operation(name, arguments, call_id)
+            self._queued = []
+            self._queued_after = None
         self.last_receipt = None
         try:
             if self._key_source is not None:
@@ -465,20 +476,26 @@ class MetaModel:
                 if not summary:
                     raise ValueError("Empty provider response")
                 return Operation("finish", {}, summary=summary)
-            if len(calls) != 1:
-                raise ValueError("Expected one controlled operation per response")
-            call = calls[0]
-            if not isinstance(call.get("call_id"), str) or not 1 <= len(call["call_id"]) <= 64:
-                raise ValueError("Invalid call identifier")
-            if self._key in call["call_id"]:
-                raise ValueError("Credential echoed in call identifier")
-            arguments = json.loads(call["arguments"])
-            if not isinstance(arguments, dict) or call["name"] not in {
-                tool["name"] for tool in TOOLS
-            }:
-                raise ValueError("Unknown tool or malformed arguments")
-            if self._echoes_credential(arguments):
-                raise ValueError("Credential echoed in generated arguments")
+            if not 1 <= len(calls) <= 8:
+                raise ValueError("Expected between 1 and 8 tool calls per response")
+            parsed_calls = []
+            for call in calls:
+                if not isinstance(call.get("call_id"), str) or not 1 <= len(call["call_id"]) <= 64:
+                    raise ValueError("Invalid call identifier")
+                if self._key in call["call_id"]:
+                    raise ValueError("Credential echoed in call identifier")
+                arguments = json.loads(call["arguments"])
+                if not isinstance(arguments, dict) or call["name"] not in {
+                    tool["name"] for tool in TOOLS
+                }:
+                    raise ValueError("Unknown tool or malformed arguments")
+                if self._echoes_credential(arguments):
+                    raise ValueError("Credential echoed in generated arguments")
+                parsed_calls.append((call["name"], arguments, call["call_id"]))
+            (name, arguments, call_id), *rest = parsed_calls
+            self._queued = rest
+            self._queued_after = (len(history), call_id)
+            call = {"name": name, "call_id": call_id}
             retained = []
             for item in output:
                 if item.get("type") == "reasoning":

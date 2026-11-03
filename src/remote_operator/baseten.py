@@ -201,11 +201,15 @@ class BasetenFailure(TransportFailure):
 class BasetenModel:
     """One Chat Completions actor bound to the event model and durable allowance.
 
-    Stateless across calls: every request replays the observable tool history,
-    so no encrypted continuation or per-task actor binding is needed. Provider
-    reasoning fields (``reasoning_content`` and similar) are never read or
-    retained; only ``content``, ``tool_calls`` and ``usage`` are used.
+    Every request replays the observable tool history, so no encrypted
+    continuation is needed. Parallel tool calls from one response are queued
+    and served without further requests; the queue is bound to the exact
+    history it was produced for, so a foreign or resumed history drops it.
+    Provider reasoning fields (``reasoning_content`` and similar) are never
+    read or retained; only ``content``, ``tool_calls`` and ``usage`` are used.
     """
+
+    MAX_PARALLEL_CALLS = 8
 
     def __init__(
         self,
@@ -226,6 +230,8 @@ class BasetenModel:
         self._transport = transport
         self.name = "Baseten / " + (grant.model if grant else "disabled")
         self.last_receipt = None
+        self._queued: list = []
+        self._queued_after = None
 
     def _redact(self, value):
         if isinstance(value, str):
@@ -288,6 +294,15 @@ class BasetenModel:
         return messages
 
     def next_operation(self, history, *, prompt):
+        if self._queued:
+            want_len, want_call = self._queued_after
+            if len(history) == want_len + 1 and history and history[-1].get("call_id") == want_call:
+                name, arguments, call_id = self._queued.pop(0)
+                self.last_receipt = None
+                self._queued_after = (len(history), call_id)
+                return Operation(name, arguments, call_id)
+            self._queued = []
+            self._queued_after = None
         self.last_receipt = None
         if self.grant is None or not self._key:
             raise ValueError("Live inference disabled: no explicit credential/grant")
@@ -336,14 +351,14 @@ class BasetenModel:
         while True:
             attempts += 1
             try:
-                operation = self._attempt(payload, attempts)
+                operation = self._attempt(payload, attempts, history)
                 return operation
             except BasetenFailure as exc:
                 if exc.category not in {"protocol", "incomplete"} or attempts >= 3:
                     raise
                 logger.debug("baseten retryable %s (attempt %d of 3)", exc.category, attempts)
 
-    def _attempt(self, payload, attempt):
+    def _attempt(self, payload, attempt, history):
         """One request plus strict parse; retryable failures propagate."""
         self.last_receipt["attempts"] = attempt
         request_deadline = time.monotonic() + 60
@@ -443,31 +458,36 @@ class BasetenModel:
                 if not content:
                     raise ValueError("Empty provider response")
                 return Operation("finish", {}, summary=summary)
-            if len(tool_calls) != 1:
-                raise ValueError("Expected one controlled operation per response")
-            call = tool_calls[0]
-            if not isinstance(call, dict) or call.get("type") != "function":
-                raise TypeError("Malformed tool call")
-            invoked = call.get("function")
-            if not isinstance(invoked, dict):
-                raise TypeError("Malformed tool call")
-            call_id = call.get("id")
-            if not isinstance(call_id, str) or not 1 <= len(call_id) <= 64:
-                raise ValueError("Invalid call identifier")
-            if self._key in call_id:
-                raise ValueError("Credential echoed in call identifier")
-            raw_arguments = invoked.get("arguments")
-            if not isinstance(raw_arguments, str):
-                raise TypeError("Malformed tool arguments")
-            arguments = json.loads(raw_arguments)
-            if not isinstance(arguments, dict) or invoked.get("name") not in {
-                tool["function"]["name"] for tool in TOOLS
-            }:
-                raise ValueError("Unknown tool or malformed arguments")
-            if self._echoes_credential(arguments):
-                raise ValueError("Credential echoed in generated arguments")
-            logger.debug("approval granted: %s %s", invoked["name"], call_id)
-            return Operation(invoked["name"], arguments, call_id=call_id, summary=summary)
+            if not 1 <= len(tool_calls) <= self.MAX_PARALLEL_CALLS:
+                raise ValueError("Expected between 1 and 8 tool calls per response")
+            parsed_calls = []
+            for call in tool_calls:
+                if not isinstance(call, dict) or call.get("type") != "function":
+                    raise TypeError("Malformed tool call")
+                invoked = call.get("function")
+                if not isinstance(invoked, dict):
+                    raise TypeError("Malformed tool call")
+                call_id = call.get("id")
+                if not isinstance(call_id, str) or not 1 <= len(call_id) <= 64:
+                    raise ValueError("Invalid call identifier")
+                if self._key in call_id:
+                    raise ValueError("Credential echoed in call identifier")
+                raw_arguments = invoked.get("arguments")
+                if not isinstance(raw_arguments, str):
+                    raise TypeError("Malformed tool arguments")
+                arguments = json.loads(raw_arguments)
+                if not isinstance(arguments, dict) or invoked.get("name") not in {
+                    tool["function"]["name"] for tool in TOOLS
+                }:
+                    raise ValueError("Unknown tool or malformed arguments")
+                if self._echoes_credential(arguments):
+                    raise ValueError("Credential echoed in generated arguments")
+                parsed_calls.append((invoked["name"], arguments, call_id))
+            (name, arguments, call_id), *rest = parsed_calls
+            self._queued = rest
+            self._queued_after = (len(history), call_id)
+            logger.debug("approval granted: %s %s", name, call_id)
+            return Operation(name, arguments, call_id=call_id, summary=summary)
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             logger.debug("baseten unparseable response: %s", self._redact(str(exc))[:200])
             raise BasetenFailure(
