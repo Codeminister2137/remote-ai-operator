@@ -43,9 +43,15 @@ kept in the thread store.
 
 The local owner `serve` process runs a drain worker thread: reconcile at
 startup (covers reboot/wake backlog), then reconcile + drain + refresh
-every 30 seconds, first pass immediate. `uv run --locked
-remote-ai-operator supervisor-drain` remains for one-shot/CLI use and for
-hosted deployments (no worker there): it reconciles jobs left
+every 30 seconds, first pass immediate. The hosted `serve --hosted` process
+runs a multi-subject sweeper with the same cadence: one daemon thread walks
+subject workspaces round-robin (bounded subjects per pass and jobs per
+subject), reconciling, draining and refreshing each against that subject's
+own lock only, sequentially. Scripted-planned jobs drain on the labelled
+offline reference; live-planned jobs without an attached key park as
+`waiting_on_key` and resume when the key is re-attached. `uv run --locked
+remote-ai-operator supervisor-drain` remains for one-shot/CLI use on the
+owner store: it reconciles jobs left
 running by an interrupted worker, runs queued jobs oldest-first (default 10,
 `--max-jobs 1..100`), then refreshes jobs waiting on owner approval. Each job
 becomes one operator task whose prompt is the approved plan (truncated past
@@ -55,7 +61,8 @@ a verified finite grant). One worker at a time: a busy operator lock returns
 the job to the queue instead of running it.
 
 Job statuses mirror the linked task: `queued`, `running`, `paused`,
-`awaiting_approval`, `completed`, `failed`, `cancelled`. Reconciliation resets
+`awaiting_approval`, `waiting_on_owner`, `waiting_on_key`, `completed`,
+`failed`, `cancelled`. Reconciliation resets
 a claimed-but-unstarted job to `queued`, reconciles an interrupted task through
 `Operator.reconcile`, and requeues it for a normal resume; refused
 reconciliation fails the job with the reason. Cancelling the thread cancels

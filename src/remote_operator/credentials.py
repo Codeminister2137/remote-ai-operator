@@ -200,6 +200,46 @@ class SessionKeys:
                 )
             return entry.key
 
+    def subjects_with_keys(self):
+        """Return sorted subjects holding a live attached provider key."""
+        with self._lock:
+            self._purge()
+            return sorted(
+                {entry.subject for entry in self._entries.values() if entry.key is not None}
+            )
+
+    def key_source_for_subject(self, subject):
+        """Return a per-call key borrower for ``subject``, or None without a key.
+
+        The hosted drain worker holds subjects, not session tokens, so it
+        borrows through this closure. Every call re-checks the live entries:
+        logout, revocation or expiry raises ``SessionUnavailable`` at that
+        call, and the borrowed key is never retained past the call.
+        """
+        valid_subject(subject)
+        with self._lock:
+            self._purge()
+            live = any(
+                entry.key is not None and secrets.compare_digest(entry.subject, subject)
+                for entry in self._entries.values()
+            )
+        if not live:
+            return None
+
+        def _borrow():
+            with self._lock:
+                self._purge()
+                for entry in self._entries.values():
+                    if entry.key is not None and secrets.compare_digest(
+                        entry.subject, subject
+                    ):
+                        return entry.key
+            raise SessionUnavailable(
+                "Session credential unavailable; re-attach the provider key"
+            )
+
+        return _borrow
+
     def revoke(self, token):
         with self._lock:
             self._entries.pop(self._identity(token), None)

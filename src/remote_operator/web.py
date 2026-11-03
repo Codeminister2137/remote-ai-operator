@@ -164,6 +164,7 @@ class Principal:
     hosted: bool = False
     key_attached: bool = False
     external_actions: ExternalActionBridge | None = None
+    drain_enabled: bool = False
 
 
 def _origin(public_origin):
@@ -494,17 +495,15 @@ def _supervisor_routes(app, principal):
     ):
         """Approve the exact reviewed plan and enqueue a run unless planning-only.
 
-        Hosted principals are planning-only: no drain worker consumes their
-        runs, so execute=true is refused loudly instead of queueing a job that
-        would sit in queued forever. The pending approval survives the refusal;
-        hosted callers retry the same nonce with execute=false.
+        Hosted principals without an active drain are planning-only:
+        execute=true is refused loudly instead of queueing a job that would
+        sit in queued forever. The pending approval survives the refusal;
+        those callers retry the same nonce with execute=false. Hosted serve
+        always runs the multi-subject drain sweeper, so execute=true queues
+        there; execute=false stays available as planning-only.
         """
-        if who.hosted:
-            if body.execute:
-                raise HTTPException(409, HOSTED_PLANNING_ONLY_MESSAGE)
-            return Supervisor(who.operator).approve_plan(
-                thread_id, body.nonce, execute=False
-            )
+        if who.hosted and body.execute and not who.drain_enabled:
+            raise HTTPException(409, HOSTED_PLANNING_ONLY_MESSAGE)
         return Supervisor(who.operator).approve_plan(thread_id, body.nonce, execute=body.execute)
 
     @app.get("/api/supervisor/runs")
@@ -661,6 +660,7 @@ def create_hosted_app(
     public_origin=None,
     judge_accounts=None,
     judge_model=None,
+    hosted_drain=None,
 ):
     """Create the hosted multi-visitor FastAPI application.
 
@@ -678,6 +678,10 @@ def create_hosted_app(
         public_origin: Optional explicit HTTPS origin.
         judge_accounts: Optional judge credential store for BYOK evaluation.
         judge_model: Server-pinned model for judge self-grants, or None.
+        hosted_drain: Drain-capability marker (the sweeper status). Pass the
+            hosted drain worker status to let execute=true queue; when None
+            (no drain consumes hosted runs) execute=true stays 409
+            planning-only. Hosted serve always passes a live sweeper.
 
     Returns:
         Configured FastAPI app with visitor authentication and task routes.
@@ -713,6 +717,7 @@ def create_hosted_app(
         )
 
     app = _base_app(public_origin=public_origin, sessions=sessions)
+    drain_capable = hosted_drain is not None
 
     def visitor(request: Request):
         """Authenticate a hosted visitor from session cookie."""
@@ -741,8 +746,11 @@ def create_hosted_app(
                 True,
                 True,
                 external,
+                drain_capable,
             )
-        return Principal(operator, ScriptedModel, "scripted", None, True, False, external)
+        return Principal(
+            operator, ScriptedModel, "scripted", None, True, False, external, drain_capable
+        )
 
     _task_routes(app, visitor)
     _external_action_routes(app, visitor)
@@ -825,6 +833,12 @@ def create_hosted_app(
             sessions.attach_key(token, body.api_key)
         except SessionCapacity:
             raise HTTPException(429, "Demo is holding too many attached keys; try later") from None
+        from remote_operator.supervisor_runner import SupervisorRunner
+
+        try:
+            SupervisorRunner(who.operator).resume_waiting_on_key()
+        except Exception:  # requeue is best-effort; the sweep retries
+            logger.debug("key-attached requeue skipped", exc_info=True)
         return {"key_attached": True, "mode": "meta"}
 
     @app.post("/api/judges/signup")
