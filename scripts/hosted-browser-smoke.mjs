@@ -9,9 +9,14 @@ await new Promise((resolve, reject) => {socket.addEventListener("open", resolve,
 let serial = 0;
 const pending = new Map();
 const exceptions = [];
+const dialogs = [];
 socket.addEventListener("message", (event) => {
   const message = JSON.parse(event.data);
   if (message.method === "Runtime.exceptionThrown") exceptions.push(message.params.exceptionDetails.text);
+  if (message.method === "Page.javascriptDialogOpening") {
+    dialogs.push(message.params.message || "");
+    send("Page.handleJavaScriptDialog", {accept:true}).catch((error) => dialogs.push("HANDLE-FAILED: " + error.message));
+  }
   if (!message.id) return;
   const operation = pending.get(message.id);
   if (!operation) return;
@@ -30,11 +35,11 @@ async function evaluate(expression) {
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
   return result.result.value;
 }
-async function waitFor(expression) {
-  const deadline = Date.now() + 35000;
+async function waitFor(expression, timeoutMs = 35000) {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await evaluate(expression)) return;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error("Page condition deadline: " + expression);
 }
@@ -73,11 +78,12 @@ try {
   if (!(await evaluate("document.querySelector('.notice').textContent.includes('Offline reference')"))) throw new Error("Session did not start on the offline reference");
   if (await evaluate("document.getElementById('accessCode').value !== ''")) throw new Error("Access code retained in the page field");
   await evaluate("document.getElementById('submit').click()");
-  await waitFor("document.getElementById('status').textContent === 'awaiting_approval' && !document.getElementById('approve').disabled");
+  await waitFor("document.getElementById('status').textContent === 'Awaiting approval' && !document.getElementById('approve').disabled", 150000);
   const taskId = await evaluate("document.getElementById('taskId').value.trim()");
   if (!/^[a-f0-9]{32}$/.test(taskId)) throw new Error("Hosted task is not bookmarkable");
   await evaluate("document.getElementById('approve').click()");
-  await waitFor("document.getElementById('status').textContent === 'completed' && !document.getElementById('preview').disabled");
+  await waitFor("document.getElementById('status').textContent === 'Completed' && !document.getElementById('preview').disabled");
+  if (!dialogs.some((text) => text.includes("Approve this change?"))) throw new Error("Approve confirmation dialog did not appear");
   await evaluate("document.getElementById('preview').click()");
   await waitFor("document.getElementById('issues').children.length === 2 && document.getElementById('import-errors').children.length === 2");
   console.log("PASS: hosted visitor session ran the scripted task, approved and exercised the sample");
@@ -95,7 +101,7 @@ try {
 
   await send("Page.reload");
   await waitFor("document.readyState === 'complete' && !document.getElementById('submit').disabled");
-  await waitFor("document.getElementById('status').textContent === 'completed'");
+  await waitFor("document.getElementById('status').textContent === 'Completed'");
   if (!(await evaluate("document.getElementById('taskId').value.trim() === " + JSON.stringify(taskId) + " && location.hash === '#" + taskId + "'"))) throw new Error("Session reload lost the visitor's task");
   for (const [label, width, height, mobile] of [["desktop",1100,950,false], ["mobile",390,844,true]]) {
     await send("Emulation.setDeviceMetricsOverride", {width,height,deviceScaleFactor:1,mobile});

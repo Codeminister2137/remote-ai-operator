@@ -242,6 +242,19 @@ The hosted route is therefore no longer scripted-only: judge-funded live Meta
 inference to task completion is verified on the deployed URL. The visitor key
 is session-only and the judge grant is finite per account.
 
+A real-browser pass against the deployed URL also passed 5/5
+(`scripts/hosted-browser-smoke.mjs` driven by private
+`.runtime/hosted-deploy-20261103/deployed_browser.py`, screenshots under
+`browser-live/`): labelled scripted mode + wrong-code refusal, visitor session
+ran the scripted task through the native approve-confirmation dialog to
+`Completed` and exercised the sample, session isolation + request-header +
+no-route key refusal, reload persistence with empty browser storage and clean
+session exit, and no horizontal overflow at desktop/mobile widths. The script
+needed two harness fixes for UI drift since 2026-10-27 (humanized status
+labels `Awaiting approval`/`Completed`, CDP auto-accept of the approve
+confirmation with a text assertion) plus a longer run budget for Modal
+cold-start variance; no application defect was found.
+
 Credential-echo regression checks found and fixed metadata/replay retention:
 provider-echoed key strings are redacted from receipts and retained replay items;
 a key echoed as a controlled call ID is refused. No key enters repository tools.
