@@ -158,6 +158,7 @@ class SupervisorFlowTests(unittest.IsolatedAsyncioTestCase):
         page = await self.client.get("/")
         for element_id in (
             "supervisorThreads",
+            "newThreadRow",
             "supervisorNewTopic",
             "supervisorOpen",
             "supervisorTranscript",
@@ -172,6 +173,22 @@ class SupervisorFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(f'id="{element_id}"', page.text)
         self.assertIn(">Create thread<", page.text)
         self.assertIn("One thread is one planning conversation", page.text)
+        self.assertIn('id="newThreadRow" hidden', page.text)
+        self.assertIn('id="inboxBell" class="secondary nav-action"', page.text)
+        self.assertIn('id="tourStartNav" class="secondary nav-action"', page.text)
+
+    async def test_served_script_marks_task_source_and_polls_window(self):
+        script = await self.client.get("/app.js")
+        for marker in (
+            '"__new__"',
+            "taskSource",
+            "opened from",
+            "startWindowPolling",
+            'second: "2-digit"',
+            "No pending Workbench actions.",
+            "Times show when this page first displayed each entry.",
+        ):
+            self.assertIn(marker, script.text)
 
     async def test_served_script_calls_supervisor_endpoints(self):
         script = await self.client.get("/app.js")
