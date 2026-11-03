@@ -25,6 +25,7 @@ let hiddenPollTicks = 0;
 let triedApproved = false;
 let currentView = "demo";
 let reviewContext = null; // {run_id, thread_id, thread_topic} when opened from a run.
+const WORKBENCH_ACTIONS_VISIBLE = false; // Hackathon: hide Workbench section. Post-hackathon: set true to restore.
 let lastDrain = null; // Latest /api/window drain health (owner serve only).
 let lastRunsActive = false; // Any supervised run executing.
 let lastAgentsActive = false; // Any reported agent on a task.
@@ -75,10 +76,10 @@ if (/^[a-f0-9]{32}$/.test(location.hash.slice(1))) element("taskId").value = loc
 const eventNames = {
   submitted:"Task submitted", started:"Actor started", inference_requested:"Actor turn requested",
   tool_started:"Tool started", tool_completed:"Tool completed", transport_failed:"Transport interrupted",
-  recovered:"Continued without replaying completed edits", approval_requested:"Change ready for review",
-  apply_started:"Applying approved change", applied:"Approved change applied", model_summary:"Actor update",
+  recovered:"Continued without replaying completed edits", approval_requested:"AI change ready for your review",
+  apply_started:"Applying approved change", applied:"Approved by you and applied", model_summary:"Actor update",
   inference_receipt:"Provider usage receipt", cancellation_requested:"Cancellation requested",
-  cancelled:"Task cancelled; earlier effects preserved", sample_executed:"Sample feature exercised",
+  cancelled:"Cancelled by you; earlier effects preserved", rejected:"Rejected by you", sample_executed:"Sample feature exercised",
   revalidation_started:"Fresh validation started", reconciled:"Interrupted effects reconciled"
 };
 function humanizeStatus(raw) {
@@ -282,7 +283,13 @@ async function refreshWindowStatus() {
   } else {
     let line = "Window: " + (status.slice || "unscheduled slice");
     if (status.phase) line += " · " + humanizeStatus(status.phase);
-    if (status.last_heartbeat_utc) line += " (last heartbeat " + status.last_heartbeat_utc + ")";
+    const beat = status.last_heartbeat_utc ? Date.parse(status.last_heartbeat_utc) : NaN;
+    if (!Number.isNaN(beat)) {
+      const ageMin = Math.max(0, Math.round((Date.now() - beat) / 60000));
+      const age = ageMin < 60 ? ageMin + "m ago" : Math.round(ageMin / 60) + "h ago";
+      line += " (updated " + age + (ageMin > 30 ? " — may be outdated" : "") + ")";
+    } else if (status.last_heartbeat_utc) line += " (last heartbeat " + status.last_heartbeat_utc + ")";
+    else line += " (no recent update)";
     if (status.note) line += " " + status.note;
     element("windowStatus").textContent = line;
     element("windowStatus").title = status.phase ? "Raw phase: " + status.phase : "";
@@ -897,7 +904,7 @@ function updateBuildChip() {
 function applyJudgeVisibility() {
   const judge = judgeSession === true;
   element("machineSection").hidden = judge;
-  element("workbenchSection").hidden = judge;
+  element("workbenchSection").hidden = judge || !WORKBENCH_ACTIONS_VISIBLE;
 }
 function clearTaskView() {
   task = null; taskEvents = []; showAllEvents = false; reviewContext = null; triedApproved = false; taskSource = "";
@@ -972,7 +979,8 @@ async function refresh() {
     "Status: " + humanizeStatus(task.status) + ".";
   element("verdict").className = !task.evidence ? "" : !task.evidence.passed ? "verdict-fail" :
     ["awaiting_approval", "completed"].includes(task.status) ? "verdict-ready" : "";
-  element("demoReviewStatus").textContent = "Task " + humanizeStatus(task.status) + ": " + element("verdict").textContent;
+  element("demoReviewStatus").textContent = "Task " + humanizeStatus(task.status) + ": " + element("verdict").textContent +
+    (taskSource ? " (opened from " + taskSource + ")" : "");
   element("demoReviewStatus").title = "Raw status: " + task.status;
   element("demoReviewCta").disabled = false;
   renderApprovalSubject();
@@ -1058,10 +1066,10 @@ element("approve").onclick = () => guarded(async () => {
   const runner = task.evidence && task.evidence.runner ? task.evidence.runner : "not run yet";
   const summary = "Approve this change?\n\nCandidate: " + short(task.evidence && task.evidence.candidate_digest) +
     "\nBase: " + short(task.base_digest) + "\nValidated by: " + runner +
-    "\nTarget: separate LOCAL demo target only — no push, no deploy." +
+    "\nTarget: separate LOCAL practice file only — no push, no deploy." +
     "\n\nPress OK to approve, Cancel to keep reviewing.";
   if (!window.confirm(summary)) return;
-  await taskAction("/approve", {nonce: task.approval.nonce}, "Verified change applied to the local demo target.");
+  await taskAction("/approve", {nonce: task.approval.nonce}, "Verified change applied to the local practice file.");
 });
 element("reject").onclick = () => guarded(() => taskAction("/reject", {}, "Change rejected; target not updated."));
 element("revalidate").onclick = () => guarded(() => taskAction("/revalidate", {}, "Fresh validation completed. The previous approval is no longer valid — review and approve again."));
@@ -1716,15 +1724,15 @@ const tourSteps = [
   {anchor: null, view: null, title: "Welcome to Remote AI Operator",
    text: "Connect, run work, then review and approve every change in one place. This tour points out each stop — about a minute. You can skip any time."},
   {anchor: "onboard-wizard", view: null, title: "Setup wizard",
-   text: "Four steps to a working session: demo access code, judge account, spending limits, then your Meta key — or continue with the free scripted reference. The progress line shows where you are."},
+   text: "Four steps to a working session: demo access code, judge account, spending limits, then your Meta key — or continue with the free offline reference. The progress line shows where you are."},
   {anchor: "sampleReview", view: "demo", title: "Sample review",
    text: "Load a ready-made validated task to practice the review loop. Below, the sample inputs (all valid, tricky, or all broken rows) give one-click data for trying the feature."},
   {anchor: "approve", view: "review", title: "The one approval place",
-   text: "Read the diff and the validation report, then approve. Approval applies this candidate only to the separate local demo target — never a push or deploy."},
+   text: "Read the change and the validation report, then approve. Approval applies it only to a separate local practice file — in every mode, never a push or deploy."},
   {anchor: "tryApproved", view: "review", title: "Try the approved feature",
-   text: "Runs the new importer on sample data and opens Demo step 3 with accepted issues and row errors — proof the approved code works."},
+   text: "Runs the approved importer on sample data and opens Step 3 with accepted issues and row errors — proof the approved code works, whether AI or the offline reference wrote it."},
   {anchor: "inboxBell", view: null, title: "Inbox bell",
-   text: "Owner messages and parked questions needing you land here. The count badge jumps you to the newest unread item."}
+   text: "Owner messages and waiting questions needing you land here. The count badge jumps you to the newest unread item."}
 ];
 let tourAvailable = [];
 let tourPosition = 0;
@@ -1987,8 +1995,11 @@ function wireDictation(fieldId, buttonId, langId, statusId, noun, inputHint) {
     if (MetaStt.active()) dictateViaMeta(ctx);
     else if (Dictation.supported()) startBrowserDictation(ctx);
     else {
-      ctx.status.textContent = "Transcription unavailable: attach a provider key for Meta dictation.";
-      message("Transcription unavailable: attach a provider key for Meta dictation.");
+      const hint = hosted ?
+        "Transcription unavailable: attach your Meta key in Your model key for Meta dictation." :
+        "Transcription unavailable: this browser cannot dictate and Meta dictation is not configured on this server.";
+      ctx.status.textContent = hint;
+      message(hint);
     }
   };
   refreshDictationBackends();

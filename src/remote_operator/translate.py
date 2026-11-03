@@ -32,7 +32,7 @@ TRANSLATION_TIMEOUT_SECONDS = 60
 TRANSLATION_RESPONSE_LIMIT = 262144
 
 UNAVAILABLE_MESSAGE = (
-    "Translation unavailable; attach a session key and retry, or send English text."
+    "Translation unavailable: attach a session key in Supervise and retry, or send English text."
 )
 REFUSED_MESSAGE = "Translation provider refused the session key; re-attach and retry."
 RATE_LIMITED_MESSAGE = "Translation rate limited; retry shortly."
