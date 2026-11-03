@@ -118,6 +118,13 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         self.assertEqual(dupes, [], "duplicate element ids wire only the first")
 
+    async def test_review_copy_and_tour_titles_stay_current(self):
+        page = (await self.client.get("/")).text
+        self.assertIn("Build tasks and supervised runs", page)
+        self.assertNotIn("Workbench actions below", page)
+        self.assertNotIn("6-stop", page)
+        self.assertIn('id="supervisorTranscript" role="log"', page)
+
     async def test_nav_shows_worker_status_pill(self):
         page = (await self.client.get("/")).text
         self.assertIn('id="workerPill"', page)

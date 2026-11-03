@@ -154,6 +154,13 @@ function startPolling() {
 function stillSelected(id, selection, session) {
   return selectedMode !== null && session === sessionRevision && selection === selectionRevision && element("taskId").value.trim() === id;
 }
+function allowanceBlockReason() {
+  if (selectedMode === null) return "Create is unavailable: connect first.";
+  if (!allowance || !allowance.enabled) return "Create is unavailable: spending allowance not loaded.";
+  if (allowance.expired) return "Create is unavailable: spending allowance expired.";
+  if (allowance.requests_used >= allowance.requests_limit) return "Create is unavailable: request limit reached.";
+  return "Create is unavailable: spending limit reached. See Activity for details.";
+}
 function inferenceAllowed() {
   return selectedMode !== null && (!selectedMode.live_inference || (allowance && allowance.enabled && !allowance.expired &&
     Number(allowance.remaining_usd_estimate) > 0 && allowance.requests_used < allowance.requests_limit));
@@ -204,11 +211,15 @@ function actions() {
   element("newTask").disabled = busy || connecting || selectedMode === null;
   element("submit").disabled = busy || connecting || !inferenceAllowed();
   element("sampleReview").disabled = busy || connecting || !inferenceAllowed();
+  const submitBlocked = !busy && !connecting && !inferenceAllowed();
+  element("submit").title = submitBlocked ? allowanceBlockReason() : "Create a task from the request above and run it.";
+  element("sampleReview").title = submitBlocked ? allowanceBlockReason() : "Load a ready-made scripted review. Reuses one of your validated tasks, or creates and runs one for you.";
   element("refreshAllowance").disabled = selectedMode === null || connecting;
   element("refreshExternal").disabled = selectedMode === null || connecting;
   for (const id of ["runMode", "supervisionMode", "powerDelay", "powerArm"]) element(id).disabled = selectedMode === null || connecting;
   for (const id of ["recentTasks", "refreshTasks", "load", "taskId"]) element(id).disabled = busy || connecting || selectedMode === null;
-  element("approve").disabled = !active || busy || task.status !== "awaiting_approval";
+  element("approve").disabled = !active || busy || task.status !== "awaiting_approval" ||
+    !(task.evidence && task.evidence.passed);
   element("reject").disabled = !active || busy || !["queued", "paused", "awaiting_approval", "review_required"].includes(task.status);
   element("resume").disabled = !active || busy || task.status !== "paused" || !inferenceAllowed();
   const recoverable = active && !busy && ["running", "reconciliation_required", "applying"].includes(task.status);
@@ -264,7 +275,7 @@ async function loadSettings() {
   element("mailState").textContent = settings.mail_configured ?
     "Mail: configured. Unattended mode sends run updates to the owner address." :
     "Mail: NOT configured. Unattended mode cannot send updates until SMTP is set up.";
-  element("approvalWindow").textContent = "Approval windows: tasks ~" + settings.task_approval_minutes + " min, plans ~" + settings.approval_window_minutes + " min. Expired approvals need a fresh validation or plan.";
+  element("approvalWindow").textContent = "Review windows: tasks ~" + settings.task_approval_minutes + " min, plans ~" + settings.approval_window_minutes + " min. Expired approvals need a fresh validation or plan.";
   element("settingsNote").textContent = "";
 }
 async function refreshPowerStatus() {
@@ -420,9 +431,10 @@ function updatePlanSettingsNote() {
   const supervision = element("supervisionMode").value === "unattended" ?
     "Unattended supervision (mail on run events)." :
     "Attended supervision (mail only when a run needs you).";
-  element("planSettingsNote").textContent = supervisorPlanNonce ?
-    "Approving now: " + mode + " " + supervision :
-    "Approval settings will appear here once a plan is written.";
+  const hostedNote = supervisorPlanNonce ? "Approving now: " + mode : "Approval settings will appear here once a plan is written.";
+  element("planSettingsNote").textContent = hosted ? hostedNote :
+    (supervisorPlanNonce ? "Approving now: " + mode + " " + supervision :
+    "Approval settings will appear here once a plan is written.");
 }
 // ---- Inbox bell (GET /api/supervisor/inbox, same tick as the task poll) ----
 let inboxCursor = 0;
@@ -683,9 +695,11 @@ function renderDiffViews(text, emptyText) {
     cols.className = "diff-cols";
     const left = document.createElement("pre");
     left.className = "diff-col diff-old";
+    left.setAttribute("aria-label", "Old (base)");
     left.textContent = f.left.join("\n");
     const right = document.createElement("pre");
     right.className = "diff-col diff-new";
+    right.setAttribute("aria-label", "New (candidate)");
     right.textContent = f.right.join("\n");
     cols.append(left, right);
     section.append(head, cols);
@@ -903,7 +917,7 @@ setInterval(() => { if (selectedMode !== null && task) updateWindowChip(); }, 10
 function updateBuildChip() {
   const chip = element("buildChip");
   const commit = selectedMode && selectedMode.build_commit ? String(selectedMode.build_commit) : "";
-  chip.textContent = commit ? "build " + commit.slice(0, 12) : "build …";
+  chip.textContent = commit ? "build " + commit.slice(0, 12) : "build ?";
   chip.title = commit ? "Server build commit " + commit + "." : "Server build commit unknown.";
 }
 function applyJudgeVisibility() {
@@ -947,9 +961,11 @@ async function chooseTask(id, source) {
   element("taskId").value = id;
   element("issues").replaceChildren(); element("import-errors").replaceChildren();
   clearTaskView();
-  taskAckSeq.set(id, inboxCursor); // Opening a task reads its parked-question items.
-  renderBell();
   await refresh();
+  if (task && task.id === id) {
+    taskAckSeq.set(id, inboxCursor); // Opening a task reads its parked-question items.
+    renderBell();
+  }
   if (task && typeof task.prompt === "string") element("prompt").value = task.prompt;
 }
 async function refresh() {
@@ -1474,6 +1490,12 @@ element("csvInvalid").onclick = () => loadCsvSample("invalid");
 element("token").addEventListener("input", () => {
   sessionRevision++; selectionRevision++; stopPolling(); selectedMode = null; task = null; connecting = false;
   allowance = null; allowanceCursor = ""; judgeSession = false;
+  supervisorThreadId = ""; supervisorPlanNonce = "";
+  inboxItems = []; inboxCursor = 0; inboxAckSeq = 0; ownerFloorSeq = -1;
+  powerArmed = false; element("powerArm").textContent = "Sleep this PC…";
+  element("supervisorTranscript").replaceChildren();
+  element("supervisorPlan").textContent = "No plan written.";
+  updatePlanSettingsNote(); renderBell();
   element("access-details").open = true; element("access-state").textContent = "";
   element("allowance-summary").textContent = "Connect to view this server's allowance.";
   element("allowance-note").textContent = "Local reserved estimates are separate from provider credits and final billing.";
@@ -1483,6 +1505,7 @@ element("token").addEventListener("input", () => {
 });
 element("taskId").addEventListener("input", () => {
   selectionRevision++; stopPolling(); clearTaskView();
+  history.replaceState(null, "", location.pathname + location.search);
 });
 (async function detect() {
   try {
