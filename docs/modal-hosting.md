@@ -189,8 +189,9 @@ Deployed and verified at:
 https://kubajaworski999--hosted.us-east.modal.run
 ```
 
-The access code is **not** in the repository or this document; it is supplied
-separately to judges (submission text or the event channel, assumed, not confirmed).
+The visitor access code is public in the README (open entry by owner inbox
+decision 2026-11-03): anyone may open a session, but real inference requires
+the visitor's own Meta key with their own finite limits.
 Deployment uses the `remote-operator-state` Volume and the
 `remote-operator-hosted` secret. The private session-signing secret and access code
 live outside both repositories; public evidence omits them.
