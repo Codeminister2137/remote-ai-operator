@@ -160,8 +160,9 @@ The design is deliberately single-writer:
   outside the repository. `OPERATOR_PUBLIC_ORIGIN` must be the final HTTPS origin so
   the cookie is `Secure`. Judge evaluation additionally needs `OPERATOR_JUDGE_MODEL`
   set to the entitled non-contributor Meta model.
-- The image contains only `src/remote_operator`, the synthetic `sample` and
-  `tests/acceptance`, never the checkout, runtime directory or private plans.
+- The image contains only `src/remote_operator`, the synthetic `sample`,
+  `tests/acceptance` and `docs/sample-task.md` (served read-only to live
+  models), never the checkout, runtime directory or private plans.
 
 SQLite commit and volume commit are not atomic: a failed `volume.commit()` can leave
 a write visible locally but not durable, and there is no retry queue. Keep the volume

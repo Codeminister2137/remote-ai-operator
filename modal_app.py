@@ -60,6 +60,7 @@ image = (
         ignore=["**/__pycache__", "**/*.pyc"],
     )
     .add_local_file("modal_app.py", "/app/modal_app.py")
+    .add_local_file("docs/sample-task.md", "/app/docs/sample-task.md")
 )
 
 
