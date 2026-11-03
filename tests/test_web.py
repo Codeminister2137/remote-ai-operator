@@ -1,5 +1,6 @@
 """Local API identity, request-boundary and approval regression checks."""
 
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -110,6 +111,12 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         javascript = (await self.client.get("/app.js")).text
         self.assertNotIn("innerHTML", javascript)
         self.assertNotIn("localStorage", javascript)
+
+    async def test_page_ids_are_unique(self):
+        page = (await self.client.get("/")).text
+        ids = re.findall(r'id="([^"]+)"', page)
+        dupes = sorted({i for i in ids if ids.count(i) > 1})
+        self.assertEqual(dupes, [], "duplicate element ids wire only the first")
 
     async def test_nav_shows_worker_status_pill(self):
         page = (await self.client.get("/")).text

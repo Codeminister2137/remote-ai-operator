@@ -318,6 +318,12 @@ class BasetenContracts(unittest.TestCase):
         with self.assertRaises(BasetenFailure):
             bad_args.next_operation([], prompt="task")
 
+    def test_redact_with_cleared_key_returns_value_unchanged(self):
+        actor = self.actor()
+        actor._key = ""
+        self.assertEqual(actor._redact("diagnostic text"), "diagnostic text")
+        self.assertEqual(actor._redact({"k": "v"}), {"k": "v"})
+
     def test_unknown_tool_and_malformed_calls_are_refused(self):
         payloads = [
             chat_response(name="delete_everything"),

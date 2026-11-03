@@ -661,6 +661,12 @@ class MetaContracts(unittest.TestCase):
         self.assertEqual(receipts[0]["payload"]["local_allowance"]["requests_used"], 1)
         self.assertEqual(failing.last_receipt["local_allowance"]["requests_used"], 1)
 
+    def test_redact_with_cleared_key_returns_value_unchanged(self):
+        actor = self.actor()
+        actor._key = ""
+        self.assertEqual(actor._redact("diagnostic text"), "diagnostic text")
+        self.assertEqual(actor._redact({"k": "v"}), {"k": "v"})
+
     def test_approval_granted_emits_debug_log_without_changing_semantics(self):
         op = self.actor().next_operation([], prompt="task")
         self.assertEqual(op.name, "read_file")

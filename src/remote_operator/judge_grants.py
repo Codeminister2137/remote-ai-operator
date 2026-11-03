@@ -67,8 +67,8 @@ class JudgeGrantBridge:
             budget = Decimal(approved_usd) if isinstance(approved_usd, str) else Decimal("nan")
         except InvalidOperation:
             raise ValueError("approved_usd must be a decimal string") from None
-        if not budget.is_finite() or budget <= 0:
-            raise ValueError("approved_usd must be positive and finite")
+        if not budget.is_finite() or budget <= 0 or budget > 100:
+            raise ValueError("approved_usd must be a decimal between 0 and 100")
         max_output_tokens = params.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
         if type(max_output_tokens) is not int or not 1 <= max_output_tokens <= 16384:
             raise ValueError("max_output_tokens must be an integer between 1 and 16384")
