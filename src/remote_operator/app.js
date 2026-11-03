@@ -26,6 +26,7 @@ let triedApproved = false;
 let currentView = "demo";
 let reviewContext = null; // {run_id, thread_id, thread_topic} when opened from a run.
 const WORKBENCH_ACTIONS_VISIBLE = false; // Hackathon: hide Workbench section. Post-hackathon: set true to restore.
+const WINDOW_STALE_MINUTES = 30; // Heartbeats older than this are shown as outdated and never light the pill.
 let lastDrain = null; // Latest /api/window drain health (owner serve only).
 let lastRunsActive = false; // Any supervised run executing.
 let lastAgentsActive = false; // Any reported agent on a task.
@@ -44,11 +45,14 @@ function updateWorkerPill() {
     pill.title = "The worker is not running. Queued work is stalled — see Activity.";
     return;
   }
-  const running = (task && ["running", "applying"].includes(task.status)) || lastRunsActive || lastAgentsActive;
-  if (running) {
+  const reasons = [];
+  if (task && ["running", "applying"].includes(task.status)) reasons.push("selected task " + task.status);
+  if (lastRunsActive) reasons.push("supervised run");
+  if (lastAgentsActive) reasons.push("reported agent");
+  if (reasons.length) {
     pill.textContent = "● Working";
     pill.className = "secondary nav-action pill-work";
-    pill.title = "Something is running. See Activity for details.";
+    pill.title = "Working: " + reasons.join(", ") + ". See Activity for details.";
     return;
   }
   pill.textContent = "○ Idle";
@@ -277,17 +281,18 @@ async function refreshWindowStatus() {
   const session = sessionRevision;
   const status = await api("/api/window");
   if (session !== sessionRevision || selectedMode === null) return;
+  const beat = status.last_heartbeat_utc ? Date.parse(status.last_heartbeat_utc) : NaN;
+  const ageMin = Number.isNaN(beat) ? NaN : Math.max(0, Math.round((Date.now() - beat) / 60000));
+  const heartbeatFresh = !Number.isNaN(ageMin) && ageMin <= WINDOW_STALE_MINUTES;
   if (!status.running) {
     element("windowStatus").textContent = "Window: no agent activity reported.";
     element("windowStatus").title = "";
   } else {
     let line = "Window: " + (status.slice || "unscheduled slice");
     if (status.phase) line += " · " + humanizeStatus(status.phase);
-    const beat = status.last_heartbeat_utc ? Date.parse(status.last_heartbeat_utc) : NaN;
-    if (!Number.isNaN(beat)) {
-      const ageMin = Math.max(0, Math.round((Date.now() - beat) / 60000));
+    if (!Number.isNaN(ageMin)) {
       const age = ageMin < 60 ? ageMin + "m ago" : Math.round(ageMin / 60) + "h ago";
-      line += " (updated " + age + (ageMin > 30 ? " — may be outdated" : "") + ")";
+      line += " (updated " + age + (!heartbeatFresh ? " — may be outdated" : "") + ")";
     } else if (status.last_heartbeat_utc) line += " (last heartbeat " + status.last_heartbeat_utc + ")";
     else line += " (no recent update)";
     if (status.note) line += " " + status.note;
@@ -300,7 +305,7 @@ async function refreshWindowStatus() {
     "Agents: none active.";
   element("agentsStatus").title = agents.length ?
     "Raw: " + agents.map((a) => a.name + "=" + (a.status || "?")).join("; ") : "";
-  lastAgentsActive = agents.some((a) => (a.task || "idle") !== "idle");
+  lastAgentsActive = heartbeatFresh && agents.some((a) => (a.task || "idle") !== "idle");
   const health = status.drain;
   lastDrain = health || null;
   if (!health || !health.alive) {
