@@ -22,8 +22,8 @@ see [Judge quick-start card](docs/judge-card.md).
 
 - Setup wizard: 4 guided steps (access code → judge account → spending
   limits → key or scripted) with inline validation and Go-to buttons.
-- Chat: tasks and supervisor threads live side by side, with bubbles,
-  typing indicator and first-seen timestamps. Any `REPLY:`
+- Chat: tasks and supervisor threads live side by side, with bubbles
+  and a typing indicator. Any `REPLY:`
   message lands in the shared Owner replies thread instead of starting
   a demo task. Sending anything new in a thread counts as a reply.
 - 🔔 Inbox bell: one badge for owner messages and parked questions;

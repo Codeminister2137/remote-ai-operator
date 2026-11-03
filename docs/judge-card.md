@@ -116,7 +116,7 @@ Scripted mode needs none of this: no key, no grant, no spend.
 
 UI described above spans unmerged `loop3/*` branches on top of `main`
 (`44244e3`): `onboard` (wizard, sample review, CSV gallery),
-`bellchat` (inbox bell, chat bubbles, typing indicator, first-seen times),
+`bellchat` (inbox bell, chat bubbles, typing indicator),
 `reviewloop` (evidence card, window/build chips, humanized statuses,
 judge visibility, try-it shortcut), `h1a` (hosted multi-subject drain
 sweeper, `waiting_on_key`), `stt` (Meta transcription backend with

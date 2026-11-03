@@ -1,6 +1,7 @@
 "use strict";
 const element = (id) => document.getElementById(id);
 let task = null;
+let taskSource = ""; // Where the selected task came from (link, list, inbox, ...).
 let taskEvents = [];
 let showAllEvents = false;
 let busy = false;
@@ -88,6 +89,18 @@ async function guarded(action) {
 function stopPolling() {
   if (progressTimer !== null) clearInterval(progressTimer);
   progressTimer = null;
+}
+let windowTimer = null;
+function stopWindowPolling() {
+  if (windowTimer !== null) clearInterval(windowTimer);
+  windowTimer = null;
+}
+function startWindowPolling() {
+  if (windowTimer !== null || !selectedMode) return;
+  windowTimer = setInterval(() => {
+    if (selectedMode === null) { stopWindowPolling(); return; }
+    refreshWindowStatus().catch(() => {});
+  }, 10000);
 }
 function startPolling() {
   if (progressTimer !== null || !selectedMode) return;
@@ -266,7 +279,7 @@ async function refreshExternalActions() {
   const list = element("externalActions");
   if (!actions.length) {
     const empty = document.createElement("li");
-    empty.textContent = "No pending external actions.";
+    empty.textContent = "No pending Workbench actions. Approvals requested from AI Workbench will appear here.";
     list.replaceChildren(empty);
     return;
   }
@@ -364,30 +377,6 @@ function updatePlanSettingsNote() {
     "Approving now: " + mode + " " + supervision :
     "Approval settings will appear here once a plan is written.";
 }
-// ---- First-seen timestamps ----
-// The server stores no per-turn or per-event timestamps, so the page stamps
-// each item with the local time it was first shown. Times are stable within
-// this page session and labelled as first-seen via each <time> title.
-const turnSeenAt = new Map();
-const eventSeenAt = new Map();
-function seenTime(map, key) {
-  let at = map.get(key);
-  if (!at) {
-    at = Date.now();
-    if (map.size > 2000) map.delete(map.keys().next().value);
-    map.set(key, at);
-  }
-  return at;
-}
-function seenTimeElement(map, key) {
-  const at = seenTime(map, key);
-  const when = document.createElement("time");
-  when.dateTime = new Date(at).toISOString();
-  when.title = "First shown by this page at " + new Date(at).toLocaleString() +
-    ". The server keeps no per-message timestamps.";
-  when.textContent = new Date(at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
-  return when;
-}
 // ---- Inbox bell (GET /api/supervisor/inbox, same tick as the task poll) ----
 let inboxCursor = 0;
 let inboxItems = []; // oldest first, capped
@@ -437,13 +426,13 @@ element("inboxBell").onclick = () => guarded(async () => {
     switchView("supervise");
     message("Jumped to thread '" + (target.topic || target.thread_id.slice(0, 12)) + "'.");
   } else if (target.type === "parked_question") {
-    await chooseTask(target.task_id);
+    await chooseTask(target.task_id, "inbox");
     switchView("review");
     message("Jumped to the parked task. Answer the owner question in the Review view to resume it.");
   } else if (target.run_id) {
     const detail = await api("/api/supervisor/runs/" + target.run_id);
     if (detail.task_id) {
-      await chooseTask(detail.task_id);
+      await chooseTask(detail.task_id, "inbox");
       switchView("review");
       message("Jumped to run " + target.run_id.slice(0, 12) + " (" + target.status + ").");
     } else if (target.thread_id) {
@@ -484,10 +473,7 @@ function renderSupervisorTranscript(history) {
     const bubble = document.createElement("div");
     bubble.className = "chat-bubble";
     bubble.textContent = turn.text;
-    const when = seenTimeElement(turnSeenAt,
-      supervisorThreadId + ":" + index + ":" + turn.role + ":" + String(turn.text).length);
-    when.className = "chat-time";
-    item.append(who, bubble, when);
+    item.append(who, bubble);
     if (turn.role === "user" && turn.translated && typeof turn.source_text === "string") {
       const details = document.createElement("details");
       const summary = document.createElement("summary");
@@ -537,13 +523,16 @@ async function loadSupervisorThreads() {
   const placeholder = document.createElement("option");
   placeholder.value = "";
   placeholder.textContent = threads.length ? "Choose a thread" : "No threads yet";
-  chooser.replaceChildren(placeholder, ...threads.map((item) => {
+  const starter = document.createElement("option");
+  starter.value = "__new__"; starter.textContent = "＋ New thread…";
+  chooser.replaceChildren(placeholder, starter, ...threads.map((item) => {
     const option = document.createElement("option");
     option.value = item.id; option.textContent = humanizeStatus(item.status) + " · " + item.topic;
     option.title = "Raw status: " + item.status;
     return option;
   }));
   chooser.value = supervisorThreadId;
+  element("newThreadRow").hidden = chooser.value !== "__new__";
 }
 async function openSupervisorThread(id) {
   if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Choose a thread first.");
@@ -552,6 +541,7 @@ async function openSupervisorThread(id) {
   const approval = detail.thread.status === "planned" ? detail.thread.approval : null;
   supervisorPlanNonce = approval && approval.nonce ? approval.nonce : "";
   element("supervisorThreads").value = id;
+  element("newThreadRow").hidden = true;
   renderSupervisorTranscript(detail.thread.history || []);
   renderTranslationNote(detail.thread);
   element("supervisorPlan").textContent = detail.thread.plan ? detail.thread.plan.markdown : "No plan written.";
@@ -675,7 +665,8 @@ function renderApprovalSubject() {
   const runner = task.evidence && task.evidence.runner ? task.evidence.runner : "not run yet";
   subject.textContent = kind + " \u00b7 task " + task.id.slice(0, 12) + " \u00b7 attempt " + (task.calls || 0) + injected +
     " \u00b7 actor " + runner + " \u00b7 candidate " + short(task.evidence && task.evidence.candidate_digest) +
-    " \u00b7 base " + short(task.base_digest) + (promptLine ? ' \u00b7 "' + promptLine + '"' : "");
+    " \u00b7 base " + short(task.base_digest) + (promptLine ? ' \u00b7 "' + promptLine + '"' : "") +
+    (taskSource ? " \u00b7 opened from " + taskSource : "");
   const rows = [];
   const push = (ok, text) => rows.push({ok, text: (ok ? "PASS " : "FAIL ") + text});
   if (!task.evidence) {
@@ -724,7 +715,7 @@ async function loadSupervisorRuns() {
     review.onclick = () => guarded(() => supervisorStep(async () => {
       const detail = await api("/api/supervisor/runs/" + run.run_id);
       if (!detail.task_id) { supervisorNote("Run has no linked task yet; wait for the worker."); return; }
-      await chooseTask(detail.task_id);
+      await chooseTask(detail.task_id, "run");
       reviewContext = {run_id: run.run_id, thread_id: run.thread_id, thread_topic: threadTopic(run.thread_id)};
       renderApprovalSubject();
       switchView("review");
@@ -743,7 +734,14 @@ element("refreshSupervisor").onclick = () => guarded(() => supervisorStep(async 
   await loadSupervisorThreads(); await loadSupervisorRuns();
 }));
 element("supervisorThreads").onchange = () => guarded(() => supervisorStep(async () => {
-  if (element("supervisorThreads").value) await openSupervisorThread(element("supervisorThreads").value);
+  const value = element("supervisorThreads").value;
+  if (value === "__new__") {
+    element("newThreadRow").hidden = false;
+    element("supervisorNewTopic").focus();
+    return;
+  }
+  element("newThreadRow").hidden = true;
+  if (value) await openSupervisorThread(value);
 }));
 element("supervisorOpen").onclick = () => guarded(() => supervisorStep(async () => {
   const topic = element("supervisorNewTopic").value.trim();
@@ -752,6 +750,7 @@ element("supervisorOpen").onclick = () => guarded(() => supervisorStep(async () 
   element("supervisorNewTopic").value = "";
   await loadSupervisorThreads();
   await openSupervisorThread(opened.id);
+  element("newThreadRow").hidden = true;
 }));
 element("supervisorSend").onclick = () => guarded(() => supervisorStep(async () => {
   if (!supervisorThreadId) return;
@@ -794,9 +793,7 @@ function renderEvents() {
       (event.payload.name ? " · " + event.payload.name : "") +
       (event.kind === "transport_failed" && typeof event.payload.detail === "string" ? " · " + event.payload.detail : "");
     item.title = "Raw event: " + event.kind;
-    const when = seenTimeElement(eventSeenAt, (task ? task.id : "") + ":" + event.sequence);
-    when.className = "event-time";
-    item.append(label, document.createTextNode(" "), when);
+    item.append(label);
     return item;
   }));
   element("event-summary").textContent = !task ? "Create a new task or select a saved task." :
@@ -861,7 +858,7 @@ function applyJudgeVisibility() {
   element("workbenchSection").hidden = judge;
 }
 function clearTaskView() {
-  task = null; taskEvents = []; showAllEvents = false; reviewContext = null; triedApproved = false;
+  task = null; taskEvents = []; showAllEvents = false; reviewContext = null; triedApproved = false; taskSource = "";
   element("status").textContent = "No task selected";
   element("status").title = "";
   renderDiffViews("", "No candidate yet.");
@@ -889,10 +886,10 @@ function newTask() {
 }
 element("newTask").onclick = newTask;
 element("eventHistory").onclick = () => { showAllEvents = !showAllEvents; renderEvents(); };
-async function chooseTask(id) {
+async function chooseTask(id, source) {
   if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Choose a saved task or provide a valid task ID.");
   reviewContext = null;
-  stopPolling(); selectionRevision++; task = null;
+  stopPolling(); selectionRevision++; task = null; taskSource = source || "list";
   element("taskId").value = id;
   element("issues").replaceChildren(); element("import-errors").replaceChildren();
   clearTaskView();
@@ -994,7 +991,7 @@ element("submit").onclick = () => guarded(async () => {
       message("Reply recorded in the Owner replies thread. No demo task was started.");
       return;
     }
-    await chooseTask(created.id); await recentTasks();
+    await chooseTask(created.id, "creation"); await recentTasks();
     message(configuration.live_inference ? "Running the configured Meta actor within its allowance." : "Running a fixed offline reference; no model request is being made.");
     startPolling();
     try { await api("/api/tasks/" + created.id + "/run", "POST", {inject_failure: element("inject").checked}); }
@@ -1011,7 +1008,7 @@ element("refreshTasks").onclick = () => guarded(async () => {
 });
 element("refreshAllowance").onclick = () => guarded(refreshAllowance);
 element("reconcile").onclick = () => guarded(() => taskAction("/reconcile", {}, "Saved result inspected. Review the new status before resuming."));
-element("load").onclick = () => guarded(() => chooseTask(element("taskId").value.trim()));
+element("load").onclick = () => guarded(() => chooseTask(element("taskId").value.trim(), "ID"));
 element("approve").onclick = () => guarded(async () => {
   if (!task) return;
   if (!task.approval) { message("This task has no valid approval yet. Run fresh validation first, then approve."); return; }
@@ -1148,6 +1145,7 @@ async function loadMode(session) {
   if (session !== sessionRevision) return;
   await refreshWindowStatus();
   if (session !== sessionRevision) return;
+  startWindowPolling();
   const summaries = await recentTasks();
   if (session !== sessionRevision) return;
   await refreshExternalActions();
@@ -1168,8 +1166,8 @@ async function loadMode(session) {
     supervisorNote("Supervisor data unavailable: " + error.message);
   }
   const saved = element("taskId").value.trim();
-  if (saved || summaries.length) {
-    await chooseTask(saved || summaries[0].id);
+  if (saved) {
+    await chooseTask(saved, "link");
     if (session === sessionRevision) {
       if (task && !task.supervisor_thread) {
         switchView("review");
@@ -1178,6 +1176,8 @@ async function loadMode(session) {
         message("Connected. Your saved task is loaded.");
       }
     }
+  } else if (summaries.length) {
+    message("Connected. Select a saved task to review it, or create a new task.");
   } else message("Connected. Review execution mode before submitting your task.");
 }
 element("connect").onclick = () => guarded(async () => {
@@ -1372,7 +1372,7 @@ element("sampleReview").onclick = () => guarded(async () => {
         const review = await api("/api/tasks/" + encodeURIComponent(candidate.id));
         if (session !== sessionRevision) return;
         if (review.task && review.task.evidence && review.task.evidence.passed) {
-          await chooseTask(candidate.id); await recentTasks();
+          await chooseTask(candidate.id, "sample"); await recentTasks();
           message("Sample review loaded from your saved tasks.");
           switchView("review");
           return;
@@ -1380,7 +1380,7 @@ element("sampleReview").onclick = () => guarded(async () => {
       } catch { /* Try the next candidate. */ }
     }
     if (candidates.length && session === sessionRevision) {
-      await chooseTask(candidates[0].id); await recentTasks();
+      await chooseTask(candidates[0].id, "sample"); await recentTasks();
       message("Sample review loaded from your saved tasks.");
       switchView("review");
       return;
@@ -1389,7 +1389,7 @@ element("sampleReview").onclick = () => guarded(async () => {
     const created = await api("/api/tasks", "POST", {prompt: defaultPrompt});
     if (session !== sessionRevision) return;
     if (created.reply) { message("Reply recorded; no demo task was started."); return; }
-    await chooseTask(created.id); await recentTasks();
+    await chooseTask(created.id, "sample"); await recentTasks();
     startPolling();
     try { await api("/api/tasks/" + created.id + "/run", "POST", {inject_failure: false}); }
     finally { if (session === sessionRevision) await refresh(); }
@@ -1913,6 +1913,8 @@ async function dictateViaMeta(ctx) {
   }
   if (accumulated) {
     field.value = joinDictation(base, accumulated);
+    const buddy = document.querySelector('[data-send-lang-for="' + field.id + '"]');
+    if (buddy) buddy.value = shortLang; // Dictated text is tagged on send.
     status.textContent = "Dictation added (Meta, " + dictateLangName(lang.value) +
       (failed ? "; stopped early: " + failed.message : "") +
       "). Review and edit before sending. Nothing was sent.";
