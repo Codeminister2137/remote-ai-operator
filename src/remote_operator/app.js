@@ -728,15 +728,15 @@ function renderEvents() {
   const start = showAllEvents ? 0 : Math.max(0, taskEvents.length - 20);
   element("events").replaceChildren(...taskEvents.slice(start).map((event, offset) => {
     const item = document.createElement("li");
-    item.className = "event-row";
-    const label = document.createElement("span");
-    label.textContent = (start + offset + 1) + " · " + (eventNames[event.kind] || humanizeStatus(event.kind)) + (event.payload.injected ? " (injected)" : "") +
-      (event.payload.name ? " · " + event.payload.name : "") +
-      (event.kind === "transport_failed" && typeof event.payload.detail === "string" ? " · " + event.payload.detail : "");
-    item.title = "Raw event: " + event.kind;
-    const when = seenTimeElement(eventSeenAt, (task ? task.id : "") + ":" + event.sequence);
-    when.className = "event-time";
-    item.append(label, document.createTextNode(" "), when);
+    item.className = "event-row";
+    const label = document.createElement("span");
+    label.textContent = (start + offset + 1) + " · " + (eventNames[event.kind] || humanizeStatus(event.kind)) + (event.payload.injected ? " (injected)" : "") +
+      (event.payload.name ? " · " + event.payload.name : "") +
+      (event.kind === "transport_failed" && typeof event.payload.detail === "string" ? " · " + event.payload.detail : "");
+    item.title = "Raw event: " + event.kind;
+    const when = seenTimeElement(eventSeenAt, (task ? task.id : "") + ":" + event.sequence);
+    when.className = "event-time";
+    item.append(label, document.createTextNode(" "), when);
     return item;
   }));
   element("event-summary").textContent = !task ? "Create a new task or select a saved task." :
