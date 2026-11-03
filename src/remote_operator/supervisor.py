@@ -15,6 +15,7 @@ import time
 import uuid
 
 from remote_operator.control import digest
+from remote_operator.translate import normalize_input, translation_manifest
 
 PLAN_APPROVAL_SECONDS = 600
 RUNS_DIRNAME = "supervisor_runs"
@@ -25,8 +26,9 @@ OWNER_REPLY_PREFIX = "REPLY:"
 class Supervisor:
     """Planning threads bound to one operator's store, lock and root."""
 
-    def __init__(self, operator):
+    def __init__(self, operator, translator=None):
         self.operator = operator
+        self.translator = translator
 
     @property
     def _runs(self):
@@ -42,15 +44,23 @@ class Supervisor:
             raise ValueError("Unknown supervisor thread")
         return task
 
-    def open_thread(self, topic: str) -> dict:
-        """Open a planning thread for ``topic``; returns its summary."""
+    def open_thread(self, topic: str, *, language: str = "en") -> dict:
+        """Open a planning thread for ``topic``; returns its summary.
+
+        The topic is normalized to English working text before the thread is
+        stored; the verbatim source stays alongside as ``prompt_source``.
+        """
         if not isinstance(topic, str) or not topic.strip() or len(topic) > 4000:
             raise ValueError("Thread requires a 1-4000 character topic")
         with self.operator.lock:
+            normalized, receipt = normalize_input(self.translator, topic, language)
             thread_id = uuid.uuid4().hex
             thread = {
                 "id": thread_id,
-                "prompt": topic,
+                "prompt": normalized.working,
+                "prompt_source": normalized.source,
+                "prompt_lang": normalized.lang,
+                "prompt_translator": normalized.translator_id,
                 "status": "open",
                 "supervisor_thread": True,
                 "history": [],
@@ -58,7 +68,9 @@ class Supervisor:
                 "approval": None,
             }
             self.operator.store.save(thread, "thread_opened", {})
-            return {"id": thread_id, "topic": topic, "status": "open"}
+            if receipt is not None:
+                self.operator.store.save(thread, "inference_receipt", receipt)
+            return {"id": thread_id, "topic": normalized.working, "status": "open"}
 
     def get_thread(self, thread_id: str) -> dict:
         """Return the thread record with its ordered events."""
@@ -83,7 +95,7 @@ class Supervisor:
                 )
         return summaries
 
-    def reply_to_owner_thread(self, model, text: str) -> dict:
+    def reply_to_owner_thread(self, model, text: str, *, language: str = "en") -> dict:
         """Record an owner reply in the single shared replies thread.
 
         Creates the ``Owner replies`` thread on first use and appends
@@ -97,18 +109,34 @@ class Supervisor:
                 break
         if thread_id is None:
             thread_id = self.open_thread(OWNER_REPLY_TOPIC)["id"]
-        posted = self.post_message(model, thread_id, text)
+        posted = self.post_message(model, thread_id, text, language=language)
         return {"thread_id": thread_id, **posted}
 
-    def post_message(self, model, thread_id: str, text: str) -> dict:
-        """Append a user message and generate the assistant planning reply."""
+    def post_message(self, model, thread_id: str, text: str, *, language: str = "en") -> dict:
+        """Append a user message and generate the assistant planning reply.
+
+        Non-English input is translated to working English inside the lock
+        before the turn is appended; on translation failure nothing is stored.
+        """
         if not isinstance(text, str) or not text.strip() or len(text) > 4000:
             raise ValueError("Message requires 1-4000 characters")
         with self.operator.lock:
             thread = self._thread(thread_id)
             if thread["status"] != "open":
                 raise ValueError("Thread is closed to new messages")
-            thread["history"].append({"role": "user", "text": text})
+            normalized, receipt = normalize_input(self.translator, text, language)
+            thread["history"].append(
+                {
+                    "role": "user",
+                    "text": normalized.working,
+                    "source_text": normalized.source,
+                    "source_lang": normalized.lang,
+                    "translated": normalized.translated,
+                    "translator": normalized.translator_id,
+                }
+            )
+            if receipt is not None:
+                self.operator.store.save(thread, "inference_receipt", receipt)
             if type(model).__name__ == "ScriptedModel":
                 reply = self._scripted_reply(thread)
                 route = "scripted"
@@ -172,6 +200,7 @@ class Supervisor:
             }
             thread["plan"] = {"markdown": markdown, "digest": plan_digest}
             thread["approval"] = approval
+            thread["translation"] = translation_manifest(thread)
             thread["status"] = "planned"
             self.operator.store.save(thread, "plan_written", {"digest": plan_digest})
             return {"digest": plan_digest, "markdown": markdown, "nonce": approval["nonce"]}
@@ -222,6 +251,7 @@ class Supervisor:
                 "thread_id": thread_id,
                 "plan_digest": approval["plan_digest"],
                 "plan": plan["markdown"],
+                "translation_manifest": thread.get("translation") or translation_manifest(thread),
                 "status": "queued",
                 "created": current,
             }
@@ -246,6 +276,7 @@ class Supervisor:
                     "thread_id": job.get("thread_id", ""),
                     "status": job.get("status", "unknown"),
                     "created": job.get("created", 0),
+                    "translation_manifest": job.get("translation_manifest"),
                 }
             )
         return runs

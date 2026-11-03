@@ -492,8 +492,14 @@ class Operator:
                 self.store.save(task, "revalidation_failed")
                 raise
 
-    def answer(self, task_id: str, text: str) -> dict:
-        """Record the owner's answer and resume a parked task as paused."""
+    def answer(self, task_id: str, text: str, *, language: str = "en", translator=None) -> dict:
+        """Record the owner's answer and resume a parked task as paused.
+
+        Non-English answers are normalized to working English before the
+        task resumes; on translation failure nothing is stored.
+        """
+        from remote_operator.translate import normalize_input
+
         if not isinstance(text, str) or not text.strip() or len(text) > 2000:
             raise ValueError("Answer requires 1-2000 characters")
         with self.lock:
@@ -502,7 +508,21 @@ class Operator:
                 raise ValueError("Task has no pending owner question")
             if self.store.cancelled(task_id):
                 raise ValueError("Task was cancelled")
-            task["history"].append({"name": "owner_answer", "result": {"text": text.strip()}})
+            normalized, receipt = normalize_input(translator, text.strip(), language)
+            task["history"].append(
+                {
+                    "name": "owner_answer",
+                    "result": {
+                        "text": normalized.working,
+                        "source_text": normalized.source,
+                        "source_lang": normalized.lang,
+                        "translated": normalized.translated,
+                        "translator": normalized.translator_id,
+                    },
+                }
+            )
+            if receipt is not None:
+                self.store.save(task, "inference_receipt", receipt)
             task["pending_question"] = None
             task["status"] = "paused"
             self.store.save(task, "question_answered")
