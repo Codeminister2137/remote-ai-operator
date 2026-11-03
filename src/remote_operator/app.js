@@ -18,6 +18,23 @@ let sessionRevision = 0;
 let selectionRevision = 0;
 let progressTimer = null;
 let pollBusy = false;
+let currentView = "demo";
+let reviewContext = null; // {run_id, thread_id, thread_topic} when opened from a run.
+function switchView(name) {
+  currentView = name;
+  for (const view of ["demo", "supervise", "review", "activity"]) {
+    element("view-" + view).hidden = view !== name;
+  }
+  for (const view of ["Demo", "Supervise", "Review", "Activity"]) {
+    element("nav" + view).classList.toggle("active", view.toLowerCase() === name);
+  }
+}
+element("navDemo").onclick = () => switchView("demo");
+element("navSupervise").onclick = () => switchView("supervise");
+element("navReview").onclick = () => switchView("review");
+element("navActivity").onclick = () => switchView("activity");
+element("demoReviewCta").onclick = () => switchView("review");
+switchView("demo");
 const defaultPrompt = element("prompt").value;
 if (/^[a-f0-9]{32}$/.test(location.hash.slice(1))) element("taskId").value = location.hash.slice(1);
 const eventNames = {
@@ -57,7 +74,7 @@ function startPolling() {
   progressTimer = setInterval(async () => {
     if (pollBusy) return;
     pollBusy = true;
-    try { await refresh(); await refreshExternalActions(); }
+    try { await refresh(); await refreshExternalActions(); try { await loadSupervisorRuns(); } catch { /* Runs refresh is best-effort inside the task poll. */ } }
     catch (error) { stopPolling(); message(error.message); }
     finally { pollBusy = false; }
   }, 1000);
@@ -236,12 +253,17 @@ async function refreshExternalActions() {
   }));
 }
 element("refreshExternal").onclick = () => guarded(refreshExternalActions);
+element("diffModeSplit").onclick = () => { diffMode = "split"; applyDiffMode(); };
+element("diffModeUnified").onclick = () => { diffMode = "unified"; applyDiffMode(); };
+applyDiffMode();
 element("supervisionMode").onchange = () => guarded(async () => {
   const saved = await api("/api/settings", "PUT", {supervision: element("supervisionMode").value});
   element("settingsNote").textContent = saved.supervision === "unattended" ?
     (saved.mail_configured ? "Unattended: run updates will be mailed to the owner." : "Unattended selected but mail is NOT configured: no updates will arrive.") :
-    "Attended: runs still execute; no mail is sent.";
+    (saved.mail_configured ? "Attended: mail only when a run needs you (waiting, failed, done after your answers)." : "Attended selected but mail is NOT configured: no updates will arrive.");
+  updatePlanSettingsNote();
 });
+element("runMode").onchange = () => updatePlanSettingsNote();
 let powerArmed = false;
 element("powerArm").onclick = () => guarded(async () => {
   if (!powerArmed) {
@@ -282,6 +304,18 @@ function supervisorActions() {
   element("supervisorSend").disabled = !open;
   element("supervisorWritePlan").disabled = !open;
   element("supervisorApprovePlan").disabled = !open || !supervisorPlanNonce;
+  updatePlanSettingsNote();
+}
+function updatePlanSettingsNote() {
+  const mode = element("runMode").value === "planning" ?
+    "Planning only: approving queues nothing." :
+    "Plan + implement: approving queues a run.";
+  const supervision = element("supervisionMode").value === "unattended" ?
+    "Unattended supervision (mail on run events)." :
+    "Attended supervision (mail only when a run needs you).";
+  element("planSettingsNote").textContent = supervisorPlanNonce ?
+    "Approving now: " + mode + " " + supervision :
+    "Approval settings will appear here once a plan is written.";
 }
 function renderSupervisorTranscript(history) {
   element("supervisorTranscript").replaceChildren(...history.map((turn) => {
@@ -327,21 +361,160 @@ async function openSupervisorThread(id) {
   }
   supervisorActions();
 }
+function threadTopic(thread_id) {
+  const options = element("supervisorThreads").options;
+  for (const option of options) {
+    if (option.value === thread_id) {
+      const sep = option.textContent.indexOf(" \u00b7 ");
+      return sep >= 0 ? option.textContent.slice(sep + 3) : option.textContent;
+    }
+  }
+  return "";
+}
+// ==split-parser-start== (pure; unit-tested by tests/split-parser.test.mjs via marker slice)
+function parseUnifiedDiff(text) {
+  // Split concatenated unified diffs (difflib format, one section per file)
+  // into per-file old/new line columns. Left holds context + deletions,
+  // right holds context + additions. Unknown lines go to both sides so no
+  // content is ever hidden by the split view.
+  const files = [];
+  let cur = null;
+  let lastSide = "both"; // attaches "\ No newline" markers to the prior side
+  const pushLine = (side, line) => {
+    if (!cur) { cur = { file: "change", left: [], right: [] }; files.push(cur); }
+    if (side === "left" || side === "both") cur.left.push(line);
+    if (side === "right" || side === "both") cur.right.push(line);
+  };
+  for (const raw of String(text || "").split("\n")) {
+    if (raw.startsWith("--- ")) {
+      cur = { file: raw.slice(4).trim().replace(/^base\//, ""), left: [], right: [] };
+      files.push(cur); lastSide = "both";
+    } else if (raw.startsWith("+++ ")) {
+      if (cur) {
+        const name = raw.slice(4).trim().replace(/^candidate\//, "");
+        if (cur.file !== name) cur.file += " \u2192 " + name;
+      }
+      lastSide = "both";
+    } else if (raw.startsWith("@@")) {
+      pushLine("both", raw); lastSide = "both";
+    } else if (raw.startsWith("\\ ")) {
+      pushLine(lastSide, raw);
+    } else if (raw.startsWith("-")) {
+      pushLine("left", raw); lastSide = "left";
+    } else if (raw.startsWith("+")) {
+      pushLine("right", raw); lastSide = "right";
+    } else if (raw === "") {
+      continue; // trailing-newline artifact; difflib never emits bare mid-diff lines
+    } else {
+      pushLine("both", raw); lastSide = "both";
+    }
+  }
+  return files.filter((f) => f.left.length || f.right.length);
+}
+// ==split-parser-end==
+let diffMode = "split";
+function renderDiffViews(text, emptyText) {
+  element("diff").textContent = text || emptyText;
+  const box = element("diffSplit");
+  box.replaceChildren();
+  const files = parseUnifiedDiff(text || "");
+  if (!files.length) {
+    const empty = document.createElement("p");
+    empty.textContent = text ? "No line changes." : emptyText;
+    box.append(empty);
+  }
+  for (const f of files) {
+    const section = document.createElement("div");
+    section.className = "diff-split-file";
+    const head = document.createElement("div");
+    head.className = "diff-split-head";
+    head.textContent = f.file + " \u2014 old (base) vs new (candidate)";
+    const cols = document.createElement("div");
+    cols.className = "diff-cols";
+    const left = document.createElement("pre");
+    left.className = "diff-col diff-old";
+    left.textContent = f.left.join("\n");
+    const right = document.createElement("pre");
+    right.className = "diff-col diff-new";
+    right.textContent = f.right.join("\n");
+    cols.append(left, right);
+    section.append(head, cols);
+    box.append(section);
+  }
+  applyDiffMode();
+}
+function applyDiffMode() {
+  const split = diffMode === "split";
+  element("diff").hidden = split;
+  element("diffSplit").hidden = !split;
+  element("diffModeSplit").classList.toggle("active", split);
+  element("diffModeUnified").classList.toggle("active", !split);
+}
+function renderApprovalSubject() {
+  const subject = element("approvalSubject");
+  const checklist = element("approvalChecklist");
+  if (!task) {
+    subject.textContent = "No task selected.";
+    checklist.replaceChildren();
+    return;
+  }
+  const short = (hex) => typeof hex === "string" ? hex.slice(0, 12) : "?";
+  const kind = reviewContext ?
+    "Supervised run " + reviewContext.run_id.slice(0, 12) + (reviewContext.thread_topic ? " \u00b7 thread '" + reviewContext.thread_topic + "'" : "") :
+    "Demo task";
+  const promptLine = typeof task.prompt === "string" ? task.prompt.split("\n")[0].slice(0, 90) : "";
+  const injected = task.injected ? " \u00b7 injected failure" : "";
+  const runner = task.evidence && task.evidence.runner ? task.evidence.runner : "not run yet";
+  subject.textContent = kind + " \u00b7 task " + task.id.slice(0, 12) + " \u00b7 attempt " + (task.calls || 0) + injected +
+    " \u00b7 actor " + runner + " \u00b7 candidate " + short(task.evidence && task.evidence.candidate_digest) +
+    " \u00b7 base " + short(task.base_digest) + (promptLine ? ' \u00b7 "' + promptLine + '"' : "");
+  const rows = [];
+  const push = (ok, text) => rows.push((ok ? "PASS " : "FAIL ") + text);
+  if (!task.evidence) {
+    push(false, "No candidate produced yet.");
+  } else {
+    push(true, "Candidate fingerprinted " + short(task.evidence.candidate_digest) + ".");
+    push(!!task.evidence.passed, task.evidence.passed ? "Validation passed (" + runner + ")." : "Validation FAILED \u2014 do not approve.");
+  }
+  if (task.status === "awaiting_approval" && task.approval && typeof task.approval.expires === "number") {
+    const fresh = Date.now() < task.approval.expires * 1000;
+    push(fresh, fresh ? "Approval window fresh." : "Approval EXPIRED \u2014 revalidate.");
+  } else if (task.status === "awaiting_approval") {
+    push(false, "No valid approval \u2014 run fresh validation first.");
+  }
+  checklist.replaceChildren(...rows.map((text) => {
+    const item = document.createElement("li");
+    item.textContent = text;
+    return item;
+  }));
+}
 async function loadSupervisorRuns() {
   const session = sessionRevision;
   const payload = await api("/api/supervisor/runs");
   if (session !== sessionRevision || selectedMode === null) return;
-  const runs = Array.isArray(payload) ? payload : (payload.runs || []);
+  const all = Array.isArray(payload) ? payload : (payload.runs || []);
+  const runs = supervisorThreadId ? all.filter((run) => run.thread_id === supervisorThreadId) : all;
   const list = element("supervisorRuns");
   if (!runs.length) {
     const empty = document.createElement("li");
-    empty.textContent = "No runs yet.";
+    empty.textContent = supervisorThreadId ? "No runs for this thread yet." : "No runs yet.";
     list.replaceChildren(empty);
     return;
   }
   list.replaceChildren(...runs.map((run) => {
     const item = document.createElement("li");
-    item.textContent = run.status + " · " + run.run_id.slice(0, 12);
+    item.textContent = run.status + " · " + run.run_id.slice(0, 12) + " ";
+    const review = document.createElement("button");
+    review.textContent = "Review"; review.className = "secondary";
+    review.onclick = () => guarded(() => supervisorStep(async () => {
+      const detail = await api("/api/supervisor/runs/" + run.run_id);
+      if (!detail.task_id) { supervisorNote("Run has no linked task yet; wait for the worker."); return; }
+      await chooseTask(detail.task_id);
+      reviewContext = {run_id: run.run_id, thread_id: run.thread_id, thread_topic: threadTopic(run.thread_id)};
+      renderApprovalSubject();
+      switchView("review");
+    }));
+    item.append(review);
     return item;
   }));
 }
@@ -406,11 +579,15 @@ function renderEvents() {
   element("eventHistory").textContent = showAllEvents ? "Show latest activity" : "Show all activity (" + taskEvents.length + ")";
 }
 function clearTaskView() {
-  task = null; taskEvents = []; showAllEvents = false;
+  task = null; taskEvents = []; showAllEvents = false; reviewContext = null;
   element("status").textContent = "No task selected";
-  element("diff").textContent = "No candidate yet.";
+  renderDiffViews("", "No candidate yet.");
   element("evidence").textContent = "Not validated.";
   element("validation-summary").textContent = "Not validated.";
+  element("verdict").textContent = "No candidate yet.";
+  renderApprovalSubject();
+  element("demoReviewStatus").textContent = "No task yet. Create and run one above; you will be brought to the Review view when it is ready.";
+  element("demoReviewCta").disabled = true;
   element("issues").replaceChildren(); element("import-errors").replaceChildren();
   renderEvents(); actions();
 }
@@ -428,6 +605,7 @@ element("newTask").onclick = newTask;
 element("eventHistory").onclick = () => { showAllEvents = !showAllEvents; renderEvents(); };
 async function chooseTask(id) {
   if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Choose a saved task or provide a valid task ID.");
+  reviewContext = null;
   stopPolling(); selectionRevision++; task = null;
   element("taskId").value = id;
   element("issues").replaceChildren(); element("import-errors").replaceChildren();
@@ -446,7 +624,7 @@ async function refresh() {
   if (location.hash.slice(1) !== task.id) location.hash = task.id;
   element("recentTasks").value = task.id;
   element("status").textContent = task.status;
-  element("diff").textContent = review.diff || "No candidate change.";
+  renderDiffViews(review.diff, "No candidate change.");
   element("evidence").textContent = task.evidence ? JSON.stringify(task.evidence, null, 2) : "Not validated.";
   element("validation-summary").textContent = task.evidence ?
     (task.evidence.passed ? "Passed" : "Failed") + " · " + task.evidence.runner + " · source " + task.evidence.candidate_digest.slice(0,12) : "Not validated.";
@@ -459,6 +637,14 @@ async function refresh() {
       element("validation-summary").textContent += " · approve within ~" + minutes + " min";
     }
   }
+  element("verdict").textContent = !task.evidence ? "No candidate yet. Run the task to produce one." :
+    !task.evidence.passed ? "Validation FAILED. Do not approve; inspect the receipt or revalidate." :
+    task.status === "awaiting_approval" ? "Ready: validation passed. Review the diff, then approve to apply." :
+    task.status === "completed" ? "Completed: this change was applied." :
+    "Status: " + task.status + ".";
+  element("demoReviewStatus").textContent = "Task " + task.status + ": " + element("verdict").textContent;
+  element("demoReviewCta").disabled = false;
+  renderApprovalSubject();
   actions();
   const events = await api("/api/tasks/" + encodeURIComponent(id) + "/events");
   if (!stillSelected(id, selection, session)) return;
@@ -468,8 +654,10 @@ async function refresh() {
   else stopPolling();
   const status = task.status;
   if (previousStatus !== status && !["running", "applying"].includes(status)) await recentTasks();
-  if (status === "awaiting_approval" && previousStatus !== status)
-    message("Change ready for review: check the diff below, then press Approve this verified change.");
+  if (status === "awaiting_approval" && previousStatus !== status) {
+    message("Change ready for review: check the diff in the Review view, then press Approve this verified change.");
+    switchView("review");
+  }
   const receipts = events.filter(event => event.kind === "inference_receipt");
   const cursor = id + ":" + (receipts.length ? receipts[receipts.length - 1].sequence : 0) + ":" + status;
   if (stillSelected(id, selection, session) && cursor !== allowanceCursor) {
@@ -635,7 +823,10 @@ async function loadMode(session) {
   const saved = element("taskId").value.trim();
   if (saved || summaries.length) {
     await chooseTask(saved || summaries[0].id);
-    if (session === sessionRevision) message("Connected. Your saved task is loaded; review its current status below.");
+    if (session === sessionRevision) {
+      switchView("review");
+      message("Connected. Your saved task is loaded; review its current status in the Review view.");
+    }
   } else message("Connected. Review execution mode before submitting your task.");
 }
 element("connect").onclick = () => guarded(async () => {
@@ -780,3 +971,141 @@ element("taskId").addEventListener("input", () => {
   } catch { /* Local deployment: wait for the owner token. */ }
 })();
 actions();
+/* ---- Dictation v1: Web Speech API textarea filler (client-only) ----
+   Fills the paired textarea only; never sends. Rows stay hidden unless
+   the browser exposes SpeechRecognition (standard or webkit prefix). */
+const Dictation = (() => {
+  const Recognition = typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+  let activeStop = null;
+  function supported() { return typeof Recognition === "function"; }
+  function create() { return new Recognition(); }
+  function stopActive() {
+    if (activeStop) {
+      const stop = activeStop;
+      activeStop = null;
+      try { stop(); } catch { /* Stopping a stale session is best-effort. */ }
+    }
+  }
+  function setActive(stop) { activeStop = stop; }
+  function clearActive(stop) { if (activeStop === stop) activeStop = null; }
+  return { supported, create, stopActive, setActive, clearActive };
+})();
+function dictateLangName(code) { return code === "pl-PL" ? "polski" : "English"; }
+function dictateErrorMessage(code) {
+  switch (code) {
+    case "not-allowed":
+    case "service-not-allowed":
+      return "Microphone blocked. Allow mic access for this page (HTTPS required), then try again.";
+    case "no-speech":
+      return "No speech heard. Try again.";
+    case "audio-capture":
+      return "No microphone found on this device.";
+    case "network":
+      return "Browser speech service unreachable. Check the connection and try again.";
+    case "language-not-supported":
+      return "This browser does not support that dictation language. Try the other language.";
+    case "aborted":
+      return "";
+    default:
+      return "Dictation error (" + code + "). Try again or type instead.";
+  }
+}
+function joinDictation(head, tail) {
+  if (!head) return tail;
+  return /\s$/.test(head) ? head + tail : head + " " + tail;
+}
+function wireDictation(fieldId, buttonId, langId, statusId) {
+  const row = document.querySelector('[data-dictate-for="' + fieldId + '"]');
+  if (!Dictation.supported() || !row) return; // Row stays hidden: typed input unaffected.
+  const field = element(fieldId);
+  const button = element(buttonId);
+  const lang = element(langId);
+  const status = element(statusId);
+  row.hidden = false;
+  let rec = null;
+  let base = "";
+  let finalText = "";
+  let lastRendered = null;
+  function setRecording(on) {
+    button.classList.toggle("recording", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.textContent = on ? "Stop dictation" : "🎤 Dictate (browser speech recognition)";
+  }
+  function stop() {
+    if (rec) { try { rec.stop(); } catch { /* stop() after end is harmless. */ } }
+  }
+  button.onclick = () => {
+    if (rec) { stop(); return; } // Toggle off; onend commits the transcript.
+    Dictation.stopActive(); // Only one dictation session at a time.
+    base = field.value;
+    finalText = "";
+    lastRendered = null;
+    status.textContent = "";
+    let session;
+    try {
+      session = Dictation.create();
+    } catch {
+      status.textContent = "Dictation unavailable in this browser. Type instead.";
+      return;
+    }
+    rec = session;
+    Dictation.setActive(stop);
+    session.lang = lang.value;
+    session.interimResults = true;
+    session.continuous = false; // Single utterance; the platform end-points on silence.
+    session.maxAlternatives = 1;
+    session.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const chunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += chunk;
+        else interim += chunk;
+      }
+      lastRendered = joinDictation(base, finalText + interim); // Interim shown live, provisional.
+      field.value = lastRendered;
+    };
+    session.onerror = (event) => {
+      const note = dictateErrorMessage(event.error || "unknown");
+      if (note) {
+        status.textContent = note;
+        message(note);
+      }
+    };
+    session.onend = () => {
+      Dictation.clearActive(stop);
+      const captured = finalText.trim() !== "";
+      if (captured) {
+        // If the user typed during dictation, append to their edit instead of clobbering it.
+        field.value = (field.value === lastRendered || field.value === base) ?
+          joinDictation(base, finalText) : joinDictation(field.value, finalText);
+        status.textContent = "Dictation added (" + dictateLangName(lang.value) +
+          "). Review and edit before sending. Nothing was sent.";
+      } else if (status.textContent === "") {
+        status.textContent = "No speech captured; field unchanged.";
+        field.value = base;
+      } else if (lastRendered !== null) {
+        field.value = base; // Partial interim was shown; restore the pre-dictation text.
+      } // Else an error note is already shown; keep it and leave the field alone.
+      rec = null;
+      setRecording(false);
+      field.focus();
+    };
+    setRecording(true);
+    status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
+    try {
+      session.start();
+    } catch (error) {
+      Dictation.clearActive(stop);
+      rec = null;
+      setRecording(false);
+      field.value = base;
+      status.textContent = "Could not start dictation (" +
+        (error && error.message ? error.message : "mic unavailable") +
+        "). Check mic permission and HTTPS, then try again.";
+    }
+  };
+}
+wireDictation("prompt", "dictate-prompt", "dictate-lang-prompt", "dictate-status-prompt");
+wireDictation("supervisorInput", "dictate-supervisor", "dictate-lang-supervisor", "dictate-status-supervisor");
+wireDictation("answer-text", "dictate-answer", "dictate-lang-answer", "dictate-status-answer");

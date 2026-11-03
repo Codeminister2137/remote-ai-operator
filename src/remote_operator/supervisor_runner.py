@@ -28,6 +28,13 @@ OPERATOR_BUSY = "Another operator action is active"
 TASK_NOT_READY = "Task is not ready; reconcile uncertain effects first"
 TERMINAL_JOB = {"completed", "failed", "cancelled"}
 DRAIN_WORKER_INTERVAL_SECONDS = 30.0
+# Unattended mails every terminal run outcome; attended mails only the run
+# events that need the owner (plus completed-after-questions, which always
+# mails when a sender is configured, in every mode).
+UNATTENDED_NOTIFY_STATUSES = frozenset(
+    {"completed", "failed", "cancelled", "awaiting_approval", "waiting_on_owner"}
+)
+ATTENDED_NOTIFY_STATUSES = frozenset({"failed", "waiting_on_owner"})
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +45,14 @@ class SupervisorRunner:
     def __init__(self, operator, *, notify_send=None, notify_on=None):
         """``notify_send`` maps a job summary dict to a notification receipt.
 
-        It is called for terminal job outcomes in ``notify_on``; any error it
+        It is called for terminal job outcomes in ``notify_on``, plus completed
+        runs that involved owner questions (in every mode); any error it
         raises is recorded on the job and never breaks the drain.
         """
         self.operator = operator
         self.notify_send = notify_send
         self.notify_on = (
-            {"completed", "failed", "cancelled", "awaiting_approval", "waiting_on_owner"}
-            if notify_on is None
-            else set(notify_on)
+            set(UNATTENDED_NOTIFY_STATUSES) if notify_on is None else set(notify_on)
         )
 
     @property
@@ -87,17 +93,23 @@ class SupervisorRunner:
             job["error"] = error[:1000]
         else:
             job.pop("error", None)
-        self._thread_event(job, "run_finished", {"run_id": job.get("run_id", path.stem)})
-        if status in self.notify_on and self.notify_send is not None:
+        self._thread_event(
+            job, "run_finished", {"run_id": job.get("run_id", path.stem), "status": status}
+        )
+        summary = {
+            "run_id": job.get("run_id", path.stem),
+            "thread_id": job.get("thread_id", ""),
+            "status": status,
+            "error": job.get("error"),
+            "had_questions": job_had_owner_questions(self.operator, job),
+        }
+        job["had_questions"] = summary["had_questions"]
+        wants = status in self.notify_on or (
+            status == "completed" and summary["had_questions"]
+        )
+        if wants and self.notify_send is not None:
             try:
-                receipt = self.notify_send(
-                    {
-                        "run_id": job.get("run_id", path.stem),
-                        "thread_id": job.get("thread_id", ""),
-                        "status": status,
-                        "error": job.get("error"),
-                    }
-                )
+                receipt = self.notify_send(summary)
                 job["notify_receipt"] = receipt
             except Exception as exc:  # noqa: BLE001 - notification must not break the drain
                 job["notify_error"] = f"{type(exc).__name__}: {exc}"[:300]
@@ -323,6 +335,25 @@ def _check_interval(interval_seconds: float) -> None:
         raise ValueError("interval_seconds must be a positive number")
 
 
+def job_had_owner_questions(operator, job: dict) -> bool:
+    """Return True when the linked task parked on an owner question.
+
+    Best-effort bookkeeping: a missing or unreadable task reads as False and
+    never breaks the drain. An answered question leaves an ``owner_answer``
+    history entry, which survives completion.
+    """
+    try:
+        task = operator.store.get(job.get("task_id", ""))
+    except (KeyError, ValueError, OSError, sqlite3.Error):
+        return False
+    if not isinstance(task, dict):
+        return False
+    history = task.get("history") or []
+    return any(
+        isinstance(entry, dict) and entry.get("name") == "owner_answer" for entry in history
+    )
+
+
 def _thread_topic(operator, thread_id: str) -> str:
     """Best-effort thread title for mails; never breaks sending."""
     try:
@@ -355,12 +386,55 @@ def format_run_mail(summary: dict, topic: str) -> str:
     run = str(summary.get("run_id", ""))[:8]
     status = str(summary.get("status", "unknown"))
     head = f"Run {run} ({topic})" if topic else f"Run {run}"
-    lines = [f"{head}: {status}.", "", _RUN_MAIL_ACTIONS.get(status, "No action needed.")]
+    if status == "completed" and summary.get("had_questions"):
+        action = "It is done after your answers. No action needed."
+    else:
+        action = _RUN_MAIL_ACTIONS.get(status, "No action needed.")
+    lines = [f"{head}: {status}.", "", action]
     error = summary.get("error")
     if status == "failed" and error:
         lines += ["", f"Error: {error}"[:1000]]
     lines += ["", "Details:", json.dumps(summary, indent=2, default=str)]
     return "\n".join(lines)
+
+
+def notify_plan(operator) -> tuple:
+    """Return ``(notify_send, notify_on)`` for the serve drain worker.
+
+    Key run events (``waiting_on_owner``, ``failed``, completed-after-questions)
+    mail in every supervision mode whenever SMTP is configured; unattended
+    additionally mails every other terminal outcome. Missing SMTP config means
+    a silent skip (``None`` sender): never a crash and never dry-run receipt
+    spam. Never raises for settings or config problems.
+    """
+    from remote_operator import notify as notify_mail
+    from remote_operator import settings as run_settings
+    from remote_operator.notify import load_smtp_config
+
+    try:
+        config = load_smtp_config()
+    except (ValueError, OSError):
+        logger.warning("supervision without SMTP settings; not notifying")
+        return None, set(UNATTENDED_NOTIFY_STATUSES)
+    if run_settings.load_settings(operator.root)["supervision"] == "unattended":
+        notify_on = set(UNATTENDED_NOTIFY_STATUSES)
+    else:
+        notify_on = set(ATTENDED_NOTIFY_STATUSES)
+    receipts = operator.root / "notify_receipts"
+
+    def _send(summary):
+        return notify_mail.send_owner_mail(
+            to=config["owner"],
+            subject=f"[operator] run {summary['status']}: {summary['run_id'][:8]}",
+            body=format_run_mail(
+                summary, _thread_topic(operator, summary.get("thread_id", ""))
+            ),
+            config=config,
+            dry_run=False,
+            receipts_dir=receipts,
+        )
+
+    return _send, notify_on
 
 
 def start_drain_worker(
@@ -383,37 +457,11 @@ def start_drain_worker(
     _check_interval(interval_seconds)
     stop = stop_event or threading.Event()
 
-    def _notify_send_or_none():
-        from remote_operator import settings as run_settings
-        from remote_operator.notify import load_smtp_config, send_owner_mail
-
-        if run_settings.load_settings(operator.root)["supervision"] != "unattended":
-            return None
-        try:
-            config = load_smtp_config()
-        except (ValueError, OSError):
-            logger.warning("unattended supervision without SMTP settings; not notifying")
-            return None
-        receipts = operator.root / "notify_receipts"
-
-        def _send(summary):
-            return send_owner_mail(
-                to=config["owner"],
-                subject=f"[operator] run {summary['status']}: {summary['run_id'][:8]}",
-                body=format_run_mail(
-                    summary, _thread_topic(operator, summary.get("thread_id", ""))
-                ),
-                config=config,
-                dry_run=False,
-                receipts_dir=receipts,
-            )
-
-        return _send
-
     def _loop() -> None:
         while not stop.is_set():
             try:
-                runner = SupervisorRunner(operator, notify_send=_notify_send_or_none())
+                sender, notify_on = notify_plan(operator)
+                runner = SupervisorRunner(operator, notify_send=sender, notify_on=notify_on)
                 runner.reconcile_jobs()
                 runner.drain(model_factory(), max_jobs=max_jobs)
                 runner.refresh_waiting()

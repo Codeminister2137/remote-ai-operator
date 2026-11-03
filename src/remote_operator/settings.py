@@ -1,8 +1,10 @@
 """Owner run settings persisted in the operator runtime directory.
 
-``supervision`` selects attended (default, no mail) or unattended (mail the
-owner on terminal run outcomes when SMTP is configured). Never stores
-secrets; mail readiness is probed, never echoed.
+``supervision`` selects attended (default, mail only the run events needing
+the owner: waiting_on_owner, failed, completed-after-questions) or unattended
+(mail every terminal run outcome). Either mode needs SMTP configured, else the
+worker stays silent. Never stores secrets; mail readiness is probed, never
+echoed.
 """
 
 import json
