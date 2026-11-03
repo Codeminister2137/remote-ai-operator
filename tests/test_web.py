@@ -112,10 +112,12 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("localStorage", javascript)
 
     async def test_mode_is_server_owned_and_queued_cancellation_is_authenticated(self):
-        config = await self.client.get("/api/config", headers=self.auth)
+        config = (await self.client.get("/api/config", headers=self.auth)).json()
         self.assertEqual(
-            config.json(), {"mode": "scripted", "live_inference": False, "https_origin": None}
+            {k: config[k] for k in ("mode", "live_inference", "https_origin")},
+            {"mode": "scripted", "live_inference": False, "https_origin": None},
         )
+        self.assertTrue(config["build_commit"])
         task = (
             await self.client.post("/api/tasks", headers=self.auth, json={"prompt": "task"})
         ).json()

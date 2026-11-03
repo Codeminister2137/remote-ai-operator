@@ -194,6 +194,19 @@ def _origin(public_origin):
     )
 
 
+def _build_commit():
+    """Return the serving build commit for the UI footer chip."""
+    build_commit = os.environ.get("OPERATOR_BUILD_COMMIT", "")
+    if not build_commit:
+        try:
+            build_commit = (
+                Path(__file__).with_name("build_commit.txt").read_text(encoding="utf-8").strip()
+            )
+        except OSError:
+            build_commit = "unknown"
+    return build_commit
+
+
 def _base_app(*, public_origin, sessions):
     remote = urlsplit(public_origin) if public_origin else None
 
@@ -640,7 +653,12 @@ def create_app(
     @app.get("/api/config", dependencies=[Depends(owner)])
     def configuration():
         """Return local deployment configuration."""
-        return {"mode": mode, "live_inference": mode == "meta", "https_origin": public_origin}
+        return {
+            "mode": mode,
+            "live_inference": mode == "meta",
+            "https_origin": public_origin,
+            "build_commit": _build_commit(),
+        }
 
     @app.get("/api/drain", dependencies=[Depends(owner)])
     def drain_health():
@@ -752,14 +770,7 @@ def create_hosted_app(
     @app.get("/api/config")
     def configuration(request: Request):
         """Return hosted deployment configuration for the visitor."""
-        build_commit = os.environ.get("OPERATOR_BUILD_COMMIT", "")
-        if not build_commit:
-            try:
-                build_commit = (
-                    Path(__file__).with_name("build_commit.txt").read_text(encoding="utf-8").strip()
-                )
-            except OSError:
-                build_commit = "unknown"
+        build_commit = _build_commit()
         token = request.cookies.get(SESSION_COOKIE, "")
         try:
             subject = sessions.subject(token)

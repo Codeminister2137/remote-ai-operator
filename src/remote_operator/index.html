@@ -39,7 +39,7 @@
 <label class="check"><input id="inject" type="checkbox" checked> Inject one transport failure after the edit</label>
 <button id="submit" disabled>Create and run new task</button></section>
 <section><h2>Demo step 2 · Review &amp; approve</h2><p id="demoReviewStatus">No task yet. Create and run one above; you will be brought to the Review view when it is ready.</p><button id="demoReviewCta" class="secondary" disabled>Open in Review</button></section>
-<section><h2>Demo step 3 · Try the feature the agent built</h2>
+<section id="demoStep3"><h2>Demo step 3 · Try the feature the agent built</h2>
 <p>After approving, run the new importer on the example below. Each line is one issue. Two valid issues should appear in the table; the duplicate ID and missing title should appear as row errors. You can edit the input and try again. This checks the approved code with sample data; it does not save issues to a live tracker.</p>
 <label>CSV input<textarea id="csv" rows="7" title="Sample CSV. Each line is one issue; edit it and run again.">id,title,status
 existing,Duplicate,open
@@ -54,6 +54,7 @@ new-3,Another imported issue,closed</textarea></label>
 <details><summary>Recover another task by ID</summary>
 <label>Task ID<input id="taskId" autocomplete="off" placeholder="Optional: paste a saved task ID"></label>
 <button id="load" class="secondary" disabled>Load task</button></details>
+<button id="copyTaskId" class="secondary" disabled title="Copy the current task ID to the clipboard.">Copy task ID</button><button id="copyTaskLink" class="secondary" disabled title="Copy a link that reopens this exact task.">Copy task link</button>
 <p id="recovery-note" hidden></p>
 <button id="reconcile" class="secondary" disabled>Inspect interrupted action</button>
 <button id="resume" class="secondary" disabled>Resume paused task</button><button id="cancel" class="secondary" disabled>Cancel task</button></section>
@@ -93,20 +94,21 @@ new-3,Another imported issue,closed</textarea></label>
 <div id="diffModeBar"><button id="diffModeSplit" class="secondary">Split: old vs new</button><button id="diffModeUnified" class="secondary">Unified</button></div>
 <pre id="diff">No candidate yet.</pre>
 <div id="diffSplit" hidden></div>
-<h3>Validation evidence</h3><p id="validation-summary">Not validated.</p><details><summary>Show validation receipt</summary><pre id="evidence">Not validated.</pre></details>
+<h3>Validation evidence</h3><p id="validation-summary">Not validated.</p><div id="evidenceCard" class="evidence-card" hidden></div><details><summary>Show validation receipt</summary><pre id="evidence">Not validated.</pre></details>
 <p>Approval applies this candidate only to the separate local demo target. It does not push or deploy.</p>
 <button id="approve" disabled title="Apply this verified change to the local demo target only. No push or deploy.">Approve this verified change</button>
 <button id="revalidate" class="secondary" disabled title="Run a fresh validation. The previous approval becomes invalid.">Run fresh validation</button><button id="reject" class="secondary" disabled title="Reject this change. The demo target is left unchanged.">Reject change</button>
+<button id="tryApproved" class="secondary" disabled title="Run the approved importer on the sample data, then open Demo step 3 to see the result. Needs an approved change.">Try it in Demo step 3</button>
 <div id="question-block" hidden><h3>Owner question — work is parked, other runs continue</h3><p id="pending-question"></p><label>Your answer<textarea id="answer-text" rows="3"></textarea></label>
 <div class="dictate-row" data-dictate-for="answer-text" hidden><button id="dictate-answer" class="secondary" aria-pressed="false" title="Dictate into the answer using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and press Send.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-answer"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-answer" class="dictate-status" role="status" aria-live="polite"></span></div>
 <button id="send-answer" disabled title="Send your answer and resume the parked work.">Send answer and resume</button></div></section>
 <section><h2>Task progress</h2><p><span id="status">No task selected</span></p><p id="event-summary">Create a new task or select a saved task.</p><button id="eventHistory" class="secondary" hidden>Show all activity</button><ol id="events"></ol></section>
-<section><h2>Pending actions from Workbench</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
+<section id="workbenchSection"><h2>Pending actions from Workbench</h2><button id="refreshExternal" class="secondary" disabled>Refresh</button>
 <p>External actions from AI Workbench or other connected tools appear here. Approve or reject the exact pending change.</p>
 <ul id="externalActions"><li>Connect to load pending actions.</li></ul></section>
 </div>
 <div id="view-activity" hidden>
-<section><h2>Worker &amp; machine</h2><p id="drainStatus">Worker status unknown.</p><p id="windowStatus">Window status unknown.</p><p id="agentsStatus">Agents status unknown.</p></section>
+<section id="machineSection"><h2>Worker &amp; machine</h2><p id="drainStatus">Worker status unknown.</p><p id="windowStatus">Window status unknown.</p><p id="agentsStatus">Agents status unknown.</p></section>
 <section><h2>Spending</h2><p id="allowance-summary">Connect to view this server's allowance.</p>
 <p id="allowance-note">Local reserved estimates are separate from provider credits and final billing.</p>
 <button id="refreshAllowance" class="secondary" disabled>Refresh spending</button></section>
@@ -117,4 +119,5 @@ new-3,Another imported issue,closed</textarea></label>
 <button id="powerCancel" class="secondary" disabled title="Cancel a scheduled sleep.">Cancel scheduled sleep</button>
 <p id="powerStatus">No sleep scheduled.</p></div></section>
 </div>
+<footer id="statusFooter"><span id="windowChip" class="chip" title="Reviewer approval window for the current task.">No review window</span> <span id="buildChip" class="chip" title="Server build commit.">build …</span></footer>
 </main></body></html>

@@ -606,10 +606,12 @@ class HostedAppTests(unittest.IsolatedAsyncioTestCase):
             response = await client.get(
                 "/api/config", headers={"Authorization": "Bearer " + "owner-" + "x" * 32}
             )
+            config = response.json()
             self.assertEqual(
-                response.json(),
+                {k: config[k] for k in ("mode", "live_inference", "https_origin")},
                 {"mode": "scripted", "live_inference": False, "https_origin": None},
             )
+            self.assertTrue(config["build_commit"])
             self.assertEqual(
                 (await client.post("/api/session", json={"code": CODE})).status_code, 404
             )
