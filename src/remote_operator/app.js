@@ -20,6 +20,8 @@ let sessionRevision = 0;
 let selectionRevision = 0;
 let progressTimer = null;
 let pollBusy = false;
+let hiddenPollTicks = 0;
+let triedApproved = false;
 let currentView = "demo";
 let reviewContext = null; // {run_id, thread_id, thread_topic} when opened from a run.
 function switchView(name) {
@@ -91,6 +93,10 @@ function startPolling() {
   if (progressTimer !== null || !selectedMode) return;
   progressTimer = setInterval(async () => {
     if (pollBusy) return;
+    if (typeof document !== "undefined" && document.hidden) {
+      hiddenPollTicks++;
+      if (hiddenPollTicks % 15 !== 0) return; // Hidden tab: poll about every 15s.
+    } else hiddenPollTicks = 0;
     pollBusy = true;
     try { await refresh(); await refreshExternalActions(); try { await loadSupervisorRuns(); } catch { /* Runs refresh is best-effort inside the task poll. */ } try { await pollInbox(); } catch { /* Inbox refresh is best-effort inside the task poll. */ } }
     catch (error) { stopPolling(); message(error.message); }
@@ -170,6 +176,7 @@ function actions() {
   element("send-answer").disabled = !parked || busy;
   if (typeof supervisorActions === "function") supervisorActions();
   renderWizard();
+  if (typeof updateStepper === "function") updateStepper();
 }
 async function recentTasks() {
   const session = sessionRevision;
@@ -805,7 +812,7 @@ function applyJudgeVisibility() {
   element("workbenchSection").hidden = judge;
 }
 function clearTaskView() {
-  task = null; taskEvents = []; showAllEvents = false; reviewContext = null;
+  task = null; taskEvents = []; showAllEvents = false; reviewContext = null; triedApproved = false;
   element("status").textContent = "No task selected";
   element("status").title = "";
   renderDiffViews("", "No candidate yet.");
@@ -959,6 +966,13 @@ element("load").onclick = () => guarded(() => chooseTask(element("taskId").value
 element("approve").onclick = () => guarded(async () => {
   if (!task) return;
   if (!task.approval) { message("This task has no valid approval yet. Run fresh validation first, then approve."); return; }
+  const short = (hex) => typeof hex === "string" ? hex.slice(0, 12) : "?";
+  const runner = task.evidence && task.evidence.runner ? task.evidence.runner : "not run yet";
+  const summary = "Approve this change?\n\nCandidate: " + short(task.evidence && task.evidence.candidate_digest) +
+    "\nBase: " + short(task.base_digest) + "\nValidated by: " + runner +
+    "\nTarget: separate LOCAL demo target only — no push, no deploy." +
+    "\n\nPress OK to approve, Cancel to keep reviewing.";
+  if (!window.confirm(summary)) return;
   await taskAction("/approve", {nonce: task.approval.nonce}, "Verified change applied to the local demo target.");
 });
 element("reject").onclick = () => guarded(() => taskAction("/reject", {}, "Change rejected; target not updated."));
@@ -1015,6 +1029,8 @@ async function copyText(text, success) {
     area.remove();
   }
   message(success);
+  triedApproved = true;
+  if (typeof updateStepper === "function") updateStepper();
 }
 element("copyTaskId").onclick = () => guarded(async () => {
   const id = element("taskId").value.trim();
@@ -1528,3 +1544,161 @@ function wireDictation(fieldId, buttonId, langId, statusId) {
 wireDictation("prompt", "dictate-prompt", "dictate-lang-prompt", "dictate-status-prompt");
 wireDictation("supervisorInput", "dictate-supervisor", "dictate-lang-supervisor", "dictate-status-supervisor");
 wireDictation("answer-text", "dictate-answer", "dictate-lang-answer", "dictate-status-answer");
+/* ---- Identity: stepper, banner, toggletips, guided tour (client-only) ---- */
+const reducedMotion = typeof window !== "undefined" && typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function stepperIndex() {
+  if (selectedMode === null) return 0; // Connect
+  if (supervisorPlanNonce) return 2; // A written plan awaits approval: Review.
+  if (!task) return 1; // Connected, nothing produced yet: Plan.
+  if (task.status === "completed") return triedApproved ? 4 : 3; // Approved: Run, then Done.
+  if (["awaiting_approval", "review_required", "waiting_on_owner"].includes(task.status)) return 2;
+  return 1; // queued/running/paused/applying/reconciliation/cancelled/rejected: back to Plan.
+}
+function updateStepper() {
+  const current = stepperIndex();
+  ["stepConnect", "stepPlan", "stepReview", "stepRun", "stepDone"].forEach((id, index) => {
+    const item = element(id);
+    if (!item) return;
+    item.classList.toggle("done", index < current || (current === 4 && index === 4));
+    item.classList.toggle("current", index === current);
+    if (index === current) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+  });
+}
+updateStepper();
+const tryApprovedSibling = element("tryApproved");
+if (tryApprovedSibling) tryApprovedSibling.addEventListener("click", () => { triedApproved = true; updateStepper(); });
+const quickBanner = element("quickBanner");
+if (quickBanner) {
+  const dismiss = element("quickBannerDismiss");
+  if (dismiss) dismiss.onclick = () => { quickBanner.hidden = true; };
+}
+function wireToggletips() {
+  const tips = Array.from(document.querySelectorAll(".toggletip"));
+  function closeAll(except) {
+    for (const btn of tips) {
+      if (btn === except) continue;
+      btn.setAttribute("aria-expanded", "false");
+      const bubble = document.getElementById(btn.getAttribute("aria-controls"));
+      if (bubble) bubble.hidden = true;
+    }
+  }
+  for (const btn of tips) {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault(); // In-label tips must not re-focus the labeled control.
+      const bubble = document.getElementById(btn.getAttribute("aria-controls"));
+      if (!bubble) return;
+      const open = bubble.hidden;
+      closeAll(btn);
+      bubble.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeAll(null); });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest || !event.target.closest(".toggletip-wrap")) closeAll(null);
+  });
+}
+wireToggletips();
+/* Guided tour: welcome, wizard, sample review, approve, try-it, bell.
+   Each anchored step is guarded: a missing or hidden anchor skips cleanly. */
+const tourSteps = [
+  {anchor: null, view: null, title: "Welcome to Remote AI Operator",
+   text: "Connect, run work, then review and approve every change in one place. This tour points out each stop — about a minute. You can skip any time."},
+  {anchor: "onboard-wizard", view: null, title: "Setup wizard",
+   text: "Four steps to a working session: demo access code, judge account, spending limits, then your Meta key — or continue with the free scripted reference. The progress line shows where you are."},
+  {anchor: "sampleReview", view: "demo", title: "Sample review",
+   text: "Load a ready-made validated task to practice the review loop. Below, the CSV gallery (happy path, edge cases, all invalid) gives one-click inputs for trying the feature."},
+  {anchor: "approve", view: "review", title: "The one approval place",
+   text: "Read the diff and the validation report, then approve. Approval applies this candidate only to the separate local demo target — never a push or deploy."},
+  {anchor: "tryApproved", view: "review", title: "Try the approved feature",
+   text: "Runs the new importer on sample data and opens Demo step 3 with accepted issues and row errors — proof the approved code works."},
+  {anchor: "inboxBell", view: null, title: "Inbox bell",
+   text: "Owner messages and parked questions needing you land here. The count badge jumps you to the newest unread item."}
+];
+let tourAvailable = [];
+let tourPosition = 0;
+let tourReturnFocus = null;
+function tourAnchorVisible(step) {
+  if (!step.anchor) return true;
+  const target = element(step.anchor);
+  if (!target) return false;
+  if (step.view) return true; // Switching to its view reveals it; verified on show.
+  return target.getClientRects().length > 0;
+}
+function tourClearHighlight() {
+  for (const marked of document.querySelectorAll(".tour-highlight")) marked.classList.remove("tour-highlight");
+}
+function tourPlaceCard(anchorEl) {
+  const card = element("tourCard");
+  card.classList.remove("tour-center");
+  card.style.top = ""; card.style.left = "";
+  if (!anchorEl) { card.classList.add("tour-center"); return; }
+  const margin = 12;
+  const rect = anchorEl.getBoundingClientRect();
+  const cardW = Math.min(340, window.innerWidth - 32);
+  const cardH = card.offsetHeight;
+  const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - cardW - margin));
+  let top = rect.bottom + 10;
+  if (top + cardH > window.innerHeight - margin) top = rect.top - cardH - 10;
+  card.style.left = left + "px";
+  card.style.top = Math.max(margin, top) + "px";
+}
+function tourTrack() {
+  if (element("tourOverlay").hidden || !tourAvailable.length) return;
+  const step = tourAvailable[tourPosition];
+  tourPlaceCard(step.anchor ? element(step.anchor) : null);
+}
+function tourShow(position) {
+  tourPosition = position;
+  const step = tourAvailable[position];
+  if (step.view) switchView(step.view);
+  element("tourTitle").textContent = step.title;
+  element("tourText").textContent = step.text;
+  element("tourCount").textContent = (position + 1) + " of " + tourAvailable.length;
+  element("tourBack").disabled = position === 0;
+  element("tourNext").textContent = position === tourAvailable.length - 1 ? "Done" : "Next";
+  element("tourOverlay").hidden = false;
+  tourClearHighlight();
+  const anchorEl = step.anchor ? element(step.anchor) : null;
+  if (anchorEl && anchorEl.getClientRects().length > 0) {
+    anchorEl.classList.add("tour-highlight");
+    anchorEl.scrollIntoView({block: "center", behavior: reducedMotion ? "auto" : "smooth"});
+  }
+  tourPlaceCard(anchorEl && anchorEl.getClientRects().length > 0 ? anchorEl : null);
+  element("tourNext").focus();
+}
+function tourEnd() {
+  element("tourOverlay").hidden = true;
+  tourClearHighlight();
+  tourAvailable = [];
+  window.removeEventListener("scroll", tourTrack, true);
+  window.removeEventListener("resize", tourTrack);
+  if (tourReturnFocus && tourReturnFocus.focus) tourReturnFocus.focus();
+  tourReturnFocus = null;
+}
+function tourStart() {
+  tourReturnFocus = document.activeElement;
+  tourAvailable = tourSteps.filter(tourAnchorVisible);
+  if (!tourAvailable.length) return;
+  window.addEventListener("scroll", tourTrack, true);
+  window.addEventListener("resize", tourTrack);
+  tourShow(0);
+}
+const tourStarter = element("tourStart");
+if (tourStarter) tourStarter.onclick = tourStart;
+const tourStarterNav = element("tourStartNav");
+if (tourStarterNav) tourStarterNav.onclick = tourStart;
+const tourBack = element("tourBack");
+if (tourBack) tourBack.onclick = () => { if (tourPosition > 0) tourShow(tourPosition - 1); };
+const tourNext = element("tourNext");
+if (tourNext) tourNext.onclick = () => {
+  if (tourPosition < tourAvailable.length - 1) tourShow(tourPosition + 1);
+  else tourEnd();
+};
+const tourSkip = element("tourSkip");
+if (tourSkip) tourSkip.onclick = tourEnd;
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && tourAvailable.length && !element("tourOverlay").hidden) tourEnd();
+});
