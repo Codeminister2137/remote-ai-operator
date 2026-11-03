@@ -654,7 +654,7 @@ def create_app(
         """Return local deployment configuration."""
         return {
             "mode": mode,
-            "live_inference": mode == "meta",
+            "live_inference": mode in {"meta", "baseten"},
             "https_origin": public_origin,
             "build_commit": _build_commit(),
         }

@@ -1028,8 +1028,10 @@ element("copyTaskLink").onclick = () => guarded(async () => {
 });
 function displayMode(configuration) {
   updateBuildChip();
+  const liveBanner = configuration.mode === "baseten" ?
+    "BASETEN MODE · Muse Spark Open inference" : "META MODE · Real AI coding";
   document.querySelector(".notice").textContent = configuration.live_inference ?
-    "META MODE · Real AI coding" : "SCRIPTED OFFLINE REFERENCE · No Meta inference";
+    liveBanner : "SCRIPTED OFFLINE REFERENCE · No Meta inference";
   element("access-note").textContent = hosted ?
     "Hosted demo. Your task list, spending and key belong to this private session only." :
     (configuration.https_origin ? "HTTPS origin configured. Owner credential stays in page memory." :
@@ -1071,7 +1073,8 @@ async function loadMode(session) {
   }
   await refreshAllowance();
   if (session !== sessionRevision) return;
-  element("execMode").textContent = "Execution mode: " + (selectedMode.live_inference ? "live Meta inference" : "scripted offline reference") + ".";
+  const liveMode = selectedMode.mode === "baseten" ? "live Baseten inference (Muse Spark Open)" : "live Meta inference";
+  element("execMode").textContent = "Execution mode: " + (selectedMode.live_inference ? liveMode : "scripted offline reference") + ".";
   await loadSettings();
   if (session !== sessionRevision) return;
   await refreshPowerStatus();

@@ -37,19 +37,40 @@ def configure_models(args, operator):
     """Activation is explicit; a key or credited account alone never selects a route."""
     if args.model_mode == "scripted":
         if args.allow_live_inference or args.grant:
-            raise ValueError("Live inference options require explicit --model-mode meta")
+            raise ValueError(
+                "Live inference options require explicit --model-mode meta or --model-mode baseten"
+            )
         return ScriptedModel, None
-    if not args.allow_live_inference or not args.grant:
-        raise ValueError("Meta mode requires --allow-live-inference and a verified finite --grant")
-    from remote_operator.meta import MetaModel
+    if args.model_mode == "meta":
+        if not args.allow_live_inference or not args.grant:
+            raise ValueError(
+                "Meta mode requires --allow-live-inference and a verified finite --grant"
+            )
+        from remote_operator.meta import MetaModel
 
-    grant = load_grant(args)
-    key = os.environ.get("META_API_KEY", "")
-    if not key:
-        raise ValueError("META_API_KEY is required for the selected Meta route")
-    return (lambda: MetaModel(key, grant, operator.store)), (
-        lambda: grant.budget_status(operator.store)
-    )
+        grant = load_grant(args)
+        key = os.environ.get("META_API_KEY", "")
+        if not key:
+            raise ValueError("META_API_KEY is required for the selected Meta route")
+        return (lambda: MetaModel(key, grant, operator.store)), (
+            lambda: grant.budget_status(operator.store)
+        )
+    if args.model_mode == "baseten":
+        if not args.allow_live_inference or not args.grant:
+            raise ValueError(
+                "Baseten mode requires --allow-live-inference and a verified finite --grant"
+            )
+        from remote_operator.baseten import BasetenModel
+        from remote_operator.baseten import grant_from_file as baseten_grant_from_file
+
+        baseten_grant = baseten_grant_from_file(args.grant)
+        baseten_key = os.environ.get("BASETEN_HACKATHON_API_KEY", "")
+        if not baseten_key:
+            raise ValueError("BASETEN_HACKATHON_API_KEY is required for the selected Baseten route")
+        return (lambda: BasetenModel(baseten_key, baseten_grant, operator.store)), (
+            lambda: baseten_grant.budget_status(operator.store)
+        )
+    raise ValueError(f"Unknown model mode: {args.model_mode}")
 
 
 def model_factory(args, operator):
@@ -92,7 +113,9 @@ def main():
         help="Serve isolated visitor sessions (shared access code) instead of the owner token",
     )
     for command in (demo, serve, drain):
-        command.add_argument("--model-mode", choices=("scripted", "meta"), default="scripted")
+        command.add_argument(
+            "--model-mode", choices=("scripted", "meta", "baseten"), default="scripted"
+        )
         command.add_argument(
             "--grant", type=Path, help="Private owner-approved inference allowance JSON"
         )
