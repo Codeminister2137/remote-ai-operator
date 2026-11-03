@@ -29,11 +29,12 @@ every check below the live gate uses stubbed transport.
   the same drain worker as every other mode.
 - `src/remote_operator/web.py` + `app.js` — `/api/config` reports
   `{"mode": "baseten", "live_inference": true}`; the UI banner reads
-  "BASETEN MODE · Muse Spark Open inference" and the allowance panel shows
+  "Muse Spark Open · live AI answers (Baseten)" and the allowance panel shows
   the finite grant. No key can activate this path: scripted stays default.
 - Receipts: every inference writes an `inference_receipt` task event with
   `provider`, `endpoint`, `model`, `grant_id`, `reported_model` (echoed from
-  the provider response), `finish_reason` and `usage`. Read them at
+  the provider response), `finish_reason`, `attempts` (1–3; protocol and
+  output-limit failures retry inside one reservation) and `usage`. Read them at
   `GET /api/tasks/{id}/events` or from the task store.
 
 ## How Baseten confirms the eligible model

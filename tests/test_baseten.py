@@ -5,7 +5,7 @@ import json
 import tempfile
 import time
 import unittest
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -323,6 +323,30 @@ class BasetenContracts(unittest.TestCase):
         actor._key = ""
         self.assertEqual(actor._redact("diagnostic text"), "diagnostic text")
         self.assertEqual(actor._redact({"k": "v"}), {"k": "v"})
+
+    def test_protocol_failures_retry_twice_then_raise(self):
+        double = chat_response()
+        double["choices"][0]["message"]["tool_calls"].append(
+            double["choices"][0]["message"]["tool_calls"][0]
+        )
+        script = [double, double, chat_response()]
+        calls = []
+
+        def serve(request):
+            calls.append(request)
+            return httpx.Response(200, json=script[len(calls) - 1])
+
+        ok_actor = self.actor(serve)
+        operation = ok_actor.next_operation([], prompt="task")
+        self.assertEqual(operation.name, "read_file")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(ok_actor.last_receipt["attempts"], 3)
+
+        fresh_grant = replace(self.grant, grant_id="retry-always-bad")
+        always_bad = self.actor(lambda request: httpx.Response(200, json=double), grant=fresh_grant)
+        with self.assertRaises(BasetenFailure) as stopped:
+            always_bad.next_operation([], prompt="task")
+        self.assertEqual(stopped.exception.category, "protocol")
 
     def test_unknown_tool_and_malformed_calls_are_refused(self):
         payloads = [

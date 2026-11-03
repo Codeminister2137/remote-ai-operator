@@ -330,6 +330,20 @@ class BasetenModel:
             "continuity": "observable_history_only" if history else "initial",
             "usage": None,
         }
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                operation = self._attempt(payload, attempts)
+                return operation
+            except BasetenFailure as exc:
+                if exc.category not in {"protocol", "incomplete"} or attempts >= 3:
+                    raise
+                logger.debug("baseten retryable %s (attempt %d of 3)", exc.category, attempts)
+
+    def _attempt(self, payload, attempt):
+        """One request plus strict parse; retryable failures propagate."""
+        self.last_receipt["attempts"] = attempt
         request_deadline = time.monotonic() + 60
         try:
             with (
@@ -452,7 +466,8 @@ class BasetenModel:
                 raise ValueError("Credential echoed in generated arguments")
             logger.debug("approval granted: %s %s", invoked["name"], call_id)
             return Operation(invoked["name"], arguments, call_id=call_id, summary=summary)
-        except (ValueError, KeyError, TypeError, AttributeError):
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            logger.debug("baseten unparseable response: %s", self._redact(str(exc))[:200])
             raise BasetenFailure(
                 "protocol", "Malformed, incomplete or unsupported provider response"
             ) from None
