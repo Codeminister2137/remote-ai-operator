@@ -122,6 +122,26 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(outcomes, [{"run_id": run_id, "status": "queued", "busy": True}])
         self.assertEqual(self._job(run_id)["status"], "queued")
 
+    def test_job_write_fires_durable_hook(self):
+        commits = []
+        root = Path(self.directory.name) / "durable"
+        seed = root / "seed.py"
+        root.mkdir(parents=True, exist_ok=True)
+        seed.write_text("# seed\n", encoding="utf-8")
+        operator = Operator(
+            root / "runtime", seed, FakeValidator(),
+            durable=lambda: commits.append(True),
+        )
+        runner = SupervisorRunner(operator)
+        path = operator.root / "supervisor_runs" / "probe.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        commits.clear()
+        runner._write_job(path, {"run_id": "probe", "status": "queued"})
+        self.assertEqual(
+            json.loads(path.read_text(encoding="utf-8"))["status"], "queued"
+        )
+        self.assertEqual(commits, [True])
+
     def test_malformed_job_file_skipped(self):
         _, run_id = self._approved()
         (self.operator.root / "supervisor_runs" / "zz.json").write_text(

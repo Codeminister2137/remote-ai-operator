@@ -75,11 +75,11 @@ class SupervisorRunner:
             return None
         return job if isinstance(job, dict) else None
 
-    @staticmethod
-    def _write_job(path: Path, job: dict) -> None:
+    def _write_job(self, path: Path, job: dict) -> None:
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(job), encoding="utf-8")
         tmp.replace(path)
+        self.operator.store._durable()
 
     def _thread_event(self, job: dict, kind: str, payload: dict) -> None:
         """Append a thread event; bookkeeping must not fail a finished run."""
