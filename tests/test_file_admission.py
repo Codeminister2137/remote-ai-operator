@@ -73,6 +73,30 @@ class FileAdmissionTests(unittest.TestCase):
         task = self.operator.store.get(self.task_id)
         return self.operator._execute(task, Operation(name, arguments))
 
+    def test_read_task_spec_serves_registered_doc_read_only(self):
+        project = self.root / "project"
+        (project / "sample").mkdir(parents=True)
+        (project / "docs").mkdir(parents=True)
+        seed = project / "sample" / "issue_import.py"
+        seed.write_text("# seed\n", encoding="utf-8")
+        (project / "docs" / "sample-task.md").write_text("SPEC\n", encoding="utf-8")
+        operator = Operator(project / "runtime", seed, FakeValidator())
+        task = operator.submit("spec read")
+        for path in ("sample-task.md", "docs/sample-task.md"):
+            result = operator._execute(
+                operator.store.get(task["id"]), Operation("read_file", {"path": path})
+            )
+            self.assertEqual(result, {"content": "SPEC\n"})
+        with self.assertRaises(ValueError):
+            operator._execute(
+                operator.store.get(task["id"]),
+                Operation("write_file", {"path": "sample-task.md", "content": "x"}),
+            )
+
+    def test_read_task_spec_missing_fails_closed(self):
+        with self.assertRaises(ValueError):
+            self.execute("read_file", {"path": "sample-task.md"})
+
     def test_admit_js_and_html_roundtrip(self):
         for name, content in (("app.js", JS_CONTENT), ("index.html", HTML_CONTENT)):
             with self.subTest(name=name):
