@@ -150,5 +150,9 @@ if (!html.includes("Run mode (next plan)")) fail("run scope hint missing");
 if (!html.includes("Supervision (all runs)")) fail("supervision scope hint missing");
 if (html.includes("next task you create")) fail("stale run scope tip kept");
 
-console.log("ACTIONS-OK approve gating, submit reasons, hosted note, key funding, scope hints");
+// Leaving without a judge account drops the session's tasks; say so visibly.
+if (!html.includes('id="leave-note"')) fail("leave retention note missing");
+if (!html.includes("keep tasks across visits")) fail("leave note names no remedy");
+
+console.log("ACTIONS-OK approve gating, submit reasons, hosted note, key funding, scope hints, leave note");
 process.exit(0);
