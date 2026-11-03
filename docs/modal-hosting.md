@@ -214,9 +214,33 @@ the last request finished at 15:29:55 Europe/Warsaw, `modal app list` reported
 request at 15:36:00 resumed the same session and listed the committed task(4 checks,
 `.runtime/hosted-deploy/receipts/06-idle-resume.json`).
 
-Remaining limits: no login throttling; logout is process-local; the hosted route is
-scripted-only until the owner enables a finite judge grant. Do not claim Meta
-inference, judge-funded usage or cross-region recovery.
+Remaining limits: no login throttling; logout is process-local. Cross-region
+recovery is still unclaimed and untested.
+
+## Redeploy + live judge verification (2026-11-03)
+
+Redeployed with `modal deploy --strategy recreate` at image build commit
+`4d8671e` (frontend-audit fixes + `docs/sample-task.md` bundled into the image
+so hosted runs can resolve the task spec). Phase-one re-verification passed
+20/20 on the deployed URL; the judge self-service path passed 6/6
+(signup, login, grant, key attach, config, run start).
+
+A full simulated-judge LIVE task then passed 11/11 on the deployed URL
+(private receipts under `.runtime/hosted-deploy-20261103/receipts/`,
+probe `judge_live2.py`, account `simlive4`): signup, login, grant
+(`max_requests` 10, approved USD 2.00), visitor Meta key attach, task create,
+run start, run reached `awaiting_approval` in 117s over 5 live inference
+calls (all receipts report `muse-spark-1.3`), visitor key never echoed in
+task events, nonce-bound approve applied, task `completed`.
+
+An earlier probe run (`simlive3`, 5 identical live receipts) was marked failed
+only by a probe bug: it read `status`/`approval` from the top level of
+`GET /api/tasks/{id}`, which returns `{"task": {...}, "diff": ...}`. No
+application defect was evidenced; the fixed probe above supersedes it.
+
+The hosted route is therefore no longer scripted-only: judge-funded live Meta
+inference to task completion is verified on the deployed URL. The visitor key
+is session-only and the judge grant is finite per account.
 
 Credential-echo regression checks found and fixed metadata/replay retention:
 provider-echoed key strings are redacted from receipts and retained replay items;
