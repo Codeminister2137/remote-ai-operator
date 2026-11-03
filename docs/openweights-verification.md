@@ -64,7 +64,7 @@ Grant template (fill values, keep the model byte-exact):
   "expires_at": 1794000000,
   "max_requests": 12,
   "max_input_bytes": 100000,
-  "max_output_tokens": 4096,
+  "max_output_tokens": 8192,
   "approved_usd": "2.50",
   "input_usd_per_million": "1.00",
   "output_usd_per_million": "3.00",
@@ -110,8 +110,28 @@ touch the network (asserted with a patched `httpx.Client`), and all response
 handling is covered by fixtures. The only spend is the owner's single live
 gate above, bounded by the finite grant and the local allowance ledger.
 
+## Verified live gate — 2026-11-03
+
+Owner-approved run (`demo --model-mode baseten`, isolated runtime, finite
+grant $2.50 / 12 requests, event credits):
+
+- `reported_model` echoed `meta-models/muse-spark-open-1026` on all 4
+  receipts; every finish reason `tool_calls`; no retries needed.
+- Task reached `awaiting_approval` in 5 calls; Docker validation passed
+  (protected acceptance tests, exit 0) on a real model-written implementation.
+- Tokens 8,496 in / 10,068 out (~$0.04 at $1/$3 per M; whole run including
+  diagnostic probes ~$0.08 of the $5 allowance).
+- Live hardening from this run: parallel tool calls are served from a
+  history-bound queue (the model ignores `parallel_tool_calls: false`),
+  protocol/output-limit failures retry inside one reservation, and
+  `read_file` serves `sample-task.md` read-only. Template uses
+  `max_output_tokens` 8192 — reasoning shares the output budget and 4096
+  stalls the write step.
+
 ## Unverified items
 
-- Live end-to-end run on `meta-models/muse-spark-open-1026` (owner gate above).
 - Baseten dashboard confirmation of the model id per request.
 - Judge walkthrough of the served UI in `baseten` mode.
+- Provider-reported spend/balance: receipts record estimates only; remaining
+  event credit is visible on the owner dashboard alone (the event key is
+  HTTP 403 on the billing API).
