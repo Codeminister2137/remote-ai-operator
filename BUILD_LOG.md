@@ -505,3 +505,23 @@ regression labels and parametrization before accepting the change. Validation:
 55 checker tests and the full suite 202passed,8skips,69subtests on Windows with
 the existing virtual environment; Ruff clean. No eligibility policy, CLI, grant
 or dependency change; no deployment.
+
+## Meta STT backend (loop3/stt) - 2026-11-03
+
+Server-side dictation via Meta ASR behind `POST /api/stt/transcribe`, served to
+owner and hosted principals with the caller's own session key; Web Speech stays
+as the client fallback. Shared run-grant bucket with a durable per-operation
+spend split (`allowance_ops` table; `operations` in allowance snapshots,
+`operation` in receipts). Local guards stay server-side (60 s -> 422, 4 MB ->
+413) while the client auto-slices recordings into 55 s sequential clips.
+Request parsing uses only the standard library (no new dependency); WAV already
+in target shape skips ffmpeg, other uploads convert through it. Audio and
+transcripts are never persisted or logged. Public Meta voice docs fixed two
+design TBDs: `languageBias` takes language names (`en`->English, `pl`->Polish),
+and PUSH_TO_TALK answers carry top-level `transcript` (turns empty), so the
+parser accepts `transcript` first and joins `turns[].transcript` otherwise.
+Validation: 22 new stubbed-transport tests, full suite 469passed,9skips,
+209subtests on Windows with the sibling virtual environment; Ruff clean;
+`node --check` clean. Zero live Meta calls made; wire shape awaits live
+verification. One intentional contract change: the schema-pin test now lists
+`allowance_ops` alongside the untouched core tables.

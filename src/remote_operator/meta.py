@@ -93,6 +93,11 @@ TOOLS = [
 ]
 
 
+def grant_fingerprint(grant):
+    """Stable fingerprint binding one grant's settings to its ledger row."""
+    return digest(json.dumps(asdict(grant), sort_keys=True))
+
+
 def grant_from_file(path):
     """Read one explicit finite grant file;never infer an allowance from a key."""
     from pathlib import Path
@@ -166,7 +171,7 @@ class InferenceGrant:
     def budget_status(self, store):
         allowance = store.allowance_status(
             self.grant_id,
-            digest(json.dumps(asdict(self), sort_keys=True)),
+            grant_fingerprint(self),
             self.max_requests,
             self.approved_usd,
         )
@@ -318,7 +323,7 @@ class MetaModel:
         ) / Decimal(1_000_000)
         allowance = self.store.reserve_allowance(
             self.grant.grant_id,
-            digest(json.dumps(asdict(self.grant), sort_keys=True)),
+            grant_fingerprint(self.grant),
             self.grant.max_requests,
             str(reserve),
             self.grant.approved_usd,
@@ -326,6 +331,7 @@ class MetaModel:
         self.last_receipt = {
             "provider": "meta",
             "model": self.grant.model,
+            "operation": "chat",
             "grant_id": self.grant.grant_id,
             "reservation_usd_estimate": str(reserve),
             "local_allowance": allowance,
