@@ -14,6 +14,8 @@ let authenticated = false;
 let sessionKeyAttached = false;
 let judgeLoginOffered = false;
 let judgeSession = false;
+let grantSaved = false;
+let scriptedChoice = false;
 let sessionRevision = 0;
 let selectionRevision = 0;
 let progressTimer = null;
@@ -141,6 +143,7 @@ function actions() {
   element("detachKey").disabled = busy || connecting || !sessionKeyAttached;
   element("newTask").disabled = busy || connecting || selectedMode === null;
   element("submit").disabled = busy || connecting || !inferenceAllowed();
+  element("sampleReview").disabled = busy || connecting || !inferenceAllowed();
   element("refreshAllowance").disabled = selectedMode === null || connecting;
   element("refreshExternal").disabled = selectedMode === null || connecting;
   for (const id of ["runMode", "supervisionMode", "powerDelay", "powerArm"]) element(id).disabled = selectedMode === null || connecting;
@@ -166,6 +169,7 @@ function actions() {
   if (parked) element("pending-question").textContent = task.pending_question || "(no question recorded)";
   element("send-answer").disabled = !parked || busy;
   if (typeof supervisorActions === "function") supervisorActions();
+  renderWizard();
 }
 async function recentTasks() {
   const session = sessionRevision;
@@ -1044,12 +1048,16 @@ async function loadMode(session) {
   const configuration = await api("/api/config");
   if (session !== sessionRevision) return;
   if (configuration.hosted && !configuration.authenticated) {
-    selectedMode = null; authenticated = false; sessionKeyAttached = false;
+    selectedMode = null; authenticated = false; sessionKeyAttached = false; grantSaved = false;
+    element("access-details").open = true; element("access-state").textContent = "";
     actions();
     message("Enter the demo access code to open your own private session.");
     return;
   }
   authenticated = true;
+  grantSaved = false;
+  element("access-details").open = false;
+  element("access-state").textContent = "connected — click to expand";
   selectedMode = configuration; displayMode(configuration);
   sessionKeyAttached = !!configuration.session_key_attached;
   judgeSession = !!configuration.judge;
@@ -1169,12 +1177,15 @@ async function refreshJudgeGrant(session) {
     element("grantRequests").value = stored.grant.max_requests;
     element("grantUsd").value = stored.grant.approved_usd;
     element("grant-note").textContent = "Limits saved. Attach your key below to run real inference on your account.";
+    grantSaved = true;
   } else {
     element("grant-note").textContent = "No spending limits yet. Save limits before attaching a key.";
+    grantSaved = false;
   }
 }
 element("judgeSignup").onclick = () => guarded(async () => {
   if (busy) return;
+  if (!judgeSignupValid()) { message("Check the account hints above before registering."); return; }
   busy = true; actions();
   try {
     await api("/api/judges/signup", "POST", {code: element("accessCode").value,
@@ -1198,6 +1209,7 @@ element("judgeLogin").onclick = () => guarded(async () => {
 });
 element("grantSave").onclick = () => guarded(async () => {
   if (busy || !judgeSession) return;
+  if (!grantLimitsValid()) { message("Check the spending limit hints above before saving."); return; }
   busy = true; actions();
   try {
     await api("/api/judges/grant", "PUT", {max_requests: Number(element("grantRequests").value),
@@ -1207,9 +1219,137 @@ element("grantSave").onclick = () => guarded(async () => {
     if (session === sessionRevision) message("Spending limits saved. Attach your key to run real inference.");
   } finally { busy = false; actions(); }
 });
+/* ---- Onboarding: wizard, inline validation, sample review, CSV gallery ---- */
+function judgeSignupValid() {
+  const name = element("judgeName").value.trim();
+  const password = element("judgePassword").value;
+  const nameOk = name.length >= 3 && name.length <= 32;
+  const passOk = password.length >= 8;
+  if (nameOk && passOk) element("judge-validation").textContent = "Account details look valid. Register, then log in.";
+  else {
+    const problems = [];
+    if (!nameOk) problems.push("username needs 3–32 characters");
+    if (!passOk) problems.push("password needs at least 8 characters");
+    element("judge-validation").textContent = "To register: " + problems.join("; ") + ".";
+  }
+  return nameOk && passOk;
+}
+element("judgeName").addEventListener("input", judgeSignupValid);
+element("judgePassword").addEventListener("input", judgeSignupValid);
+judgeSignupValid();
+function grantLimitsValid() {
+  const requests = Number(element("grantRequests").value);
+  const usd = element("grantUsd").value.trim();
+  const usdNumber = usd === "" ? NaN : Number(usd);
+  const requestsOk = Number.isInteger(requests) && requests >= 1 && requests <= 100;
+  const usdOk = Number.isFinite(usdNumber) && usdNumber > 0;
+  if (!requestsOk || !usdOk) {
+    const problems = [];
+    if (!requestsOk) problems.push("Max requests must be a whole number from 1 to 100");
+    if (!usdOk) problems.push("Approved USD must be a positive number, e.g. 2.50");
+    element("grant-note").textContent = "Check your limits: " + problems.join("; ") + ".";
+    return false;
+  }
+  return true;
+}
+function wizardStep() {
+  if (!authenticated) return 1;
+  if (!judgeSession) return 2;
+  if (!grantSaved) return 3;
+  if (!sessionKeyAttached && !scriptedChoice) return 4;
+  return 0;
+}
+function renderWizard() {
+  if (element("onboard-wizard").hidden) return;
+  const current = wizardStep();
+  const labels = ["", "demo access code", "judge account", "spending limits", "key or scripted"];
+  element("wizard-progress").textContent = current === 0 ?
+    "Setup complete — " + (sessionKeyAttached ? "Meta key attached." : "offline reference selected.") + " Load a sample review below." :
+    "Step " + current + " of 4: " + labels[current] + ".";
+  for (let step = 1; step <= 4; step++) {
+    const done = current === 0 || step < current;
+    let text = done ? "Done." : step === current ? "Current step." : "To do.";
+    if (step === 4 && done) text = sessionKeyAttached ? "Done (key attached)." : "Done (offline reference).";
+    element("wizard-state-" + step).textContent = text;
+  }
+}
+function wizardFocus(id) {
+  element("access-details").open = true;
+  const target = element(id);
+  target.scrollIntoView({block: "center"});
+  target.focus({preventScroll: true});
+}
+element("wizardGo1").onclick = () => wizardFocus(hosted ? "accessCode" : "token");
+element("wizardGo2").onclick = () => wizardFocus("judgeName");
+element("wizardGo3").onclick = () => wizardFocus("grantRequests");
+element("wizardGo4").onclick = () => wizardFocus("modelKey");
+element("wizardScripted").onclick = () => {
+  scriptedChoice = true; renderWizard();
+  message("Continuing with the scripted offline reference: no key, no cost, no model requests.");
+};
+element("sampleReview").onclick = () => guarded(async () => {
+  if (busy || !inferenceAllowed()) return;
+  busy = true; actions();
+  const session = sessionRevision;
+  const note = element("sampleReviewNote");
+  try {
+    note.textContent = "Looking for a ready-made review…";
+    const summaries = await api("/api/tasks?limit=20");
+    if (session !== sessionRevision) return;
+    const candidates = summaries.filter((item) => !item.thread && ["awaiting_approval", "completed"].includes(item.status));
+    for (const candidate of candidates.slice(0, 3)) {
+      try {
+        const review = await api("/api/tasks/" + encodeURIComponent(candidate.id));
+        if (session !== sessionRevision) return;
+        if (review.task && review.task.evidence && review.task.evidence.passed) {
+          await chooseTask(candidate.id); await recentTasks();
+          message("Sample review loaded from your saved tasks.");
+          switchView("review");
+          return;
+        }
+      } catch { /* Try the next candidate. */ }
+    }
+    if (candidates.length && session === sessionRevision) {
+      await chooseTask(candidates[0].id); await recentTasks();
+      message("Sample review loaded from your saved tasks.");
+      switchView("review");
+      return;
+    }
+    note.textContent = "Cold start: the first run builds the reference and validates it, which can take a minute or two. Creating a sample task…";
+    const created = await api("/api/tasks", "POST", {prompt: defaultPrompt});
+    if (session !== sessionRevision) return;
+    if (created.reply) { message("Reply recorded; no demo task was started."); return; }
+    await chooseTask(created.id); await recentTasks();
+    startPolling();
+    try { await api("/api/tasks/" + created.id + "/run", "POST", {inject_failure: false}); }
+    finally { if (session === sessionRevision) await refresh(); }
+    if (session !== sessionRevision) return;
+    message("Sample task ran. Review the diff in the Review view, then approve to apply.");
+  } finally {
+    busy = false;
+    if (session === sessionRevision) note.textContent = "";
+    actions();
+  }
+});
+const csvSamples = {
+  happy: {text: "id,title,status\nalpha,First issue,open\nbeta,Second issue,closed\ngamma,Third issue,OPEN",
+    expect: "Happy path: expect 3 accepted, 0 row errors."},
+  edges: {text: "id,title,status\nexisting,Clashes with seeded issue,open\nedge-1,,closed\nedge-2,Bad status row,pending\nedge-3,Valid after failures,closed\nedge-3,Duplicate within file,open",
+    expect: "Edge cases: expect 1 accepted, 4 row errors (rows 2–4 and 6: duplicate, missing title, bad status, duplicate)."},
+  invalid: {text: "id,title,status\n,Missing id,open\nx,,closed\ny,Bad status,waiting\nexisting,Seeded duplicate,open",
+    expect: "All invalid: expect 0 accepted, 4 row errors."}
+};
+function loadCsvSample(kind) {
+  element("csv").value = csvSamples[kind].text;
+  element("csvExpect").textContent = csvSamples[kind].expect + " Counts describe the offline reference importer.";
+}
+element("csvHappy").onclick = () => loadCsvSample("happy");
+element("csvEdges").onclick = () => loadCsvSample("edges");
+element("csvInvalid").onclick = () => loadCsvSample("invalid");
 element("token").addEventListener("input", () => {
   sessionRevision++; selectionRevision++; stopPolling(); selectedMode = null; task = null; connecting = false;
   allowance = null; allowanceCursor = ""; judgeSession = false;
+  element("access-details").open = true; element("access-state").textContent = "";
   element("allowance-summary").textContent = "Connect to view this server's allowance.";
   element("allowance-note").textContent = "Local reserved estimates are separate from provider credits and final billing.";
   element("recentTasks").replaceChildren(); clearTaskView();
@@ -1229,6 +1369,8 @@ element("taskId").addEventListener("input", () => {
     element("owner-access").hidden = true;
     element("visitor-access").hidden = false;
     element("judge-access").hidden = !judgeLoginOffered;
+    element("onboard-wizard").hidden = !judgeLoginOffered;
+    renderWizard();
     element("key-section").hidden = false;
     element("key-controls").hidden = !modelRouteConfigured;
     element("access-note").textContent = "Private demo: enter the access code to open your own session.";
