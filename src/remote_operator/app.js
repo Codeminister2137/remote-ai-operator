@@ -289,8 +289,10 @@ async function loadWorkRoots() {
     }));
     chooser.value = [...chooser.options].some((option) => option.value === previous) ? previous : "sample";
     note.textContent = roots.length ?
-      "Repository targets write real files on approval, with no automated checks. Review every diff." :
-      "This serve registered no repository targets: only the sample task is available.";
+      "Repository targets write real files on approval, with no automated checks. Review every diff." +
+      " To add folders, extend the serve's --work-root list (.env OPERATOR_WORK_ROOTS on installed PCs) and restart it." :
+      "This serve registered no repository targets: only the sample task is available." +
+      " To add folders, set --work-root (.env OPERATOR_WORK_ROOTS on installed PCs) and restart the serve.";
   } catch {
     if (session !== sessionRevision || selectedMode === null) return;
     note.textContent = "Repository targets unavailable; only the sample task can be created.";
@@ -1761,7 +1763,9 @@ function startBrowserDictation(ctx) {
     field.focus();
   };
   setRecording(true);
-  status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
+  status.textContent = (ctx.fallbackNote ? "Meta failed (" + ctx.fallbackNote + "); browser listening instead. " : "") +
+    "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
+  ctx.fallbackNote = null;
   try {
     session.start();
   } catch (error) {
@@ -2107,7 +2111,7 @@ async function dictateViaMeta(ctx) {
   }
   if (failed && !accumulated && Dictation.supported()) {
     finish();
-    status.textContent = failed.message + " Using browser speech instead.";
+    ctx.fallbackNote = failed.message;
     message(failed.message + " Using browser speech instead.");
     startBrowserDictation(ctx);
     return;
