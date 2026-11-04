@@ -35,7 +35,11 @@ Ground rules (from `docs/submission-draft.md`, binding):
 3. Server: Meta mode confirmed, finite grant visible with remaining
    allowance and expiry; allowance panel on screen at task creation.
 4. Privacy sweep: no Bearer/key/nonce visible; no personal tabs in frame.
-5. Rehearse once in scripted mode (no credit); keep its banner visible
+5. Project scene: serve started with `--work-root <repo>\demo-repo`
+   (or pick it in the installer); reset `demo-repo/notes.txt` to one line,
+   pre-run the project task to awaiting-approval off camera — the shot
+   shows review → approve → changed file (a real approval, no fake press).
+6. Rehearse once in scripted mode (no credit); keep its banner visible
    during rehearsal, then switch to Meta for the take.
 
 ## 180-second shot list (adapted from DEMO.md to current UI)
@@ -48,7 +52,8 @@ Ground rules (from `docs/submission-draft.md`, binding):
 | 80–105 | Injected-failure event, retained edit, recovery, resume to review | "The interruption lands after a saved edit. Recovery keeps that edit and continues without repeating the mutation." |
 | 105–135 | Passed summary, exact diff, receipt details briefly | "Host-observed checks of the candidate. Approval binds these source bytes, the base and the validation policy; changed state needs fresh review." |
 | 135–165 | Physical approve press, applied importer run, 2 accepted / 2 errors | "I approve this exact local change. The applied code imports valid rows and reports the duplicate and missing title." |
-| 165–180 | Repo + limitations slate | "Public source runs independently. One registered source file; no arbitrary repositories, no PC wake." |
+| 165–175 | Work-on picker → demo-repo project task; staged diff; approve; changed file on disk | "Same approvals, real repository: the agent stages changes under my folder, I review the diff, approve, and the file updates. No automated checks here — I am the reviewer." |
+| 175–180 | Repo + limitations slate | "Public source runs independently. Sample task plus real-repository development with staged approvals; no PC wake." |
 
 ## Landmines (from the Nov 3 UI review — avoid on camera)
 
