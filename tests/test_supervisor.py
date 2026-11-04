@@ -315,6 +315,40 @@ class SupervisorUnitTests(unittest.TestCase):
         reply = self.supervisor.post_message(QuietModel(), thread["id"], "hello")
         self.assertEqual(reply["reply"], "[quiet-test-model] Next step: read sample-task.md.")
 
+    def test_live_reply_prefers_conversational_answer(self):
+        class ChattyModel:
+            name = "chatty-test-model"
+
+            def chat_text(self, text):
+                self.seen = text
+                return "The plan needs a data source first."
+
+            def next_operation(self, history, *, prompt):
+                raise AssertionError("tool path must not run when chat answers")
+
+        model = ChattyModel()
+        thread = self.supervisor.open_thread("topic")
+        reply = self.supervisor.post_message(model, thread["id"], "hello")
+        self.assertEqual(reply["route"], "meta")
+        self.assertEqual(reply["reply"], "[chatty-test-model] The plan needs a data source first.")
+        self.assertIn("hello", model.seen)
+
+    def test_live_reply_falls_back_when_chat_fails(self):
+        from remote_operator.control import Operation
+
+        class FlakyChatModel:
+            name = "flaky-test-model"
+
+            def chat_text(self, text):
+                raise ValueError("provider down")
+
+            def next_operation(self, history, *, prompt):
+                return Operation("read_file", {"path": "sample-task.md"})
+
+        thread = self.supervisor.open_thread("topic")
+        reply = self.supervisor.post_message(FlakyChatModel(), thread["id"], "hello")
+        self.assertEqual(reply["reply"], "[flaky-test-model] Next step: read sample-task.md.")
+
 
 class HumanizeOperationTests(unittest.TestCase):
     def test_known_operations_read_as_sentences(self):

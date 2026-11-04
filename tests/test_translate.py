@@ -743,7 +743,7 @@ class TranslateRouteTests(unittest.IsolatedAsyncioTestCase):
                 (turn["text"], turn["source_text"], turn["source_lang"], turn["translated"]),
                 ("Hello world", "Cześć world", "pl", True),
             )
-            (payload,) = self.calls
+            (payload,) = [call for call in self.calls if "Polish" in call.get("instructions", "")]
             self.assertNotIn("tools", payload)
             self.assertIn("Polish", payload["instructions"])
             allowance = await client.get("/api/allowance", headers=self.auth)
@@ -807,7 +807,8 @@ class TranslateRouteTests(unittest.IsolatedAsyncioTestCase):
                 json={"text": "more english", "language": "en"},
             )
             self.assertEqual(posted.status_code, 200, posted.text)
-            self.assertEqual(self.calls, [])
+            translations = [call for call in self.calls if "Polish" in call.get("instructions", "")]
+            self.assertEqual(translations, [])
         finally:
             await client.aclose()
 

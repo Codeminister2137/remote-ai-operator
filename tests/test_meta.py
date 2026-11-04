@@ -738,3 +738,66 @@ class MetaContracts(unittest.TestCase):
         sent_plain = self.requests[-1]
         self.assertEqual(sent_plain["instructions"], INSTRUCTIONS)
         self.assertEqual(sent_plain["tools"], TOOLS)
+
+    def test_chat_text_returns_plain_answer_without_tools(self):
+        from remote_operator.meta import CHAT_INSTRUCTIONS, CHAT_MAX_OUTPUT_TOKENS
+
+        def serve(request):
+            return httpx.Response(
+                200,
+                json={
+                    "status": "completed",
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [{"type": "output_text", "text": "Hello there."}],
+                        }
+                    ],
+                    "usage": {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
+                },
+            )
+
+        actor = self.actor(handler=serve)
+        self.assertEqual(actor.chat_text("hi"), "Hello there.")
+        sent = self.requests[-1]
+        self.assertEqual(sent["instructions"], CHAT_INSTRUCTIONS)
+        self.assertNotIn("tools", sent)
+        self.assertEqual(sent["max_output_tokens"], CHAT_MAX_OUTPUT_TOKENS)
+        self.assertEqual(actor.last_receipt["operation"], "chat")
+        self.assertEqual(actor.last_receipt["continuity"], "single_turn")
+
+    def test_chat_text_redacts_key_and_rejects_empty(self):
+        def serve(request):
+            return httpx.Response(
+                200,
+                json={
+                    "status": "completed",
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [{"type": "output_text", "text": "key fixture-secret here"}],
+                        }
+                    ],
+                    "usage": {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
+                },
+            )
+
+        actor = self.actor(handler=serve)
+        self.assertEqual(actor.chat_text("hi"), "key [redacted] here")
+
+        def empty(request):
+            return httpx.Response(
+                200,
+                json={
+                    "status": "completed",
+                    "output": [],
+                    "usage": {"input_tokens": 10, "output_tokens": 1, "total_tokens": 11},
+                },
+            )
+
+        with self.assertRaises(MetaFailure):
+            self.actor(handler=empty).chat_text("hi")
+        with self.assertRaises(ValueError):
+            self.actor().chat_text("   ")
+        with self.assertRaises(ValueError):
+            MetaModel(None, self.grant, self.store).chat_text("hi")

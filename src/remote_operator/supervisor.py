@@ -14,7 +14,9 @@ import secrets
 import time
 import uuid
 
+from remote_operator.baseten import BasetenFailure
 from remote_operator.control import digest
+from remote_operator.meta import MetaFailure
 from remote_operator.translate import normalize_input, translation_manifest
 
 PLAN_APPROVAL_SECONDS = 600
@@ -186,6 +188,21 @@ class Supervisor:
         transcript = "\n".join(
             f"{turn['role']}: {turn['text']}" for turn in thread["history"][-10:]
         )
+        chat_prompt = (
+            f"Planning thread '{thread['prompt']}'. Transcript:\n{transcript}\n"
+            "Answer the last user message directly."
+        )
+        chat_text = getattr(model, "chat_text", None)
+        if callable(chat_text):
+            try:
+                words = chat_text(chat_prompt)
+            except (MetaFailure, BasetenFailure, ValueError, KeyError, TypeError, AttributeError):
+                words = ""
+            if isinstance(words, str) and words.strip():
+                receipt = getattr(model, "last_receipt", None)
+                if receipt is not None:
+                    self.operator.store.save(thread, "inference_receipt", receipt)
+                return f"[{model.name}] {words.strip()[:2000]}", "meta"
         prompt = (
             f"Planning thread '{thread['prompt']}'. Transcript:\n{transcript}\n"
             "Propose the next planning step."
