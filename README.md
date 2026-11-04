@@ -166,6 +166,29 @@ POST `/run`, `/approve`, `/reject`, `/reconcile`, `/cancel`, `/revalidate`, `/sa
 `Authorization: Bearer TOKEN`. The server selects the actor; scripted mode is default. See docs/meta-tooling.md for guarded Meta activation. No endpoint
 accepts a provider, billing source, shell command or arbitrary workspace path.
 
+## Developing real repositories (local serve only)
+
+The sample task above edits a safe practice file. To continue development on a
+real local repository instead, register it as a work root when starting the
+local serve (repeatable; local serve only, never hosted):
+
+```powershell
+$env:OPERATOR_ACCESS_TOKEN = "<at least 32 random characters>"
+uv run --locked remote-ai-operator --work-root C:\Users\Jakub\PycharmProjects\my-app serve
+```
+
+In the UI, the **Work on** picker then offers the registered folder next to the
+sample task. A repository task lets the agent read files and stage changes
+under that folder; nothing is written until you approve the staged diff, and
+the approval re-verifies that neither the staged files nor the repository
+changed since review. Unlike the sample task, repository tasks run **no
+automated checks** — the UI says so, and you are the reviewer.
+
+First-version limits: paths stay inside the registered folder (no parent
+references, absolute paths, dot-files, or secret-looking names such as
+`*.pem`/`credentials.json`); new files need an existing folder; files must be
+UTF-8 text under 32 KB. The hosted visitor demo never offers repository tasks.
+
 ## Hosted visitor mode
 
 `serve --hosted` starts a separate application for visitors instead of the owner

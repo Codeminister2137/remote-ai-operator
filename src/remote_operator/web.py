@@ -89,6 +89,8 @@ class PathAwareBodyLimit(RequestBodyLimitMiddleware):
 class Submission(BaseModel):
     model_config = ConfigDict(extra="forbid")
     prompt: str = Field(min_length=1, max_length=4000)
+    mode: str = Field(default="sample", max_length=16)
+    project: str | None = Field(default=None, max_length=512)
 
 
 class RunOptions(BaseModel):
@@ -372,8 +374,13 @@ def _task_routes(app, principal):
                 "reply": True,
                 "thread_id": posted["thread_id"],
             }
-        task = who.operator.submit(body.prompt)
-        return {"id": task["id"], "status": task["status"], "mode": who.mode}
+        task = who.operator.submit(body.prompt, mode=body.mode, project=body.project)
+        return {
+            "id": task["id"],
+            "status": task["status"],
+            "mode": who.mode,
+            "task_mode": task.get("mode", "sample"),
+        }
 
     @app.get("/api/tasks")
     def list_tasks(
@@ -444,6 +451,12 @@ def _task_routes(app, principal):
     def allowance(who: Annotated[Principal, Depends(principal)]):
         """Return spending allowance status for the principal."""
         return who.allowance_status() if who.allowance_status is not None else {"enabled": False}
+
+    @app.get("/api/work-roots")
+    def work_roots(who: Annotated[Principal, Depends(principal)]):
+        """List registered local work roots for project tasks (empty on hosted serves)."""
+        roots = getattr(who.operator, "work_roots", ())
+        return {"roots": [str(root) for root in roots]}
 
 
 def _owner_routes(app, principal, drain_snapshot=None):
