@@ -341,6 +341,8 @@ function Write-TailscaleSkipped($GuideRef) {
   Write-Host 'What the service needs instead: a stable, private web address that'
   Write-Host 'starts with https://, that your phone can open, and that forwards'
   Write-Host 'to the helper program on this PC.'
+  Write-Host 'Examples people use instead: ZeroTier, Cloudflare Tunnel,'
+  Write-Host 'or a home VPN / router port-forwarding rule.'
   Write-Host "See $GuideRef, section 'If you skipped the private-network step'."
   Write-Host 'Finding and setting up an alternative is your responsibility;'
   Write-Host 'the installer cannot do it for you.'
@@ -397,12 +399,37 @@ function Invoke-Installer {
   $venvPython = Ensure-Install $root $pythonExe
   Write-Host 'Program files are ready.'
 
-  # Soft check: task checking needs Docker; the helper revives Docker
-  # Desktop on its own when it is installed.
+  # Docker: task checking needs Docker Desktop; offer to install it.
+  # The helper revives Docker Desktop on its own when it is installed.
   if ($null -eq (Get-Command docker -ErrorAction SilentlyContinue)) {
-    $manualSteps += ('Docker was not found. Task checking needs Docker Desktop; ' +
-      "install it from https://www.docker.com/products/docker-desktop/ if the " +
-      "helper later reports Docker unreachable (see $guideRef).")
+    Write-Host 'Docker was not found. Task checking needs Docker Desktop.'
+    $wantsDocker = $false
+    if (-not $NonInteractive) {
+      Write-Host 'Docker Desktop needs the WSL2 backend and usually a reboot'
+      Write-Host 'before it works the first time.'
+      $wantsDocker = Read-Choice 'Install Docker Desktop now (winget)?' $true
+    }
+    if ($wantsDocker) {
+      try {
+        $winget = Get-Command winget.exe, winget -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+        if ($null -eq $winget) { throw 'winget is not available.' }
+        Write-Host 'Installing Docker Desktop (may take several minutes)...'
+        & $winget.Source install -e --id Docker.DockerDesktop --silent `
+          --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -ne 0) { throw 'winget could not install Docker Desktop.' }
+        Write-Host 'Docker Desktop installed. If task checks report Docker'
+        Write-Host 'unreachable, reboot once and start Docker Desktop, then continue.'
+      } catch {
+        Write-Host "Could not install Docker automatically: $($_.Exception.Message)"
+        $manualSteps += ('Install Docker Desktop from ' +
+          'https://www.docker.com/products/docker-desktop/ (needs WSL2 + a reboot).')
+      }
+    } else {
+      $manualSteps += ('Docker was not found. Task checking needs Docker Desktop; ' +
+        "install it from https://www.docker.com/products/docker-desktop/ if the " +
+        "helper later reports Docker unreachable (see $guideRef).")
+    }
   }
 
   # 3. Password file ---------------------------------------------------
@@ -415,6 +442,9 @@ function Invoke-Installer {
     Write-Host ">>> $($tokenResult.Token)"
     Write-Host '>>> You will type this password on your phone.'
     Write-Host ''
+    if (-not $NonInteractive) {
+      [void](Read-Host 'Press Enter to confirm you saved the password somewhere safe')
+    }
   } else {
     # The existing password is never printed.
     Write-Host 'Kept your existing password (not shown).'
@@ -467,12 +497,19 @@ function Invoke-Installer {
       Write-Host 'Tailscale is installed but not signed in.'
       $signIn = $false
       if (-not $NonInteractive) {
-        $signIn = Read-Choice 'Sign in to Tailscale now (opens a browser window)?' $true
+        Write-Host 'If a Tailscale sign-in window is already open, finish there instead;'
+        Write-Host 'either way, answer yes below and the installer re-checks automatically.'
+        $signIn = Read-Choice 'Sign in to Tailscale now (may briefly open a browser tab that closes itself)?' $true
       }
       if ($signIn) {
         try {
-          & $tailscale up
           $selfName = Get-TailscaleSelf $tailscale
+          if ($null -eq $selfName) {
+            & $tailscale up
+            $selfName = Get-TailscaleSelf $tailscale
+          } else {
+            Write-Host 'Already signed in - continuing.'
+          }
         } catch {
           Write-Host "Sign-in did not complete: $($_.Exception.Message)"
         }
