@@ -125,7 +125,11 @@ async function api(path, method = "GET", body) {
   return data;
 }
 function message(text) { element("message").textContent = text; }
-function accessStatus(text) { element("accessStatus").textContent = text; }
+function accessStatus(text, isError) {
+  const status = element("accessStatus");
+  status.textContent = text;
+  status.className = isError ? "status-error" : "";
+}
 async function guarded(action) {
   try { await action(); } catch (error) { message(error.message); }
 }
@@ -263,7 +267,7 @@ async function recentTasks() {
   placeholder.value = ""; placeholder.textContent = tasksOnly.length ? "New task (no saved task selected)" : "No saved tasks yet";
   chooser.replaceChildren(placeholder, ...tasksOnly.map((item) => {
     const option = document.createElement("option");
-    option.value = item.id; option.textContent = humanizeStatus(item.status) + " · " + item.prompt;
+    option.value = item.id; option.textContent = (item.mode === "project" ? "Repository" : "Sample") + " · " + humanizeStatus(item.status) + " · " + item.prompt;
     option.title = "Raw status: " + item.status;
     return option;
   }));
@@ -287,7 +291,12 @@ async function loadWorkRoots() {
       option.title = "The agent reads and stages changes under this folder. Nothing is written until you approve the diff; no automated checks run.";
       return option;
     }));
-    chooser.value = [...chooser.options].some((option) => option.value === previous) ? previous : "sample";
+    let preferred = "sample";
+    try {
+      const saved = typeof localStorage === "undefined" ? null : localStorage.getItem("taskTarget");
+      if (saved && [...chooser.options].some((option) => option.value === saved)) preferred = saved;
+    } catch { /* Private mode keeps the default. */ }
+    chooser.value = [...chooser.options].some((option) => option.value === previous) && previous ? previous : preferred;
     note.textContent = roots.length ?
       "Repository targets write real files on approval, with no automated checks. Review every diff." +
       " To add folders, extend the serve's --work-root list (.env OPERATOR_WORK_ROOTS on installed PCs) and restart it." :
@@ -1113,6 +1122,14 @@ element("submit").onclick = () => guarded(async () => {
       {prompt: element("prompt").value};
     const created = await api("/api/tasks", "POST", submission);
     if (session !== sessionRevision) return;
+    try {
+      if (typeof localStorage !== "undefined") localStorage.setItem("taskTarget", target);
+    } catch { /* Private mode keeps the default. */ }
+    if (!created.reply) {
+      message(target.startsWith("project:") ?
+        "Repository task created under " + target.slice("project:".length) + " — running." :
+        "Sample task created (safe practice file) — running.");
+    }
     if (created.reply) {
       await loadSupervisorThreads();
       await openSupervisorThread(created.thread_id);
@@ -1335,9 +1352,9 @@ element("connect").onclick = () => guarded(async () => {
   try {
     await loadMode(session);
     if (session === sessionRevision)
-      accessStatus(selectedMode ? "Connected. Execution mode loaded." : "Connected, but no execution mode was loaded. Check the server is running, then press Connect again.");
+      accessStatus(selectedMode ? "Connected. Execution mode loaded." : "Connected, but no execution mode was loaded. Check the server is running, then press Connect again.", !selectedMode);
   } catch (error) {
-    if (session === sessionRevision) accessStatus("Connect failed: " + error.message);
+    if (session === sessionRevision) accessStatus("Connect failed: " + error.message, true);
     throw error;
   } finally {
     if (session === sessionRevision) { connecting = false; actions(); }
@@ -1356,7 +1373,7 @@ element("enterSession").onclick = () => guarded(async () => {
       accessStatus("Connected. Private session started.");
     }
   } catch (error) {
-    if (session === sessionRevision) accessStatus("Connect failed: " + error.message);
+    if (session === sessionRevision) accessStatus("Connect failed: " + error.message, true);
     throw error;
   } finally {
     if (session === sessionRevision) { connecting = false; actions(); }
