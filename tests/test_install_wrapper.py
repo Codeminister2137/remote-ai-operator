@@ -37,6 +37,22 @@ class WrapperStderrTests(unittest.TestCase):
         self.assertIn("$validRoots = $existingRoots", text)
         self.assertIn("kept the previous code folder", text)
 
+    def test_prompt_requires_existing_folder(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("The folder must already exist; the installer never creates it.", text)
+
+    def test_summary_recaps_effective_code_folder(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("CODE FOLDER:", text)
+        self.assertIn("kept your previous folder because the new answer matched nothing", text)
+        self.assertIn("CODE FOLDER: none (sample task only).", text)
+
+    def test_ffmpeg_detection_refreshes_path_and_tolerates_reinstall(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("function Find-FfmpegCommand", text)
+        self.assertIn("if ($null -eq (Find-FfmpegCommand)) {", text)
+        self.assertIn("ffmpeg was already installed; using it.", text)
+
 
 if __name__ == "__main__":
     unittest.main()
