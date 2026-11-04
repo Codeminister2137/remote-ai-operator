@@ -70,7 +70,8 @@ A three-minute recording is still required; this acceptance is not video evidenc
 2026-10-27: the judge demo is deployed at
 `https://remote-operator--hosted.us-east.modal.run` and was verified over HTTPS with
 no visitor key, no inference and no model spend. The access code is not in the
-repository; it is supplied out-of-band.
+repository; it is supplied out-of-band. (Update 2026-11-03: judge entry is now
+open — the access code is public in the README; visits stay isolated.)
 
 Verified: wrong access code 403; session cookie HttpOnly/SameSite=Strict/Secure; missing
 `X-Operator-Request` rejected 403; a scripted task created, listed and read; an

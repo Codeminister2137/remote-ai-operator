@@ -193,8 +193,9 @@ The visitor access code is public in the README (open entry by owner inbox
 decision 2026-11-03): anyone may open a session, but real inference requires
 the visitor's own Meta key with their own finite limits.
 Deployment uses the `remote-operator-state` Volume and the
-`remote-operator-hosted` secret. The private session-signing secret and access code
-live outside both repositories; public evidence omits them.
+`remote-operator-hosted` secret. The private session-signing secret
+lives outside both repositories and public evidence omits it; only the access
+code itself is public in the README.
 
 Live checks (no visitor key, no inference, no model spend; private receipts under
 `.runtime/hosted-deploy/receipts/`):
@@ -215,8 +216,9 @@ the last request finished at 15:29:55 Europe/Warsaw, `modal app list` reported
 request at 15:36:00 resumed the same session and listed the committed task(4 checks,
 `.runtime/hosted-deploy/receipts/06-idle-resume.json`).
 
-Remaining limits: no login throttling; logout is process-local. Cross-region
-recovery is still unclaimed and untested.
+Remaining limits from that pass: no login throttling existed yet, and logout is
+process-local. Judge username/password login, added later, throttles after ten
+failures. Cross-region recovery is still unclaimed and untested.
 
 ## Redeploy + live judge verification (2026-11-03)
 
