@@ -142,6 +142,38 @@ class BasetenContracts(unittest.TestCase):
         self.assertEqual(system_plain, INSTRUCTIONS)
         self.assertEqual(sent_plain["tools"], TOOLS)
 
+    def test_chat_text_returns_plain_answer_without_tools(self):
+        from remote_operator.baseten import CHAT_INSTRUCTIONS, CHAT_MAX_OUTPUT_TOKENS
+
+        def serve(request):
+            return httpx.Response(200, json=content_response("Hello there."))
+
+        actor = self.actor(handler=serve)
+        self.assertEqual(actor.chat_text("hi"), "Hello there.")
+        sent = json.loads(self.requests[-1].content)
+        system = next(m for m in sent["messages"] if m["role"] == "system")["content"]
+        self.assertEqual(system, CHAT_INSTRUCTIONS)
+        self.assertNotIn("tools", sent)
+        self.assertEqual(sent["max_tokens"], CHAT_MAX_OUTPUT_TOKENS)
+        self.assertEqual(actor.last_receipt["continuity"], "single_turn")
+
+    def test_chat_text_redacts_key_and_rejects_empty(self):
+        def serve(request):
+            return httpx.Response(200, json=content_response("key fixture-secret here"))
+
+        actor = self.actor(handler=serve)
+        self.assertEqual(actor.chat_text("hi"), "key [redacted] here")
+
+        def empty(request):
+            return httpx.Response(200, json=content_response("  "))
+
+        with self.assertRaises(BasetenFailure):
+            self.actor(handler=empty).chat_text("hi")
+        with self.assertRaises(ValueError):
+            self.actor().chat_text("   ")
+        with self.assertRaises(ValueError):
+            BasetenModel(None, self.grant, self.store).chat_text("hi")
+
     def test_explicit_reasoning_effort_is_sent(self):
         def serve(request):
             body = json.loads(request.content)
