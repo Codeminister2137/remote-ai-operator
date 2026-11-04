@@ -177,6 +177,10 @@ $env:OPERATOR_ACCESS_TOKEN = "<at least 32 random characters>"
 uv run --locked remote-ai-operator --work-root C:\Users\Jakub\PycharmProjects\my-app serve
 ```
 
+To add folders later, extend `--work-root` (`OPERATOR_WORK_ROOTS` in
+`.env` on installed PCs) and restart the serve. Roots are boot-time
+configuration on purpose: no browser control can widen them.
+
 In the UI, the **Work on** picker then offers the registered folder next to the
 sample task. A repository task lets the agent read files and stage changes
 under that folder; nothing is written until you approve the staged diff, and

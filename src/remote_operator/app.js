@@ -289,8 +289,10 @@ async function loadWorkRoots() {
     }));
     chooser.value = [...chooser.options].some((option) => option.value === previous) ? previous : "sample";
     note.textContent = roots.length ?
-      "Repository targets write real files on approval, with no automated checks. Review every diff." :
-      "This serve registered no repository targets: only the sample task is available.";
+      "Repository targets write real files on approval, with no automated checks. Review every diff." +
+      " To add folders, extend the serve's --work-root list (.env OPERATOR_WORK_ROOTS on installed PCs) and restart it." :
+      "This serve registered no repository targets: only the sample task is available." +
+      " To add folders, set --work-root (.env OPERATOR_WORK_ROOTS on installed PCs) and restart the serve.";
   } catch {
     if (session !== sessionRevision || selectedMode === null) return;
     note.textContent = "Repository targets unavailable; only the sample task can be created.";
@@ -1761,7 +1763,9 @@ function startBrowserDictation(ctx) {
     field.focus();
   };
   setRecording(true);
-  status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
+  status.textContent = (ctx.fallbackNote ? "Meta failed (" + ctx.fallbackNote + "); browser listening instead. " : "") +
+    "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
+  ctx.fallbackNote = null;
   try {
     session.start();
   } catch (error) {
@@ -1991,6 +1995,7 @@ async function dictateViaMeta(ctx) {
   const base = field.value;
   const shortLang = dictateShortLang(lang.value);
   let accumulated = "";
+  let receipts = [];
   let slices = 0;
   let stopping = false;
   let recorder = null;
@@ -2013,10 +2018,35 @@ async function dictateViaMeta(ctx) {
   button.onclick = () => stop();
   setRecording(true);
   const recordStarted = Date.now();
+  let audioCtx = null, analyser = null, levelData = null;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC && stream && stream.getAudioTracks().length) {
+      audioCtx = new AC();
+      const source = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      levelData = new Uint8Array(analyser.frequencyBinCount);
+    }
+  } catch { audioCtx = null; analyser = null; }
+  function levelTag() {
+    if (!analyser) return "";
+    try {
+      analyser.getByteTimeDomainData(levelData);
+      let peak = 0;
+      for (let i = 0; i < levelData.length; i++) {
+        const v = Math.abs(levelData[i] - 128);
+        if (v > peak) peak = v;
+      }
+      return peak > 8 ? " Hearing you." : " No audio yet — check the mic.";
+    } catch { return ""; }
+  }
   const ticker = setInterval(() => {
     if (stopping) return;
     const secs = Math.floor((Date.now() - recordStarted) / 1000);
-    status.textContent = "Recording with Meta (" + secs + "s elapsed)... Press Stop to finish.";
+    status.textContent = "Recording with Meta (" + secs + "s elapsed)." + levelTag() +
+      " Words appear when you press Stop (or every 55s).";
   }, 1000);
   function recordSlice() {
     return new Promise((resolve) => {
@@ -2050,15 +2080,17 @@ async function dictateViaMeta(ctx) {
   }
   while (!stopping && !failed) {
     const slice = ++slices;
-    status.textContent = "Recording with Meta (slice " + slice + ", up to 55s each)... Press Stop to finish.";
+    status.textContent = "Recording with Meta (slice " + slice + ", up to 55s each)... Words appear when you press Stop.";
     const blob = await recordSlice();
     if (!blob) { failed = failed || new Error("Recording failed."); break; }
-    if (blob.size < 1024) continue; // Instant stop; nothing worth billing.
+    if (blob.size < 1024) { receipts.push("slice " + slice + ": skipped, under 1KB"); continue; }
+    receipts.push("slice " + slice + ": " + Math.round(blob.size / 1024) + "KB audio");
     status.textContent = "Transcribing slice " + slice + " with Meta... Press Stop to finish.";
     chain = chain.then(async () => {
       if (failed) return;
       const result = await transcribeSlice(blob, slice, shortLang, ctx.inputHint);
       const text = ((result && result.text) || "").trim();
+      receipts.push("slice " + slice + ": transcript " + text.length + " chars");
       if (text) {
         accumulated = accumulated ? accumulated + " " + text : text;
         field.value = joinDictation(base, accumulated);
@@ -2069,6 +2101,7 @@ async function dictateViaMeta(ctx) {
   function finish() {
     clearInterval(ticker);
     Dictation.clearActive(stop);
+    try { if (audioCtx) audioCtx.close(); } catch { /* Best-effort. */ }
     for (const track of stream.getTracks()) { try { track.stop(); } catch { /* Best-effort. */ } }
     ctx.busy = false;
     setRecording(false);
@@ -2078,24 +2111,25 @@ async function dictateViaMeta(ctx) {
   }
   if (failed && !accumulated && Dictation.supported()) {
     finish();
-    status.textContent = failed.message + " Using browser speech instead.";
+    ctx.fallbackNote = failed.message;
     message(failed.message + " Using browser speech instead.");
     startBrowserDictation(ctx);
     return;
   }
+  const receiptNote = receipts.length ? " [" + receipts.slice(-4).join("; ") + "]" : "";
   if (accumulated) {
     field.value = joinDictation(base, accumulated);
     const buddy = document.querySelector('[data-send-lang-for="' + field.id + '"]');
     if (buddy) buddy.value = shortLang; // Dictated text is tagged on send.
     status.textContent = "Dictation added (Meta, " + dictateLangName(lang.value) +
       (failed ? "; stopped early: " + failed.message : "") +
-      "). Review and edit before sending. Nothing was sent.";
+      "). Review and edit before sending. Nothing was sent." + receiptNote;
     if (failed) message(failed.message);
   } else if (failed) {
-    status.textContent = failed.message + " Field unchanged.";
+    status.textContent = failed.message + " Field unchanged." + receiptNote;
     field.value = base;
   } else {
-    status.textContent = "No speech captured; field unchanged.";
+    status.textContent = "No speech captured; field unchanged." + receiptNote;
     field.value = base;
   }
   finish();
