@@ -55,19 +55,23 @@ def read_inbox(operator, *, since: int = 0, limit: int = DEFAULT_LIMIT) -> dict:
     return {"cursor": tip, "items": items}
 
 
-def _user_turn_at(operator, thread_id: str, seq: int, history: list) -> str:
-    """Return the user turn that produced the thread_message event at ``seq``.
-
-    Falls back to the latest user turn when the event log cannot be counted;
-    never raises.
-    """
-    user_turns = [
-        str(turn.get("text", ""))
-        for turn in history
+def _user_positions(history: list) -> list[int]:
+    """Positions of user turns in a thread history."""
+    return [
+        pos
+        for pos, turn in enumerate(history)
         if isinstance(turn, dict) and turn.get("role") == "user"
     ]
-    if not user_turns:
-        return ""
+
+
+def _user_turn_index(operator, thread_id: str, seq: int, user_count: int) -> int:
+    """0-based index of the user turn that produced the event at ``seq``.
+
+    Falls back to the latest user turn when the event log cannot be
+    counted; never raises.
+    """
+    if user_count <= 0:
+        return 0
     try:
         with operator.store.connect() as db:
             count = db.execute(
@@ -76,10 +80,43 @@ def _user_turn_at(operator, thread_id: str, seq: int, history: list) -> str:
                 (thread_id, seq),
             ).fetchone()[0]
     except (OSError, sqlite3.Error, ValueError):
-        return user_turns[-1][:500]
-    if isinstance(count, int) and 1 <= count <= len(user_turns):
-        return user_turns[count - 1][:500]
-    return user_turns[-1][:500]
+        return user_count - 1
+    if isinstance(count, int) and 1 <= count <= user_count:
+        return count - 1
+    return user_count - 1
+
+
+def _user_turn_at(operator, thread_id: str, seq: int, history: list) -> str:
+    """Return the user turn that produced the thread_message event at ``seq``.
+
+    Falls back to the latest user turn when the event log cannot be counted;
+    never raises.
+    """
+    positions = _user_positions(history)
+    if not positions:
+        return ""
+    index = _user_turn_index(operator, thread_id, seq, len(positions))
+    turn = history[positions[index]]
+    return str(turn.get("text", ""))[:500] if isinstance(turn, dict) else ""
+
+
+def _in_reply_to(operator, thread_id: str, seq: int, history: list) -> str:
+    """Latest assistant turn before the answered user turn (may be empty).
+
+    Gives pollers the question/options the owner replied to, so terse
+    answers ("do A and C") stay interpretable. Best-effort; never raises.
+    """
+    try:
+        positions = _user_positions(history)
+        if not positions:
+            return ""
+        index = _user_turn_index(operator, thread_id, seq, len(positions))
+        for turn in reversed(history[: positions[index]]):
+            if isinstance(turn, dict) and turn.get("role") == "assistant":
+                return str(turn.get("text", ""))[:500]
+    except (OSError, sqlite3.Error, ValueError, IndexError):
+        pass
+    return ""
 
 
 def _owner_message(operator, seq: int, thread_id: str, payload: dict) -> dict | None:
@@ -95,6 +132,7 @@ def _owner_message(operator, seq: int, thread_id: str, payload: dict) -> dict | 
         "thread_id": thread_id,
         "topic": str(thread.get("prompt", ""))[:160],
         "text": _user_turn_at(operator, thread_id, seq, thread.get("history") or []),
+        "in_reply_to": _in_reply_to(operator, thread_id, seq, thread.get("history") or []),
         "route": str(payload.get("route", ""))[:32],
     }
 
