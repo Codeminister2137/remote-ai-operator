@@ -247,6 +247,8 @@ function actions() {
   element("newTask").disabled = busy || connecting || selectedMode === null;
   element("submit").disabled = busy || connecting || !inferenceAllowed();
   element("taskTarget").disabled = busy || connecting || selectedMode === null;
+  element("prompt").disabled = busy || connecting || selectedMode === null || isSampleTarget();
+  element("dictate-prompt").disabled = element("prompt").disabled;
   element("sampleReview").disabled = busy || connecting || !inferenceAllowed();
   const submitBlocked = !busy && !connecting && !inferenceAllowed();
   element("submit").title = submitBlocked ? allowanceBlockReason() : "Create a task from the request above and run it.";
@@ -298,6 +300,21 @@ async function recentTasks() {
   chooser.value = element("taskId").value.trim();
   return tasksOnly;
 }
+function isSampleTarget() {
+  const target = element("taskTarget").value || "sample";
+  return !target.startsWith("project:");
+}
+function syncPromptForTarget() {
+  // Sample tasks run a fixed pipeline (CSV import checks); custom request
+  // text can only confuse or break validation, so the field is locked.
+  if (isSampleTarget()) {
+    element("prompt").value = defaultPrompt;
+    element("prompt").title = "The sample task uses a fixed request. Choose a repository target to write your own.";
+  } else {
+    element("prompt").title = "";
+  }
+  actions();
+}
 async function loadWorkRoots() {
   const session = sessionRevision;
   const chooser = element("taskTarget");
@@ -325,6 +342,7 @@ async function loadWorkRoots() {
     if (session !== sessionRevision || selectedMode === null) return;
     note.textContent = "Repository targets unavailable; only the sample task can be created.";
   }
+  syncPromptForTarget();
 }
 async function loadSettings() {
   const session = sessionRevision;
@@ -1038,6 +1056,7 @@ function newTask() {
   element("prompt").focus();
 }
 element("newTask").onclick = newTask;
+element("taskTarget").onchange = () => { syncPromptForTarget(); };
 element("eventHistory").onclick = () => { showAllEvents = !showAllEvents; renderEvents(); };
 async function chooseTask(id, source) {
   if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Choose a saved task or provide a valid task ID.");
@@ -1149,7 +1168,7 @@ element("submit").onclick = () => guarded(async () => {
     const target = element("taskTarget").value || "sample";
     const submission = target.startsWith("project:") ?
       {prompt: element("prompt").value, mode: "project", project: target.slice("project:".length)} :
-      {prompt: element("prompt").value};
+      {prompt: defaultPrompt};
     const created = await api("/api/tasks", "POST", submission);
     if (session !== sessionRevision) return;
     if (!created.reply) {
