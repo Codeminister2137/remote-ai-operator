@@ -563,6 +563,7 @@ function Invoke-Installer {
     $existingRoots = @($envValues['OPERATOR_WORK_ROOTS'].Split(';') |
       ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
   }
+  $typedAnswer = $false
   if ($WorkRoot.Count -gt 0) {
     $chosenRoots = @($WorkRoot)
   } elseif ($NonInteractive) {
@@ -579,7 +580,7 @@ function Invoke-Installer {
     $answer = (Read-Host 'Code folder for the agent? [Enter keeps current, "none" clears]').Trim()
     if ($answer -eq '') { $chosenRoots = $existingRoots }
     elseif ($answer.ToLowerInvariant() -eq 'none') { $chosenRoots = @() }
-    else { $chosenRoots = @($answer) }
+    else { $chosenRoots = @($answer); $typedAnswer = $true }
   }
   $validRoots = @()
   foreach ($dir in $chosenRoots) {
@@ -590,6 +591,10 @@ function Invoke-Installer {
       continue
     }
     $validRoots += (Resolve-Path $resolved).Path
+  }
+  if ($typedAnswer -and $validRoots.Count -eq 0 -and $existingRoots.Count -gt 0) {
+    Write-Host "No folder matched '$answer'; kept the previous code folder: $($existingRoots -join '; ')"
+    $validRoots = $existingRoots
   }
   Set-DotEnvValue $envPath 'OPERATOR_WORK_ROOTS' ($validRoots -join ';')
   if ($validRoots.Count -gt 0) {

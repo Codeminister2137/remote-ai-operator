@@ -32,6 +32,11 @@ class WrapperStderrTests(unittest.TestCase):
         self.assertLess(strict, relaxed, "setup validation must stay strict")
         self.assertLess(relaxed, invoke, "stderr must be non-fatal before serve starts")
 
+    def test_typo_must_not_wipe_previous_work_roots(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("$validRoots = $existingRoots", text)
+        self.assertIn("kept the previous code folder", text)
+
 
 if __name__ == "__main__":
     unittest.main()
