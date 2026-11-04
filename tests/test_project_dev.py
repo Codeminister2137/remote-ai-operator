@@ -199,6 +199,27 @@ class ProjectTaskTests(unittest.TestCase):
         self.assertEqual(len(stopped), 1)
         self.assertIn("live inference", stopped[0]["payload"]["detail"])
 
+    def test_project_tool_error_returns_to_model_for_recovery(self):
+        task = self.submit()
+        model = ScriptedOps(
+            [
+                Operation("read_file", {"path": "notes.txt"}),
+                Operation("write_file", {"path": "notes.txt", "content": "- call mom\n"}),
+                Operation("validate", {}),
+            ]
+        )
+        result = self.operator.run(task["id"], model)
+        self.assertEqual(result["status"], "awaiting_approval")
+        self.assertIn("error", result["history"][0]["result"])
+        review = self.operator.review(task["id"])
+        self.assertEqual([entry["path"] for entry in review["files"]], ["notes.txt"])
+
+    def test_project_protocol_violation_still_stops_loudly(self):
+        task = self.submit()
+        model = ScriptedOps([Operation("evil_tool", {})])
+        with self.assertRaises(ValueError):
+            self.operator.run(task["id"], model)
+
     def test_scripted_reference_refuses_project_tasks(self):
         from remote_operator.scripted import ScriptedModel
 
