@@ -232,7 +232,7 @@ function actions() {
   for (const id of ["runMode", "supervisionMode", "powerDelay", "powerArm"]) element(id).disabled = selectedMode === null || connecting;
   for (const id of ["recentTasks", "refreshTasks", "load", "taskId"]) element(id).disabled = busy || connecting || selectedMode === null;
   element("approve").disabled = !active || busy || task.status !== "awaiting_approval" ||
-    !(task.evidence && task.evidence.passed);
+    (task.mode === "project" ? !task.approval : !(task.evidence && task.evidence.passed));
   element("reject").disabled = !active || busy || !["queued", "paused", "awaiting_approval", "review_required"].includes(task.status);
   element("resume").disabled = !active || busy || task.status !== "paused" || !inferenceAllowed();
   const recoverable = active && !busy && ["running", "reconciliation_required", "applying"].includes(task.status);
@@ -241,7 +241,7 @@ function actions() {
   element("recovery-note").textContent = recoverable && task.status === "running" ?
     "If progress stopped after a disconnect, use Inspect interrupted action below. If a run is still active, wait for it to finish first." :
     "An action may have been interrupted. Inspect its saved result before resuming. This does not repeat the action or approve a change.";
-  element("revalidate").disabled = !active || busy || !["awaiting_approval", "review_required", "paused"].includes(task.status);
+  element("revalidate").disabled = !active || busy || task.mode === "project" || !["awaiting_approval", "review_required", "paused"].includes(task.status);
   element("preview").disabled = !active || busy || task.status !== "completed";
   element("tryApproved").disabled = !active || busy || task.status !== "completed";
   const hasId = selectedMode !== null && !busy && !connecting && !!element("taskId").value.trim();
