@@ -1,7 +1,9 @@
 # Judge quick-start card — Remote AI Operator
 
 5 minutes, hosted demo, no install. Everything below runs at the deployed
-judge URL; the access code is supplied separately and never committed.
+judge URL; the demo access code is public in the README
+([Hosted visitor mode](../README.md#hosted-visitor-mode)) — entry is open to
+everyone and each visit stays private.
 
 > Live URL: `https://remote-operator--hosted.us-east.modal.run`
 > (the offline reference runs without anything from you; real AI mode
@@ -48,7 +50,7 @@ shown in the submission video.
 
 ### 2:30–3:30 · Sample
 
-In the Demo view, step 2, press **Load sample review**. It reuses one of
+In the Build view, step 2, press **Load sample review**. It reuses one of
 your validated saved tasks when available; on a first visit it creates and
 runs the sample task for you (first run checks everything, takes a minute
 or two). You land in the Review view with a real proposed change and real
@@ -73,7 +75,7 @@ to the separate local demo target only.
 
 ### 4:30–5:00 · Try it
 
-Press **Try it in Demo step 3** (or scroll to Demo step 3 yourself).
+Press **Try it in Step 3** (or scroll to Build view step 3 yourself).
 **Run approved import** runs the applied importer on the sample rows:
 2 accepted issues, 2 row errors (duplicate ID + missing title). The
 **sample inputs** offer one-click data — All valid (3 accepted,
@@ -83,11 +85,11 @@ Press **Try it in Demo step 3** (or scroll to Demo step 3 yourself).
 ## What to look at (reviewer checklist)
 
 - Exact-change approval: approving locks in the exact change, what it was
-  checked against, and a 10-minute deadline. Change anything and the
+  checked against, and a 60-minute deadline. Change anything and the
   approval is refused — try editing, then approving.
 - Independent checks: 7 safety checks run in an isolated test box
-  (Docker on a PC, Modal Sandbox when hosted); the AI never grades its
-  own work.
+  (Docker on a PC, Modal Sandbox — the hosted run's isolated test box —
+  when hosted; see modal-hosting.md); the AI never grades its own work.
 - Safe retries: switch on “Inject one transport failure”, run, and watch
   the retry keep the saved work instead of doing it twice.
 - Privacy: a second visitor (private window + same access code)
@@ -102,7 +104,7 @@ Press **Try it in Demo step 3** (or scroll to Demo step 3 yourself).
 
 | Secret / limit | Where | Notes |
 | --- | --- | --- |
-| Demo access code | Supplied separately; entered once | Never in the repo; opens your private signed-in visit |
+| Demo access code | Public in the README ([Hosted visitor mode](../README.md#hosted-visitor-mode)); entered once | Open entry; opens your private signed-in visit |
 | Judge password | Stored on the server as a salted hash, never in plain text | Your judge name keeps your tasks separate |
 | Meta API key | “Your model key”, this visit only | Never saved, never your identity, remove anytime |
 | Spending limits | Judge grant (Max requests + Approved USD) | You set them; you pay; owner pays nothing |
@@ -113,22 +115,11 @@ The offline reference needs none of this: no key, no grant, no spend.
 
 ## Screenshots
 
-> PLACEHOLDER (parent): no headless browser in this environment
-> (`chromium` absent), so screenshots were not captured here.
+> Screenshots pending capture: they were not taken yet.
 > Suggested captures from the hosted URL at phone width (390px):
 > (1) setup wizard at step 3 with inline limit hints;
 > (2) Review view with side-by-side change + evidence card + approval checklist;
-> (3) Demo step 3 after “Run approved import” (2 accepted / 2 errors);
+> (3) Build view step 3 after “Run approved import” (2 accepted / 2 errors);
 > (4) Supervise chat with bubbles + 🔔 inbox badge;
 > (5) dictation button naming which transcription it uses (Meta or browser).
 
-## Loop3 branch map (shipped on main)
-
-UI described above is merged to `main`: `onboard` (wizard, sample review,
-sample inputs), `bellchat` (inbox bell, chat bubbles, typing indicator),
-`reviewloop` (evidence card, countdown/build chips, plain statuses,
-judge visibility, try-it shortcut), `h1a` (hosted multi-visitor worker),
-`stt` (Meta transcription with auto-slice dictation, browser speech
-fallback), `translate` (server-side PL→EN normalization at ingestion),
-`openweights` (Baseten model-mode on Muse Spark Open for the open-weights
-bonus — see docs/openweights-verification.md).

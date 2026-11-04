@@ -38,7 +38,7 @@ uv run --locked remote-ai-operator serve
 ```
 
 1. Open http://127.0.0.1:8765 and enter your token. Connect and inspect the mode.
-2. Select **New task**, review the registered sample request and create/run it.
+2. Press **Start new demo draft** (or pick the **New task …** entry in **Recent tasks**), review the registered sample request and create/run it.
 3. Read selected-task activity, expand older entries if needed and inspect the diff.
 4. Review validation, then approve the exact change. Press **Run approved import**:
    two issues are accepted; the duplicate and missing title produce two errors.
@@ -46,17 +46,19 @@ uv run --locked remote-ai-operator serve
 
 The default server binds loopback. For phone use, follow docs/phone-access.md and
 configure your own approved private transport. No shared reviewer account or public
-endpoint is supplied by this source checkout. Do not publish the owner credential.
+endpoint is supplied by this source checkout alone (the deployed demo in the
+next section is separate). Do not publish the owner credential.
 
 ## Hosted judge demo
 
-A deployed scripted demo runs at
-`https://remote-operator--hosted.us-east.modal.run`. Judges receive the shared access
-code out-of-band; it is never in this repository. Enter the code once and the browser
+A deployed demo runs at
+`https://remote-operator--hosted.us-east.modal.run`. The demo access code is public
+in README.md (Hosted visitor mode); entry is open and each visit stays private.
+Enter the code once and the browser
 holds only a signed session cookie. The demo starts on the labelled scripted
 reference at zero inference cost, isolates each visitor's tasks and can be left at any
-time. A visitor Meta key can be attached only when the owner has enabled a finite
-judge grant; until then the key endpoint refuses. The hosted app has no access to the
+time. Judges register an account, set their own spending limits and attach their own
+Meta key for real AI; without any grant the key endpoint refuses. The hosted app has no access to the
 owner's PC or private source. See docs/modal-hosting.md and ADR-0004/0005.
 
 The same mode runs locally: set OPERATOR_VISITOR_CODE and OPERATOR_SESSION_SECRET, then
