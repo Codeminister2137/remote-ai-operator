@@ -717,3 +717,24 @@ class MetaContracts(unittest.TestCase):
             self.assertNoLogs("remote_operator.meta", level="DEBUG"),
         ):
             failing.next_operation([], prompt="task")
+
+    def test_project_tasks_send_project_instructions_and_tools(self):
+        from remote_operator.meta import (
+            INSTRUCTIONS,
+            PROJECT_INSTRUCTIONS,
+            PROJECT_TOOLS,
+            TOOLS,
+        )
+
+        actor = self.actor()
+        actor.next_operation([], prompt="task", project_root="/repo")
+        sent = self.requests[-1]
+        self.assertEqual(sent["instructions"], PROJECT_INSTRUCTIONS)
+        self.assertEqual(sent["tools"], PROJECT_TOOLS)
+        self.assertNotIn("issue_import.py", sent["instructions"])
+        self.assertNotIn("/repo", json.dumps(sent))
+        plain = self.actor()
+        plain.next_operation([], prompt="task")
+        sent_plain = self.requests[-1]
+        self.assertEqual(sent_plain["instructions"], INSTRUCTIONS)
+        self.assertEqual(sent_plain["tools"], TOOLS)

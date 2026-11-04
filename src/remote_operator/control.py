@@ -229,7 +229,9 @@ class Operation:
 class Model(Protocol):
     name: str
 
-    def next_operation(self, history: list[dict], *, prompt: str) -> Operation: ...
+    def next_operation(
+        self, history: list[dict], *, prompt: str, project_root: str | None = None
+    ) -> Operation: ...
 
 
 class TransportFailure(Exception):
@@ -320,7 +322,10 @@ class Operator:
                         synthetic_failure = True
                         raise TransportFailure("Injected transport failure; no request sent")
                     try:
-                        operation = model.next_operation(task["history"], prompt=task["prompt"])
+                        operation_kwargs = {"prompt": task["prompt"]}
+                        if task.get("mode") == "project":
+                            operation_kwargs["project_root"] = task.get("project_root")
+                        operation = model.next_operation(task["history"], **operation_kwargs)
                     finally:
                         receipt = getattr(model, "last_receipt", None)
                         if receipt is not None:
@@ -376,10 +381,10 @@ class Operator:
                 task["pending"] = None
             self.store.save(task, "cancelled", {"effects_preserved": True})
             return task
-        except (Exception, KeyboardInterrupt):
+        except (Exception, KeyboardInterrupt) as exc:
             if "task" in locals() and task["status"] == "running":
                 task["status"] = "reconciliation_required" if task["pending"] else "paused"
-                self.store.save(task, "execution_stopped")
+                self.store.save(task, "execution_stopped", {"detail": str(exc)[:200]})
             raise
         finally:
             self.lock.release()
