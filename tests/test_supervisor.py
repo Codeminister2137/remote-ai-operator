@@ -282,3 +282,27 @@ class SupervisorUnitTests(unittest.TestCase):
             self.supervisor.list_threads(0)
         with self.assertRaises(ValueError):
             self.supervisor.list_threads(99)
+class HumanizeOperationTests(unittest.TestCase):
+    def test_known_operations_read_as_sentences(self):
+        from remote_operator.supervisor import humanize_operation
+
+        self.assertEqual(
+            humanize_operation("read_file", {"path": "sample-task.md"}),
+            "Next step: read sample-task.md.",
+        )
+        self.assertEqual(
+            humanize_operation("ask_owner", {"question": "Which format?"}),
+            "Question: Which format?",
+        )
+        self.assertEqual(humanize_operation("validate", {}), "Next step: run validation.")
+        self.assertEqual(
+            humanize_operation("finish", {"summary": "All set."}),
+            "Planning complete. All set.",
+        )
+
+    def test_unknown_and_malformed_operations_never_dump_json(self):
+        from remote_operator.supervisor import humanize_operation
+
+        self.assertEqual(humanize_operation("frobnicate", {"x": 1}), "Next step: frobnicate.")
+        self.assertEqual(humanize_operation("read_file", {}), "Next step: read a file.")
+        self.assertEqual(humanize_operation("read_file", None), "Next step: read a file.")

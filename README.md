@@ -71,6 +71,50 @@ Network access is needed for dependencies/image preparation. Actual validation
 uses `--pull=never` and no container network. No model credentials are needed.
 The default runner image is pinned to the tested manifest digest above.
 
+## Install on a PC, step by step
+
+From an empty Windows PC to a running operator (about 15 minutes).
+Every command runs in PowerShell.
+
+1. Install Python 3.12 or newer, then close and reopen PowerShell:
+
+   ```powershell
+   winget install -e --id Python.Python.3.12
+   python --version
+   ```
+
+   If winget is missing, install Python from python.org instead
+   (tick "Add to PATH" during setup).
+2. Install git, then close and reopen PowerShell:
+
+   ```powershell
+   winget install -e --id Git.Git
+   git --version
+   ```
+3. Clone this repository and enter it:
+
+   ```powershell
+   git clone https://github.com/Codeminister2137/remote-ai-operator.git
+   cd remote-ai-operator
+   ```
+4. Run the installer:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+   ```
+
+   It creates the environment, generates your access password (shown
+   once — save it), offers the Tailscale phone-access step (say no to
+   skip it; the PC program still works), and starts the serve
+   automatically at sign-in.
+5. On your phone: install the Tailscale app, sign in to the same
+   account, open the phone URL the installer printed, and enter your
+   access password.
+6. If something looks wrong: check `.runtime\serve.log` in the project
+   folder, or read the plain-language
+   [self-host access guide](docs/self-host-access-guide.md) (token
+   rotation, uninstall, no-Tailscale alternatives).
+
 ## Offline workflow
 
 ```text

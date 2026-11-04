@@ -838,7 +838,7 @@ class TranslateUiTests(unittest.IsolatedAsyncioTestCase):
         for snippet in (
             'language: element("supervisorLang").value',
             "dictateLangTag",
-            "Show original (",
+            "Show working English (",
             "Includes text translated from",
             "translation_manifest",
             "supervisorTranslationNote",

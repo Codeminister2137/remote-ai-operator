@@ -265,7 +265,8 @@ async function loadSettings() {
   const session = sessionRevision;
   if (hosted) {
     element("supervision-row").hidden = true;
-    element("power-block").hidden = true;
+    for (const id of ["powerDelay", "powerArm", "powerCancel"]) element(id).hidden = true;
+    element("powerStatus").textContent = "Sleep is unavailable in the hosted demo - there is no PC to sleep.";
     element("settingsNote").textContent = "Run mode applies to your plans. Machine settings are owner-only.";
     return;
   }
@@ -420,6 +421,8 @@ function supervisorActions() {
   const open = ready && !!supervisorThreadId;
   element("supervisorInput").disabled = !open;
   element("supervisorSend").disabled = !open;
+  element("supervisorInputRow").hidden = !open;
+  element("supervisorSend").hidden = !open;
   element("supervisorWritePlan").disabled = !open;
   element("supervisorApprovePlan").disabled = !open || !supervisorPlanNonce;
   updatePlanSettingsNote();
@@ -531,14 +534,14 @@ function renderSupervisorTranscript(history) {
     who.textContent = mine ? "You" : "Assistant" + (turn.route ? " · " + turn.route : "");
     const bubble = document.createElement("div");
     bubble.className = "chat-bubble";
-    bubble.textContent = turn.text;
+    bubble.textContent = (mine && turn.translated && typeof turn.source_text === "string") ? turn.source_text : turn.text;
     item.append(who, bubble);
     if (turn.role === "user" && turn.translated && typeof turn.source_text === "string") {
       const details = document.createElement("details");
       const summary = document.createElement("summary");
-      summary.textContent = "Show original (" + String(turn.source_lang || "?").toUpperCase() + ")";
+      summary.textContent = "Show working English (translated from " + String(turn.source_lang || "?").toUpperCase() + ")";
       const source = document.createElement("p");
-      source.textContent = turn.source_text;
+      source.textContent = turn.text;
       const meta = document.createElement("p");
       meta.textContent = "Language: " + (turn.source_lang || "?") + " · Translator: " + translatorName(turn.translator);
       meta.title = "Translator: " + (turn.translator || "?");
@@ -1339,7 +1342,11 @@ element("judgeSignup").onclick = () => guarded(async () => {
     await api("/api/judges/signup", "POST", {code: element("accessCode").value,
       username: element("judgeName").value.trim(), password: element("judgePassword").value});
     element("judgePassword").value = "";
+    element("judge-note").textContent = "Registered. Log in with your password to open your private workspace.";
     message("Judge account registered. Log in to open your private workspace.");
+  } catch (error) {
+    element("judge-note").textContent = "Registration failed: " + error.message;
+    throw error;
   } finally { busy = false; actions(); }
 });
 element("judgeLogin").onclick = () => guarded(async () => {
@@ -1350,7 +1357,13 @@ element("judgeLogin").onclick = () => guarded(async () => {
       password: element("judgePassword").value});
     element("judgePassword").value = "";
     await loadMode(session);
-    if (session === sessionRevision) message("Judge session started. Set spending limits, then attach your key.");
+    if (session === sessionRevision) {
+      element("judge-note").textContent = "Logged in. Set spending limits, then attach your Meta key for live inference.";
+      message("Judge session started. Set spending limits, then attach your key.");
+    }
+  } catch (error) {
+    element("judge-note").textContent = "Login failed: " + error.message;
+    throw error;
   } finally {
     if (session === sessionRevision) { connecting = false; actions(); }
   }
@@ -2032,7 +2045,7 @@ function wireDictation(fieldId, buttonId, langId, statusId, noun, inputHint) {
     else {
       const hint = hosted ?
         "Transcription unavailable: attach your Meta key in Your model key for Meta dictation." :
-        "Transcription unavailable: this browser cannot dictate and Meta dictation is not configured on this server.";
+        "Transcription unavailable: this browser cannot dictate (dictation needs Chrome or Edge) and Meta dictation is not configured on this server.";
       ctx.status.textContent = hint;
       message(hint);
     }
