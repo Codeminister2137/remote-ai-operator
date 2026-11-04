@@ -6,11 +6,13 @@
      2. Creates or reuses .venv and installs the operator (prefers uv).
      3. Creates .env with a random owner password (OPERATOR_ACCESS_TOKEN)
         when missing. An existing password is kept and NEVER printed.
-     4. Offers to install Tailscale (private-network app for phone access).
+     4. Asks which code folder the agent may develop (project tasks).
+        Enter keeps the sample task only; re-run any time to change it.
+     5. Offers to install Tailscale (private-network app for phone access).
         You can say no; the PC program still works on this PC.
-     5. Registers the serve to start automatically at sign-in (a per-user
+     6. Registers the serve to start automatically at sign-in (a per-user
         Scheduled Task - no admin needed) and starts it now.
-     6. Prints the phone web address and what is left to do by hand.
+     7. Prints the phone web address and what is left to do by hand.
 
    Run from the project folder in PowerShell:
      powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
@@ -20,6 +22,8 @@
      -NonInteractive  No questions; safe defaults (skips install/sign-in offers).
      -Uninstall       Remove the automatic start entry again (keeps your files).
      -Port 8765       Loopback port the helper program listens on.
+     -WorkRoot a,b    Code folder(s) the agent may develop (project tasks).
+                      Without it the installer asks once; Enter keeps sample-only.
 
    Re-running is safe: every step checks the current state first.
 #>
@@ -28,6 +32,7 @@ param(
   [int]$Port = 8765,
   [string]$TaskName = 'RemoteAIOperatorServe',
   [string]$RepoRoot = '',
+  [string[]]$WorkRoot = @(),
   [switch]$NonInteractive,
   [switch]$NoTailscale,
   [switch]$Uninstall
@@ -234,9 +239,16 @@ $origin = [System.Environment]::GetEnvironmentVariable('OPERATOR_PUBLIC_ORIGIN',
 $serveArgs = @(
   '-m', 'remote_operator.cli',
   '--project-root', $RepoRoot,
-  '--runtime', (Join-Path $RepoRoot '.runtime'),
-  'serve', '--port', "$Port"
+  '--runtime', (Join-Path $RepoRoot '.runtime')
 )
+$workRoots = [System.Environment]::GetEnvironmentVariable('OPERATOR_WORK_ROOTS', 'Process')
+if (-not [string]::IsNullOrWhiteSpace($workRoots)) {
+  foreach ($dir in $workRoots.Split(';')) {
+    $trimmed = $dir.Trim()
+    if ($trimmed -ne '') { $serveArgs += @('--work-root', $trimmed) }
+  }
+}
+$serveArgs += @('serve', '--port', "$Port")
 if (-not [string]::IsNullOrWhiteSpace($origin)) { $serveArgs += @('--public-origin', $origin) }
 
 '' + "`n=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') starting serve ===`n" | Out-File -Append -Encoding utf8 $LogFile
@@ -448,6 +460,49 @@ function Invoke-Installer {
   } else {
     # The existing password is never printed.
     Write-Host 'Kept your existing password (not shown).'
+  }
+
+  # 3b. Agent code folder(s) -------------------------------------------
+  Write-Step 'Choosing the code folder for project tasks'
+  $envValues = Read-DotEnv $envPath
+  $existingRoots = @()
+  if ($envValues.ContainsKey('OPERATOR_WORK_ROOTS')) {
+    $existingRoots = @($envValues['OPERATOR_WORK_ROOTS'].Split(';') |
+      ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+  }
+  if ($WorkRoot.Count -gt 0) {
+    $chosenRoots = @($WorkRoot)
+  } elseif ($NonInteractive) {
+    $chosenRoots = $existingRoots
+  } else {
+    if ($existingRoots.Count -gt 0) {
+      Write-Host "Currently: $($existingRoots -join '; ')"
+    } else {
+      Write-Host 'Currently: sample task only (safe practice file).'
+    }
+    Write-Host 'The agent can read files and propose changes in this folder.'
+    Write-Host 'Nothing is written until you approve the diff in the browser.'
+    $answer = (Read-Host 'Code folder for the agent? [Enter keeps current, "none" clears]').Trim()
+    if ($answer -eq '') { $chosenRoots = $existingRoots }
+    elseif ($answer.ToLowerInvariant() -eq 'none') { $chosenRoots = @() }
+    else { $chosenRoots = @($answer) }
+  }
+  $validRoots = @()
+  foreach ($dir in $chosenRoots) {
+    $resolved = $dir.Trim()
+    if ($resolved -eq '') { continue }
+    if (-not (Test-Path $resolved -PathType Container)) {
+      Write-Host "Skipped (not a folder): $resolved"
+      continue
+    }
+    $validRoots += (Resolve-Path $resolved).Path
+  }
+  Set-DotEnvValue $envPath 'OPERATOR_WORK_ROOTS' ($validRoots -join ';')
+  if ($validRoots.Count -gt 0) {
+    Write-Host "Project tasks enabled for: $($validRoots -join '; ')"
+  } else {
+    Write-Host 'Project tasks off: only the sample task is available.'
+    Write-Host 'Re-run the installer any time to add a code folder.'
   }
 
   # 4. Private-network step (Tailscale) --------------------------------
