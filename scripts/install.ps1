@@ -625,6 +625,33 @@ function Invoke-Installer {
     Write-Host 'Re-run the installer any time to add a code folder.'
   }
 
+  # 3c. Model key (optional Meta API key) -------------------------------
+  Write-Step 'Checking the Meta model key'
+  $keyValues = Read-DotEnv $envPath
+  $haveKey = $keyValues.ContainsKey('META_API_KEY') -and `
+    (-not [string]::IsNullOrWhiteSpace($keyValues['META_API_KEY']))
+  $keyChanged = $false
+  if ($NonInteractive) {
+    if ($haveKey) { Write-Host 'A Meta model key is already saved (kept, never shown here).' }
+    else { Write-Host 'No Meta model key saved (non-interactive install).' }
+  } else {
+    Write-Host 'Real Meta answers and Meta voice dictation need your own Meta API key.'
+    Write-Host 'The key is stored in the local .env file and never printed or shared.'
+    if ($haveKey) { Write-Host 'A key is already saved (not shown).' }
+    $keyAnswer = (Read-Host 'Meta API key? [Enter keeps the saved key / skips]').Trim()
+    if ($keyAnswer -eq '') {
+      if ($haveKey) { Write-Host 'Kept the saved key.' }
+      else {
+        Write-Host 'Skipped: sample tasks and browser speech still work.'
+        Write-Host 'Re-run the installer any time to add the key.'
+      }
+    } else {
+      Set-DotEnvValue $envPath 'META_API_KEY' $keyAnswer
+      $keyChanged = $true
+      Write-Host 'Meta model key saved.'
+    }
+  }
+
   # 4. Private-network step (Tailscale) --------------------------------
   Write-Step 'Phone access (private-network step)'
   $declinedMarker = Join-Path $root '.runtime\.tailscale-declined'
@@ -790,6 +817,11 @@ function Invoke-Installer {
     }
   } else {
     Write-Host 'CODE FOLDER: none (sample task only).'
+  }
+  if ($haveKey -or $keyChanged) {
+    Write-Host 'MODEL KEY: saved (used after the server restarts).'
+  } else {
+    Write-Host 'MODEL KEY: none (Meta features need one).'
   }
   Write-Host ''
   Write-Host 'The helper also starts by itself every time you sign in to Windows.'

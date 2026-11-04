@@ -53,6 +53,14 @@ class WrapperStderrTests(unittest.TestCase):
         self.assertIn("if ($null -eq (Find-FfmpegCommand)) {", text)
         self.assertIn("ffmpeg was already installed; using it.", text)
 
+    def test_model_key_prompt_saves_without_printing(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("Meta API key? [Enter keeps the saved key / skips]", text)
+        self.assertIn("Set-DotEnvValue $envPath 'META_API_KEY' $keyAnswer", text)
+        self.assertIn("never printed or shared", text)
+        self.assertIn("MODEL KEY: saved (used after the server restarts).", text)
+        self.assertIn("MODEL KEY: none (Meta features need one).", text)
+
 
 if __name__ == "__main__":
     unittest.main()
