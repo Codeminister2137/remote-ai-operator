@@ -805,7 +805,12 @@ class ProjectOperator(Operator):
     def _execute(self, task: dict, operation: Operation, *, deadline=float("inf")):
         if task.get("mode") != "project":
             return super()._execute(task, operation, deadline=deadline)
-        return self._execute_project(task, operation)
+        try:
+            return self._execute_project(task, operation)
+        except ValueError as exc:
+            if operation.name not in {"read_file", "write_file", "validate"}:
+                raise
+            return {"error": str(exc)[:200]}
 
     def _execute_project(self, task: dict, operation: Operation) -> dict:
         root = self._task_root(task)
