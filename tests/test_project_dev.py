@@ -1,5 +1,6 @@
 """Project-task checks: path admission, staging, approval and apply boundaries."""
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -84,6 +85,49 @@ class ResolveTests(unittest.TestCase):
         ):
             with self.subTest(rel=rel), self.assertRaises(ValueError):
                 resolve_project_path(self.root, rel)
+
+    def test_refuses_trailing_dot_and_space_segments(self):
+        # Windows strips trailing dots/spaces, so "credentials.json." would
+        # otherwise read credentials.json past the secret-name rules.
+        for rel in (
+            "notes.txt.",
+            "notes.txt ",
+            "credentials.json.",
+            "credentials.json ",
+            "tls.key.",
+            "id_rsa ",
+            "app./main.py",
+            "app /main.py",
+        ):
+            with self.subTest(rel=rel), self.assertRaises(ValueError):
+                resolve_project_path(self.root, rel)
+        staging = Path(self.directory.name) / "staging"
+        with self.assertRaises(ValueError):
+            stage_project_file(staging, "notes.txt.", "x\n")
+
+    def test_refuses_resolved_aliases_of_hidden_and_secret_files(self):
+        # 8.3 short names (ENV~1 -> .env) alias hidden/secret files to
+        # innocent-looking names; the resolved path must be re-checked.
+        if os.name != "nt":
+            self.skipTest("8.3 short names are Windows-only")
+        import ctypes
+
+        (self.root / ".env").write_text("OPERATOR_ACCESS_TOKEN=x\n", encoding="utf-8")
+        (self.root / "credentials.json").write_text("{}\n", encoding="utf-8")
+        probed = False
+        for name in (".env", "credentials.json"):
+            buffer = ctypes.create_unicode_buffer(512)
+            length = ctypes.windll.kernel32.GetShortPathNameW(str(self.root / name), buffer, 512)
+            short = Path(buffer.value).name if length else name
+            if short == name or not (self.root / short).exists():
+                continue  # Short names are disabled on this volume.
+            probed = True
+            with self.subTest(alias=short), self.assertRaises(ValueError):
+                resolve_project_path(self.root, short)
+            with self.subTest(alias=short), self.assertRaises(ValueError):
+                read_project_file(self.root, short)
+        if not probed:
+            self.skipTest("short names disabled on this volume")
 
     def test_refuses_links(self):
         outside = Path(self.directory.name) / "outside.py"
