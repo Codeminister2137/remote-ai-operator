@@ -1937,6 +1937,7 @@ async function dictateViaMeta(ctx) {
   }
   function stop() {
     stopping = true;
+    status.textContent = "Stopping - transcribing final audio...";
     if (recorder && recorder.state !== "inactive") {
       try { recorder.stop(); } catch { /* Already stopped. */ }
     }
@@ -1945,6 +1946,12 @@ async function dictateViaMeta(ctx) {
   const dispatch = button.onclick;
   button.onclick = () => stop();
   setRecording(true);
+  const recordStarted = Date.now();
+  const ticker = setInterval(() => {
+    if (stopping) return;
+    const secs = Math.floor((Date.now() - recordStarted) / 1000);
+    status.textContent = "Recording with Meta (" + secs + "s elapsed)... Press Stop to finish.";
+  }, 1000);
   function recordSlice() {
     return new Promise((resolve) => {
       const chunks = [];
@@ -1994,6 +2001,7 @@ async function dictateViaMeta(ctx) {
   }
   await chain;
   function finish() {
+    clearInterval(ticker);
     Dictation.clearActive(stop);
     for (const track of stream.getTracks()) { try { track.stop(); } catch { /* Best-effort. */ } }
     ctx.busy = false;
