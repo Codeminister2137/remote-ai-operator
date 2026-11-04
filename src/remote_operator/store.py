@@ -92,7 +92,6 @@ class Store:
                     "id": task["id"],
                     "prompt": task["prompt"][:160],
                     "status": task["status"],
-                    "mode": task.get("mode", "sample"),
                     "thread": bool(task.get("supervisor_thread")),
                 }
             )

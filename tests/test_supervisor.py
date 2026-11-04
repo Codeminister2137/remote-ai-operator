@@ -313,9 +313,7 @@ class SupervisorUnitTests(unittest.TestCase):
 
         thread = self.supervisor.open_thread("topic")
         reply = self.supervisor.post_message(QuietModel(), thread["id"], "hello")
-        self.assertEqual(
-            reply["reply"], "[quiet-test-model] Next step: read sample-task.md."
-        )
+        self.assertEqual(reply["reply"], "[quiet-test-model] Next step: read sample-task.md.")
 
 
 class HumanizeOperationTests(unittest.TestCase):

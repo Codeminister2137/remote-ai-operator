@@ -267,7 +267,7 @@ async function recentTasks() {
   placeholder.value = ""; placeholder.textContent = tasksOnly.length ? "New task (no saved task selected)" : "No saved tasks yet";
   chooser.replaceChildren(placeholder, ...tasksOnly.map((item) => {
     const option = document.createElement("option");
-    option.value = item.id; option.textContent = (item.mode === "project" ? "Repository" : "Sample") + " · " + humanizeStatus(item.status) + " · " + item.prompt;
+    option.value = item.id; option.textContent = humanizeStatus(item.status) + " · " + item.prompt;
     option.title = "Raw status: " + item.status;
     return option;
   }));
@@ -291,12 +291,7 @@ async function loadWorkRoots() {
       option.title = "The agent reads and stages changes under this folder. Nothing is written until you approve the diff; no automated checks run.";
       return option;
     }));
-    let preferred = "sample";
-    try {
-      const saved = typeof localStorage === "undefined" ? null : localStorage.getItem("taskTarget");
-      if (saved && [...chooser.options].some((option) => option.value === saved)) preferred = saved;
-    } catch { /* Private mode keeps the default. */ }
-    chooser.value = [...chooser.options].some((option) => option.value === previous) && previous ? previous : preferred;
+    chooser.value = [...chooser.options].some((option) => option.value === previous) ? previous : "sample";
     note.textContent = roots.length ?
       "Repository targets write real files on approval, with no automated checks. Review every diff." +
       " To add folders, extend the serve's --work-root list (.env OPERATOR_WORK_ROOTS on installed PCs) and restart it." :
@@ -1034,7 +1029,7 @@ async function refresh() {
   task = review.task;
   if (location.hash.slice(1) !== task.id) location.hash = task.id;
   element("recentTasks").value = task.id;
-  element("status").textContent = humanizeStatus(task.status);
+  element("status").textContent = (task.mode === "project" ? "Repository task · " : "Sample task · ") + humanizeStatus(task.status);
   element("status").title = "Raw status: " + task.status;
   renderDiffViews(review.diff, "No candidate change.");
   const isProject = task.mode === "project";
@@ -1122,9 +1117,6 @@ element("submit").onclick = () => guarded(async () => {
       {prompt: element("prompt").value};
     const created = await api("/api/tasks", "POST", submission);
     if (session !== sessionRevision) return;
-    try {
-      if (typeof localStorage !== "undefined") localStorage.setItem("taskTarget", target);
-    } catch { /* Private mode keeps the default. */ }
     if (!created.reply) {
       message(target.startsWith("project:") ?
         "Repository task created under " + target.slice("project:".length) + " — running." :
