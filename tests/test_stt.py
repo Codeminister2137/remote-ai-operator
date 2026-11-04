@@ -579,7 +579,7 @@ class SttRouteTests(unittest.IsolatedAsyncioTestCase):
             content=oversized,
         )
         self.assertEqual(refused.status_code, 413)
-        small = await self.client.post("/api/tasks", headers=self.auth, content="x" * 8193)
+        small = await self.client.post("/api/tasks", headers=self.auth, content="x" * 65537)
         self.assertEqual(small.status_code, 413)
         accept = await self.client.post(
             "/api/tasks", headers=self.auth, json={"prompt": "still capped small"}
