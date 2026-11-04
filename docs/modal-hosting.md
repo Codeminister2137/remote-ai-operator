@@ -186,7 +186,7 @@ Deploy-time details verified on Windows and in the Modal image:
 Deployed and verified at:
 
 ```text
-https://kubajaworski999--hosted.us-east.modal.run
+https://remote-operator--hosted.us-east.modal.run
 ```
 
 The visitor access code is public in the README (open entry by owner inbox

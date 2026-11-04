@@ -232,7 +232,7 @@ No real Meta quality or physical phone/VPN acceptance is claimed.
   pass. No inference, cloud deployment or publication in this step.
 
 - Deployed and live-verified the hosted judge demo (scripted mode, no visitor key, no
-  inference, no model spend) at `https://kubajaworski999--hosted.us-east.modal.run`,
+  inference, no model spend) at `https://remote-operator--hosted.us-east.modal.run`,
   single-writer `remote-operator-state` volume and
   `remote-operator-hosted` secret; access code and signing secret stay outside both
   repositories. Live checks: 20 access/isolation/CSRF checks; 4 cold-resume checks after

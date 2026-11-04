@@ -147,7 +147,7 @@ Without an attached key, visitors can only run the free scripted reference —
 every real model call spends the visitor's own key under their own limits.
 
 This mode is a localhost preview of the session flow. A hosted judge deployment is
-live at `https://kubajaworski999--hosted.us-east.modal.run` with open entry: the
+live at `https://remote-operator--hosted.us-east.modal.run` with open entry: the
 visitor access code is `KwWLEbaTQ-YzSDqn4pqEz5hdnVHBShJz` (public by owner decision 2026-11-03 — entry is
 open to everyone; sessions stay isolated per visit). It uses the durable volume described
 in ADR-0005, written by one process at a time; `modal deploy --strategy recreate
@@ -257,7 +257,7 @@ Modal is selected for hosted judging. The optional Sandbox test box is implement
 and tested live on the real runtime; the hosted access-code visit flow, signed
 visits that survive restarts and durable state written by one process at a time
 are implemented, covered by local tests and live-verified at
-`https://kubajaworski999--hosted.us-east.modal.run`
+`https://remote-operator--hosted.us-east.modal.run`
 (offline reference, no judge grant enabled). Personal local Docker hosting remains
 the default. See [docs/modal-hosting.md](docs/modal-hosting.md) for evidence and limits.
 

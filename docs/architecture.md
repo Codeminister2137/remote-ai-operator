@@ -87,7 +87,7 @@ Modal is selected for a separate hosted sample demo; see ADR-0003. The optional
 Modal Sandbox adapter is implemented and live-accepted on the actual runtime
 (docs/modal-hosting.md). The hosted web/session layer and single-writer durable
 state are implemented, locally tested and live-verified at
-`https://kubajaworski999--hosted.us-east.modal.run` in scripted mode; the judge Meta
+`https://remote-operator--hosted.us-east.modal.run` in scripted mode; the judge Meta
 allowance is not enabled. The current local FastAPI/SQLite/Docker deployment remains
 usable for personal supervision. Session-only user keys are approved and implemented;
 do not infer working multiuser scale, cloud-to-PC control or distributed recovery from

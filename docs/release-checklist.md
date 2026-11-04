@@ -17,7 +17,7 @@ establish that a service is running now.
 - [x] Event-built contribution map, reviewer instructions and three-minute storyboard.
 - [x] Fresh physical-phone Meta task, owner review/approval and applied sample; owner confirmed, server receipts verified.
 - [x] Bounded live Modal Sandbox runner acceptance on the real runtime; private receipts retained.
-- [x] Hosted judge demo deployed and live-verified at `https://kubajaworski999--hosted.us-east.modal.run`
+- [x] Hosted judge demo deployed and live-verified at `https://remote-operator--hosted.us-east.modal.run`
       (scripted mode; access/isolation/CSRF, exact approval, cold resume, idle
       scale-to-zero and a real-browser UI run). Access code and signing secret stay
       outside both repositories.

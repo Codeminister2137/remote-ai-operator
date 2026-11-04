@@ -68,7 +68,7 @@ A three-minute recording is still required; this acceptance is not video evidenc
 ## Hosted Modal deployment
 
 2026-10-27: the judge demo is deployed at
-`https://kubajaworski999--hosted.us-east.modal.run` and was verified over HTTPS with
+`https://remote-operator--hosted.us-east.modal.run` and was verified over HTTPS with
 no visitor key, no inference and no model spend. The access code is not in the
 repository; it is supplied out-of-band.
 

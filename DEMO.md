@@ -68,7 +68,7 @@ not a published submission. Never include private plans or raw trial evidence.
 
 The hosted visitor flow (shared access code, signed resumable session, session-only
 visitor key, per-visitor tasks, single-writer durable state) is implemented, covered by
-local tests and live-verified at `https://kubajaworski999--hosted.us-east.modal.run`
+local tests and live-verified at `https://remote-operator--hosted.us-east.modal.run`
 (scripted mode, no judge grant). The access code is supplied separately. Recording and
 submission remain owner-authorized steps. See docs/modal-hosting.md for exact evidence
 and limits.

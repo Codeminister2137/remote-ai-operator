@@ -3,7 +3,7 @@
 5 minutes, hosted demo, no install. Everything below runs at the deployed
 judge URL; the access code is supplied separately and never committed.
 
-> Live URL: `https://kubajaworski999--hosted.us-east.modal.run`
+> Live URL: `https://remote-operator--hosted.us-east.modal.run`
 > (the offline reference runs without anything from you; real AI mode
 > needs your key — see minute 2 below).
 

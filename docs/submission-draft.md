@@ -127,7 +127,7 @@ Follow docs/reviewer-guide.md, or the 5-minute path in docs/judge-card.md
 (code → wizard → sample → approve → try-it).
 
 A hosted scripted demo is deployed at
-`https://kubajaworski999--hosted.us-east.modal.run` and is live-verified (access
+`https://remote-operator--hosted.us-east.modal.run` and is live-verified (access
 code, per-visitor isolation, scripted run, exact approval, cold-start recovery and a
 real-browser UI pass). Judges receive the shared access code out-of-band; it is never
 committed. The hosted app starts on the labelled scripted reference at zero inference

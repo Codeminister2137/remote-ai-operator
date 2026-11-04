@@ -51,7 +51,7 @@ endpoint is supplied by this source checkout. Do not publish the owner credentia
 ## Hosted judge demo
 
 A deployed scripted demo runs at
-`https://kubajaworski999--hosted.us-east.modal.run`. Judges receive the shared access
+`https://remote-operator--hosted.us-east.modal.run`. Judges receive the shared access
 code out-of-band; it is never in this repository. Enter the code once and the browser
 holds only a signed session cookie. The demo starts on the labelled scripted
 reference at zero inference cost, isolates each visitor's tasks and can be left at any
