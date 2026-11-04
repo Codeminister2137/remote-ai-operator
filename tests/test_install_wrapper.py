@@ -10,6 +10,9 @@ keeping strict mode for the setup/validation above it.
 """
 
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -60,6 +63,67 @@ class WrapperStderrTests(unittest.TestCase):
         self.assertIn("never printed or shared", text)
         self.assertIn("MODEL KEY: saved (used after the server restarts).", text)
         self.assertIn("MODEL KEY: none (Meta features need one).", text)
+
+    def test_model_key_prompt_does_not_echo(self):
+        # A plain Read-Host echoes the typed key to the console; the secure
+        # prompt keeps it out of scrollback and screen shares.
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("-AsSecureString", text)
+        self.assertIn("SecureStringToBSTR", text)
+        self.assertIn("ZeroFreeBSTR", text)
+        self.assertNotIn("(Read-Host 'Meta API key?", text)
+
+
+class WrapperQuotingTests(unittest.TestCase):
+    """Quoted install paths must stay inert string content in the wrapper."""
+
+    PROBE = r"""
+$ErrorActionPreference = 'Stop'
+$installPath = $args[0]
+$work = $args[1]
+$text = [System.IO.File]::ReadAllText($installPath)
+$start = $text.IndexOf('function Write-StartWrapper')
+$end = $text.IndexOf('function Register-ServeTask')
+if ($start -lt 0 -or $end -le $start) { throw 'Write-StartWrapper not found' }
+Invoke-Expression ($text.Substring($start, $end - $start))
+function Assert-Parses($path) {
+  $errors = $null
+  [void][System.Management.Automation.PSParser]::Tokenize(
+    [System.IO.File]::ReadAllText($path), [ref]$errors)
+  if ($errors.Count -ne 0) { throw "wrapper has $($errors.Count) parse errors" }
+}
+$root = Join-Path $work "o'brien"
+$result = Write-StartWrapper $root 8765 (Join-Path $root '.venv\Scripts\python.exe')
+Assert-Parses $result.Path
+$generated = [System.IO.File]::ReadAllText($result.Path)
+$wanted = '$RepoRoot = ''' + $root.Replace("'", "''") + ''''
+if ($generated -notmatch [regex]::Escape($wanted)) { throw 'RepoRoot line not safely quoted' }
+$evil = Join-Path $work "x'; Write-Host PWNED; #"
+$result2 = Write-StartWrapper $evil 8765 (Join-Path $work 'python.exe')
+Assert-Parses $result2.Path
+$gen2 = [System.IO.File]::ReadAllText($result2.Path)
+if ($gen2 -notmatch "x'';") { throw 'quote not escaped; statement could inject' }
+Write-Host 'QUOTE-OK'
+"""
+
+    def test_quoted_paths_stay_inside_wrapper_strings(self):
+        shell = shutil.which("powershell") or shutil.which("pwsh")
+        if shell is None:
+            self.skipTest("powershell unavailable")
+        with tempfile.TemporaryDirectory() as tmp:
+            probe = Path(tmp) / "quote_probe.ps1"
+            probe.write_text(self.PROBE, encoding="utf-8")
+            proc = subprocess.run(
+                [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe)]
+                + [str(INSTALL_PS1), tmp],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        output = (proc.stdout + proc.stderr).strip()
+        self.assertEqual(proc.returncode, 0, "quote probe failed:\n" + output[-2000:])
+        self.assertIn("QUOTE-OK", proc.stdout)
 
 
 if __name__ == "__main__":
