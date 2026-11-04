@@ -115,6 +115,12 @@ def resolve_project_path(root: Path, rel: str) -> Path:
     secret-looking basenames are refused before any filesystem access. The
     resolved path must stay inside ``root`` and neither it nor any directory
     between ``root`` and its parent may be a link or junction.
+
+    The operating system may alias names (8.3 short names, trailing-dot and
+    trailing-space stripping), so segments with trailing dots or spaces are
+    refused outright and the hidden-file and secret-name rules are re-applied
+    to the resolved path: otherwise an alias such as ``ENV~1`` or
+    ``credentials.json.`` would read a file the literal name rules refuse.
     """
     root = Path(root).resolve()
     if not isinstance(rel, str) or not rel or len(rel) > MAX_PROJECT_PATH_CHARS:
@@ -129,7 +135,7 @@ def resolve_project_path(root: Path, rel: str) -> Path:
     if not segments:
         raise ValueError("Project path is not admitted")
     for segment in segments:
-        if segment in {"", ".", ".."} or segment.startswith("."):
+        if segment in {"", ".", ".."} or segment.startswith(".") or segment.endswith((".", " ")):
             raise ValueError("Project path is not admitted")
     lowered = segments[-1].lower()
     if lowered in PROJECT_DENY_BASENAMES or lowered.endswith(PROJECT_DENY_SUFFIXES):
@@ -137,6 +143,12 @@ def resolve_project_path(root: Path, rel: str) -> Path:
     full = (root / candidate).resolve()
     if full != root and root not in full.parents:
         raise ValueError("Project path escapes the registered root")
+    for part in full.relative_to(root).parts:
+        if part.startswith("."):
+            raise ValueError("Project path is not admitted")
+    resolved_leaf = full.name.lower()
+    if resolved_leaf in PROJECT_DENY_BASENAMES or resolved_leaf.endswith(PROJECT_DENY_SUFFIXES):
+        raise ValueError("Project path is not admitted")
     node = full if full.is_dir() else full.parent
     while True:
         if node.is_symlink() or node.is_junction():

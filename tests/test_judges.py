@@ -288,5 +288,36 @@ class JudgeFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(bridge.effective("visitor-x", JUDGE_MODEL))
 
 
+class JudgeVerifyTimingTests(unittest.TestCase):
+    """Unknown usernames must cost the same PBKDF2 work as known ones."""
+
+    def test_unknown_users_run_the_password_hash(self):
+        from unittest import mock
+
+        from remote_operator.judge_accounts import JudgeAuthError
+
+        real_iterations = judge_accounts.Pbkdf2_ITERATIONS
+        judge_accounts.Pbkdf2_ITERATIONS = 1000
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                accounts = JudgeAccounts(Path(tmp) / "judges.sqlite3")
+                accounts.signup("ada", "correct-horse-99")
+                real_pbkdf2 = judge_accounts.hashlib.pbkdf2_hmac
+                with mock.patch.object(
+                    judge_accounts.hashlib, "pbkdf2_hmac", wraps=real_pbkdf2
+                ) as hashed:
+                    with self.assertRaises(JudgeAuthError):
+                        accounts.verify("ada", "wrong-password-99")
+                    self.assertEqual(hashed.call_count, 1)
+                    hashed.reset_mock()
+                    with self.assertRaises(JudgeAuthError):
+                        accounts.verify("nosuchuser", "wrong-password-99")
+                    # Skipping the hash would let remote timing enumerate
+                    # valid usernames; the check must still refuse.
+                    self.assertEqual(hashed.call_count, 1)
+        finally:
+            judge_accounts.Pbkdf2_ITERATIONS = real_iterations
+
+
 if __name__ == "__main__":
     unittest.main()

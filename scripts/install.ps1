@@ -260,8 +260,12 @@ if (-not [string]::IsNullOrWhiteSpace($origin)) { $serveArgs += @('--public-orig
 $ErrorActionPreference = 'Continue'
 & $VenvPython @serveArgs *>> $LogFile
 '@
-  $content = $template.Replace('__REPO__', $Root).Replace('__PORT__', "$Port").Replace(
-    '__VENVPYTHON__', $VenvPython)
+  # Single-quoted PowerShell strings escape a quote by doubling it. Without
+  # this, a folder name with an apostrophe (legal on Windows, e.g. O'Brien)
+  # breaks the generated wrapper, and a crafted checkout path could inject a
+  # statement that runs at every sign-in. $Port is an int and needs no escape.
+  $content = $template.Replace('__REPO__', $Root.Replace("'", "''")).Replace(
+    '__PORT__', "$Port").Replace('__VENVPYTHON__', $VenvPython.Replace("'", "''"))
   $old = ''
   if (Test-Path $wrapper) { $old = [System.IO.File]::ReadAllText($wrapper) }
   [System.IO.File]::WriteAllText($wrapper, $content, [System.Text.UTF8Encoding]::new($false))
@@ -638,7 +642,19 @@ function Invoke-Installer {
     Write-Host 'Real Meta answers and Meta voice dictation need your own Meta API key.'
     Write-Host 'The key is stored in the local .env file and never printed or shared.'
     if ($haveKey) { Write-Host 'A key is already saved (not shown).' }
-    $keyAnswer = (Read-Host 'Meta API key? [Enter keeps the saved key / skips]').Trim()
+    # Secure prompt: a plain Read-Host would echo the typed key to the
+    # console (scrollback, screen shares). Enter still skips (empty secret).
+    $secureAnswer = Read-Host 'Meta API key? [Enter keeps the saved key / skips]' -AsSecureString
+    $keyAnswer = ''
+    if ($secureAnswer.Length -gt 0) {
+      $keyBstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureAnswer)
+      try {
+        $keyAnswer = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($keyBstr).Trim()
+      } finally {
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyBstr)
+      }
+    }
+    $secureAnswer.Dispose()
     if ($keyAnswer -eq '') {
       if ($haveKey) { Write-Host 'Kept the saved key.' }
       else {
