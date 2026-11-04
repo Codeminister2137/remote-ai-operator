@@ -23,6 +23,32 @@ OWNER_REPLY_TOPIC = "Owner replies"
 OWNER_REPLY_PREFIX = "REPLY:"
 
 
+def humanize_operation(name: str, arguments: dict) -> str:
+    """One-line human description of a planning operation for chat display.
+
+    Unknown operations fall back to their name so new model tools never
+    render as raw JSON. Never raises on odd shapes.
+    """
+    try:
+        args = dict(arguments or {})
+    except (TypeError, ValueError):
+        args = {}
+    path = str(args.get("path", "") or "")
+    if name == "read_file":
+        return f"Next step: read {path or 'a file'}." if path else "Next step: read a file."
+    if name == "write_file":
+        return f"Next step: write {path or 'a file'}."
+    if name == "validate":
+        return "Next step: run validation."
+    if name == "ask_owner":
+        question = str(args.get("question", "") or "").strip()
+        return f"Question: {question}" if question else "Question for you (see details)."
+    if name == "finish":
+        summary = str(args.get("summary", "") or "").strip()
+        return f"Planning complete. {summary}" if summary else "Planning complete."
+    return f"Next step: {name}."
+
+
 class Supervisor:
     """Planning threads bound to one operator's store, lock and root."""
 
@@ -170,7 +196,13 @@ class Supervisor:
             self.operator.store.save(thread, "inference_receipt", receipt)
         name = getattr(operation, "name", "reply")
         args = getattr(operation, "arguments", {})
-        return f"[{model.name}] planning step {name}: {json.dumps(args)[:500]}", "meta"
+        if not isinstance(args, dict):
+            args = {}
+        summary = getattr(operation, "summary", "")
+        if summary and "summary" not in args:
+            args = {**args, "summary": summary}
+        human = humanize_operation(str(name), args)
+        return f"[{model.name}] {human}", "meta"
 
     def write_plan(self, thread_id: str) -> dict:
         """Render the plan artifact from the transcript; returns it with a nonce."""

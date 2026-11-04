@@ -52,7 +52,7 @@
 <button id="submit" disabled title="Create a task from the request above and run it.">Create and run new task</button></section>
 <section><h2>Step 2 · Review &amp; approve</h2><p id="demoReviewStatus">No task yet. Create and run one above; you will be brought to the Review view when it is ready.</p><button id="demoReviewCta" class="secondary" disabled title="Open the current task in the Review view.">Open in Review</button><button id="sampleReview" class="secondary" disabled title="Load a ready-made scripted review. Reuses one of your validated tasks, or creates and runs one for you.">Load sample review</button><p id="sampleReviewNote" role="status"></p></section>
 <section id="demoStep3"><h2>Step 3 · Try the feature the agent built</h2>
-<p>After approving, run the new importer on the example below. Each line is one issue. Two valid issues should appear in the table; the duplicate ID and missing title should appear as row errors. You can edit the input and try again. This checks the approved code with sample data; it does not save issues to a live tracker.</p>
+<p>After approving, run the new importer on the example below. Each line is one issue. Two valid issues should appear in the table; the duplicate ID and missing title should appear as row errors. You can edit the input and try again. This runs your approved importer in every mode — AI-built or offline reference — with sample data; it does not save issues to a live tracker.</p>
 <label>CSV input<textarea id="csv" rows="7" title="Sample CSV. Each line is one issue; edit it and run again.">id,title,status
 existing,Duplicate,open
 new-1,First imported issue,OPEN
@@ -79,7 +79,7 @@ new-3,Another imported issue,closed</textarea></label>
 <button id="supervisorOpen" class="secondary" disabled title="Create a thread with the topic above.">Create thread</button></span>
 <button id="refreshSupervisor" class="secondary" disabled title="Reload threads and runs.">Refresh threads</button>
 <ol id="supervisorTranscript" role="log" aria-live="polite" aria-label="Supervision conversation"></ol>
-<label>Message<textarea id="supervisorInput" rows="3"></textarea></label>
+<label id="supervisorInputRow">Message<textarea id="supervisorInput" rows="3"></textarea></label>
 <label>Message language<select id="supervisorLang" data-send-lang-for="supervisorInput" title="Language of messages and new thread topics. Non-English text is translated to English on the server before planning; the original is preserved."><option value="en" selected>English</option><option value="pl">Polski</option></select></label>
 <div class="dictate-row" data-dictate-for="supervisorInput" hidden><button id="dictate-supervisor" class="secondary" aria-pressed="false" title="Dictate into the chat message using your browser's speech recognition. Audio is transcribed by your browser vendor (Google on Chrome), not this server. Dictation only fills the field — you review and press Send.">🎤 Dictate (browser speech recognition)</button><label class="dictate-lang">Dictation language<select id="dictate-lang-supervisor"><option value="en-US" selected>English</option><option value="pl-PL">Polski</option></select></label><span id="dictate-status-supervisor" class="dictate-status" role="status" aria-live="polite"></span></div>
 <button id="supervisorSend" disabled title="Send this message in the open thread.">Send message</button>
