@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from remote_operator.control import Operator
+from remote_operator.control import Operator, ProjectOperator
 from remote_operator.runner import DockerValidator
 from remote_operator.scripted import ScriptedModel
 
@@ -19,8 +19,14 @@ def project_paths(project: Path) -> tuple[Path, Path]:
     return seed, checks
 
 
-def build_operator(project: Path, runtime: Path | None = None) -> Operator:
+def build_operator(
+    project: Path, runtime: Path | None = None, work_roots: list[Path] | None = None
+) -> Operator:
     seed, checks = project_paths(project)
+    if work_roots:
+        return ProjectOperator(
+            runtime or project / ".runtime", seed, DockerValidator(checks), work_roots=work_roots
+        )
     return Operator(runtime or project / ".runtime", seed, DockerValidator(checks))
 
 
@@ -82,6 +88,16 @@ def main():
     parser = argparse.ArgumentParser(description="Supervised coding workflow (scripted by default)")
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("--runtime", type=Path)
+    parser.add_argument(
+        "--work-root",
+        type=Path,
+        action="append",
+        default=None,
+        help=(
+            "Repeatable local directory the owner may develop with project tasks "
+            "(local serve only; project tasks run no automated checks)"
+        ),
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     demo = commands.add_parser("demo", help="Run the registered sample (scripted by default)")
     demo.add_argument("--inject-failure", action="store_true")
@@ -121,7 +137,9 @@ def main():
         )
         command.add_argument("--allow-live-inference", action="store_true")
     args = parser.parse_args()
-    operator = build_operator(args.project_root.resolve(), args.runtime)
+    operator = build_operator(
+        args.project_root.resolve(), args.runtime, getattr(args, "work_root", None)
+    )
     try:
         factory, allowance_status = (
             configure_models(args, operator)

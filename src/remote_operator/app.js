@@ -90,6 +90,14 @@ function humanizeStatus(raw) {
   const words = String(raw || "").replace(/_/g, " ").trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Unknown";
 }
+function projectVerdict(task, review, files) {
+  const count = files.length;
+  const where = typeof review.root === "string" && review.root ? " under " + review.root : "";
+  if (!count) return "No staged change yet. Run the task to produce one.";
+  if (task.status === "awaiting_approval") return "Ready: " + count + " staged file(s)" + where + ", no automated checks. Review every diff, then approve to write real files.";
+  if (task.status === "completed") return "Completed: " + count + " file(s) written" + where + ".";
+  return "Status: " + humanizeStatus(task.status) + " · " + count + " staged file(s).";
+}
 function parseChecksReport(output) {
   const match = /OPERATOR_CHECKS (\{[^}]*\})/.exec(String(output || ""));
   if (!match) return null;
@@ -210,6 +218,7 @@ function actions() {
   element("detachKey").disabled = busy || connecting || !sessionKeyAttached;
   element("newTask").disabled = busy || connecting || selectedMode === null;
   element("submit").disabled = busy || connecting || !inferenceAllowed();
+  element("taskTarget").disabled = busy || connecting || selectedMode === null;
   element("sampleReview").disabled = busy || connecting || !inferenceAllowed();
   const submitBlocked = !busy && !connecting && !inferenceAllowed();
   element("submit").title = submitBlocked ? allowanceBlockReason() : "Create a task from the request above and run it.";
@@ -260,6 +269,32 @@ async function recentTasks() {
   }));
   chooser.value = element("taskId").value.trim();
   return tasksOnly;
+}
+async function loadWorkRoots() {
+  const session = sessionRevision;
+  const chooser = element("taskTarget");
+  const note = element("workRootsNote");
+  const previous = chooser.value;
+  try {
+    const data = await api("/api/work-roots");
+    if (session !== sessionRevision || selectedMode === null) return;
+    const roots = Array.isArray(data.roots) ? data.roots : [];
+    const placeholder = document.createElement("option");
+    placeholder.value = "sample"; placeholder.textContent = "Sample task (safe practice file)";
+    chooser.replaceChildren(placeholder, ...roots.map((root) => {
+      const option = document.createElement("option");
+      option.value = "project:" + root; option.textContent = "Repository: " + root;
+      option.title = "The agent reads and stages changes under this folder. Nothing is written until you approve the diff; no automated checks run.";
+      return option;
+    }));
+    chooser.value = [...chooser.options].some((option) => option.value === previous) ? previous : "sample";
+    note.textContent = roots.length ?
+      "Repository targets write real files on approval, with no automated checks. Review every diff." :
+      "This serve registered no repository targets: only the sample task is available.";
+  } catch {
+    if (session !== sessionRevision || selectedMode === null) return;
+    note.textContent = "Repository targets unavailable; only the sample task can be created.";
+  }
 }
 async function loadSettings() {
   const session = sessionRevision;
@@ -728,17 +763,24 @@ function renderApprovalSubject() {
   const short = (hex) => typeof hex === "string" ? hex.slice(0, 12) : "?";
   const kind = reviewContext ?
     "Supervised run " + reviewContext.run_id.slice(0, 12) + (reviewContext.thread_topic ? " \u00b7 thread '" + reviewContext.thread_topic + "'" : "") :
-    "Demo task";
+    task.mode === "project" ? "Repository task" : "Demo task";
   const promptLine = typeof task.prompt === "string" ? task.prompt.split("\n")[0].slice(0, 90) : "";
   const injected = task.injected ? " \u00b7 injected failure" : "";
   const runner = task.evidence && task.evidence.runner ? task.evidence.runner : "not run yet";
-  subject.textContent = kind + " \u00b7 task " + task.id.slice(0, 12) + " \u00b7 attempt " + (task.calls || 0) + injected +
-    " \u00b7 actor " + runner + " \u00b7 candidate " + short(task.evidence && task.evidence.candidate_digest) +
-    " \u00b7 base " + short(task.base_digest) + (promptLine ? ' \u00b7 "' + promptLine + '"' : "") +
+  const approvalFiles = task.mode === "project" && task.approval && Array.isArray(task.approval.files) ? task.approval.files : [];
+  subject.textContent = kind + " · task " + task.id.slice(0, 12) + " · attempt " + (task.calls || 0) + injected +
+    (task.mode === "project" ?
+      " · root " + task.project_root + " · staged files " + approvalFiles.length :
+      " · actor " + runner + " · candidate " + short(task.evidence && task.evidence.candidate_digest) +
+      " · base " + short(task.base_digest)) + (promptLine ? ' · "' + promptLine + '"' : "") +
     (taskSource ? " \u00b7 opened from " + taskSource : "");
   const rows = [];
   const push = (ok, text) => rows.push({ok, text: (ok ? "PASS " : "FAIL ") + text});
-  if (!task.evidence) {
+  const projectFiles = approvalFiles;
+  if (task.mode === "project") {
+    push(projectFiles.length > 0, projectFiles.length ? projectFiles.length + " file(s) staged: " + projectFiles.map((entry) => entry.path).join(", ") + "." : "No staged change yet.");
+    push(true, "No automated checks — the owner is the reviewer.");
+  } else if (!task.evidence) {
     push(false, "No candidate produced yet.");
   } else {
     push(true, "Candidate fingerprinted " + short(task.evidence.candidate_digest) + ".");
@@ -746,9 +788,9 @@ function renderApprovalSubject() {
   }
   if (task.status === "awaiting_approval" && task.approval && typeof task.approval.expires === "number") {
     const fresh = Date.now() < task.approval.expires * 1000;
-    push(fresh, fresh ? "Approval window fresh." : "Approval EXPIRED \u2014 revalidate.");
+    push(fresh, fresh ? "Approval window fresh." : task.mode === "project" ? "Approval EXPIRED — run the task again." : "Approval EXPIRED — revalidate.");
   } else if (task.status === "awaiting_approval") {
-    push(false, "No valid approval \u2014 run fresh validation first.");
+    push(false, task.mode === "project" ? "No valid approval — run the task first." : "No valid approval — run fresh validation first.");
   }
   checklist.replaceChildren(...rows.map((row) => {
     const item = document.createElement("li");
@@ -984,8 +1026,12 @@ async function refresh() {
   element("status").textContent = humanizeStatus(task.status);
   element("status").title = "Raw status: " + task.status;
   renderDiffViews(review.diff, "No candidate change.");
-  element("evidence").textContent = task.evidence ? JSON.stringify(task.evidence, null, 2) : "Not validated.";
-  element("validation-summary").textContent = task.evidence ?
+  const isProject = task.mode === "project";
+  const projectFiles = Array.isArray(review.files) ? review.files : [];
+  element("evidence").textContent = isProject ? "No automated checks for repository tasks; you are the reviewer." :
+    task.evidence ? JSON.stringify(task.evidence, null, 2) : "Not validated.";
+  element("validation-summary").textContent = isProject ? "No automated checks · review the staged diff" :
+    task.evidence ?
     (task.evidence.passed ? "Passed" : "Failed") + " · " + task.evidence.runner + " · source " + task.evidence.candidate_digest.slice(0,12) : "Not validated.";
   if (task.status === "awaiting_approval" && task.approval && typeof task.approval.expires === "number") {
     const remainingMs = task.approval.expires * 1000 - Date.now();
@@ -996,12 +1042,14 @@ async function refresh() {
       element("validation-summary").textContent += " · approve within ~" + minutes + " min";
     }
   }
-  element("verdict").textContent = !task.evidence ? "No candidate yet. Run the task to produce one." :
+  element("verdict").textContent = isProject ? projectVerdict(task, review, projectFiles) :
+    !task.evidence ? "No candidate yet. Run the task to produce one." :
     !task.evidence.passed ? "Validation FAILED. Do not approve; inspect the receipt or revalidate." :
     task.status === "awaiting_approval" ? "Ready: validation passed. Review the diff, then approve to apply." :
     task.status === "completed" ? "Completed: this change was applied." :
     "Status: " + humanizeStatus(task.status) + ".";
-  element("verdict").className = !task.evidence ? "" : !task.evidence.passed ? "verdict-fail" :
+  element("verdict").className = isProject ? (task.status === "awaiting_approval" ? "verdict-ready" : "") :
+    !task.evidence ? "" : !task.evidence.passed ? "verdict-fail" :
     ["awaiting_approval", "completed"].includes(task.status) ? "verdict-ready" : "";
   element("demoReviewStatus").textContent = "Task " + humanizeStatus(task.status) + ": " + element("verdict").textContent +
     (taskSource ? " (opened from " + taskSource + ")" : "");
@@ -1057,7 +1105,11 @@ element("submit").onclick = () => guarded(async () => {
       selectedMode = configuration; displayMode(configuration);
       throw new Error("Execution mode changed. Review the displayed mode before submitting again.");
     }
-    const created = await api("/api/tasks", "POST", {prompt: element("prompt").value});
+    const target = element("taskTarget").value || "sample";
+    const submission = target.startsWith("project:") ?
+      {prompt: element("prompt").value, mode: "project", project: target.slice("project:".length)} :
+      {prompt: element("prompt").value};
+    const created = await api("/api/tasks", "POST", submission);
     if (session !== sessionRevision) return;
     if (created.reply) {
       await loadSupervisorThreads();
@@ -1085,6 +1137,17 @@ element("reconcile").onclick = () => guarded(() => taskAction("/reconcile", {}, 
 element("load").onclick = () => guarded(() => chooseTask(element("taskId").value.trim(), "ID"));
 element("approve").onclick = () => guarded(async () => {
   if (!task) return;
+  if (task.mode === "project") {
+    if (!task.approval) { message("This task has no staged approval yet. Run the task first, then approve the staged diff."); return; }
+    const files = Array.isArray(task.approval.files) ? task.approval.files : [];
+    const names = files.map((entry) => entry.path).join("\n- ");
+    const summary = "Write REAL files?\n\n" + files.length + " file(s) under:\n" + task.project_root +
+      "\n\n- " + names +
+      "\n\nNo automated checks ran — you reviewed the diff. Press OK to write, Cancel to keep reviewing.";
+    if (!window.confirm(summary)) return;
+    await taskAction("/approve", {nonce: task.approval.nonce}, "Approved files written to the repository.");
+    return;
+  }
   if (!task.approval) { message("This task has no valid approval yet. Run fresh validation first, then approve."); return; }
   const short = (hex) => typeof hex === "string" ? hex.slice(0, 12) : "?";
   const runner = task.evidence && task.evidence.runner ? task.evidence.runner : "not run yet";
@@ -1228,6 +1291,8 @@ async function loadMode(session) {
   if (session !== sessionRevision) return;
   startWindowPolling();
   const summaries = await recentTasks();
+  if (session !== sessionRevision) return;
+  await loadWorkRoots();
   if (session !== sessionRevision) return;
   await refreshExternalActions();
   if (session !== sessionRevision) return;

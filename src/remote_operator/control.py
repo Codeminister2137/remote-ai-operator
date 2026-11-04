@@ -99,6 +99,109 @@ def write_source(root: Path, source: str) -> None:
     write_named(root, SOURCE, source)
 
 
+PROJECT_DENY_BASENAMES = frozenset(
+    {"credentials.json", "secrets.json", "id_rsa", "id_ed25519", "id_ecdsa"}
+)
+PROJECT_DENY_SUFFIXES = (".pem", ".key")
+MAX_PROJECT_PATH_CHARS = 512
+
+
+def resolve_project_path(root: Path, rel: str) -> Path:
+    """Resolve ``rel`` inside ``root`` for project-file tasks, or refuse it.
+
+    Unlike :func:`admitted_file` (single-segment sample names), project paths
+    may nest in subdirectories, but every segment must be an explicit plain
+    name: absolute paths, drive letters, parent references, dot-segments and
+    secret-looking basenames are refused before any filesystem access. The
+    resolved path must stay inside ``root`` and neither it nor any directory
+    between ``root`` and its parent may be a link or junction.
+    """
+    root = Path(root).resolve()
+    if not isinstance(rel, str) or not rel or len(rel) > MAX_PROJECT_PATH_CHARS:
+        raise ValueError("Project path is not admitted")
+    if "\\" in rel:
+        raise ValueError("Project path is not admitted")
+    candidate = Path(rel)
+    if candidate.is_absolute() or ":" in rel:
+        raise ValueError("Project path is not admitted")
+    # Split textually: Path parsing would silently drop "." segments.
+    segments = rel.split("/")
+    if not segments:
+        raise ValueError("Project path is not admitted")
+    for segment in segments:
+        if segment in {"", ".", ".."} or segment.startswith("."):
+            raise ValueError("Project path is not admitted")
+    lowered = segments[-1].lower()
+    if lowered in PROJECT_DENY_BASENAMES or lowered.endswith(PROJECT_DENY_SUFFIXES):
+        raise ValueError("Project path is not admitted")
+    full = (root / candidate).resolve()
+    if full != root and root not in full.parents:
+        raise ValueError("Project path escapes the registered root")
+    node = full if full.is_dir() else full.parent
+    while True:
+        if node.is_symlink() or node.is_junction():
+            raise ValueError("Linked project path is forbidden")
+        if node == root:
+            break
+        node = node.parent
+    if full.exists() and (full.is_symlink() or full.is_junction()):
+        raise ValueError("Linked project path is forbidden")
+    return full
+
+
+def read_project_file(root: Path, rel: str) -> str:
+    """Read one admitted text file from a registered project root."""
+    path = resolve_project_path(root, rel)
+    if not path.is_file():
+        raise ValueError("Project path is not a readable file")
+    if path.stat().st_size > MAX_SOURCE_BYTES:
+        raise ValueError("Project file exceeds allowed size")
+    try:
+        return path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("Project file is not decodable text") from None
+
+
+def stage_project_file(staging: Path, rel: str, content: str) -> str:
+    """Atomically stage ``content`` under ``staging`` mirroring ``rel``.
+
+    ``rel`` must already be admitted by :func:`resolve_project_path`; the join
+    is re-checked for containment so a validated relative path can never
+    escape the staging directory.
+    """
+    resolve_project_path(staging, rel)
+    if not isinstance(content, str) or len(content.encode()) > MAX_SOURCE_BYTES:
+        raise ValueError("Invalid staged size/type")
+    staging = staging.resolve()
+    destination = (staging / Path(rel)).resolve()
+    if destination != staging and staging not in destination.parents:
+        raise ValueError("Staged path escapes the staging directory")
+    if destination.exists() and not destination.is_file():
+        raise ValueError("Staged path is not a plain file")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(content.encode())
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return digest(content)
+
+
+def staged_project_files(staging: Path) -> list[str]:
+    """List staged files as POSIX relative paths in sorted order."""
+    if not staging.is_dir():
+        return []
+    found = []
+    for path in sorted(staging.rglob("*")):
+        if path.is_file() and not path.is_symlink():
+            found.append(path.relative_to(staging).as_posix())
+    return found
+
+
 @dataclass(frozen=True)
 class Validation:
     """Host observation of one candidate, separate from model narration."""
@@ -148,11 +251,13 @@ class Operator:
         self.store = Store(self.root / "tasks.sqlite3", after_commit=durable)
         self.lock = ProcessLock(self.root / "operator.lock")
 
-    def submit(self, prompt: str) -> dict:
+    def submit(self, prompt: str, *, mode: str = "sample", project: str | None = None) -> dict:
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 4000:
             raise ValueError("Task requires 1-4000 characters")
         if prompt.strip()[:6].upper() == "REPLY:":
             raise ValueError("REPLY prompts route to the owner thread, not tasks")
+        if mode != "sample" or project is not None:
+            raise ValueError("Project development is not configured on this serve")
         with self.lock:
             task_id = uuid.uuid4().hex
             folder = self.root / task_id
@@ -166,6 +271,7 @@ class Operator:
                 "id": task_id,
                 "prompt": prompt,
                 "status": "queued",
+                "mode": "sample",
                 "base_digest": digest(source),
                 "base_source": source,
                 "history": [],
@@ -332,17 +438,20 @@ class Operator:
             self._check_control(task["id"], deadline)
             return task["evidence"]
         if operation.name == "ask_owner":
-            question = (
-                operation.arguments.get("question", "")
-                if isinstance(operation.arguments, dict)
-                else ""
-            )
-            if not isinstance(question, str) or not question.strip() or len(question) > 500:
-                raise ValueError("ask_owner requires a 1-500 character question")
-            task["pending_question"] = question.strip()
-            task["status"] = "waiting_on_owner"
-            return {"parked": True}
+            return self._park_question(task, operation)
         raise ValueError(f"Unknown or invalid tool: {operation.name}")
+
+    @staticmethod
+    def _park_question(task: dict, operation: Operation) -> dict:
+        """Park the task on an owner question; shared by sample and project flows."""
+        question = (
+            operation.arguments.get("question", "") if isinstance(operation.arguments, dict) else ""
+        )
+        if not isinstance(question, str) or not question.strip() or len(question) > 500:
+            raise ValueError("ask_owner requires a 1-500 character question")
+        task["pending_question"] = question.strip()
+        task["status"] = "waiting_on_owner"
+        return {"parked": True}
 
     def _prepare_approval(self, task: dict) -> None:
         candidate = digest(read_source(self.folder(task["id"], "candidate")))
@@ -603,3 +712,345 @@ class Operator:
                 )
             )
         return {"task": task, "diff": "".join(parts)}
+
+
+class ProjectOperator(Operator):
+    """An :class:`Operator` that can also develop inside real local repositories.
+
+    Sample tasks behave exactly as on the base class. Project tasks (``mode``
+    ``"project"``) read and stage files inside one registered work root chosen
+    at submission; nothing is written to the root until the owner approves the
+    staged diff with the task nonce. Project tasks run no automated checks:
+    approvals record ``checks: "none"`` and the owner is the reviewer.
+
+    Only the local serve builds this class (``--work-root``). Hosted visitor
+    serves keep the base class, where project submission is refused.
+    """
+
+    def __init__(self, root: Path, seed: Path, validator: Validator, *, work_roots, durable=None):
+        super().__init__(root, seed, validator, durable=durable)
+        if not work_roots:
+            raise ValueError("Project development needs at least one work root")
+        resolved = []
+        for candidate in work_roots:
+            path = Path(candidate).resolve()
+            if not path.is_dir():
+                raise ValueError("Work root is not a directory")
+            if path == self.root or self.root in path.parents:
+                raise ValueError("Work root must not overlap the runtime store")
+            resolved.append(path)
+        self.work_roots = tuple(dict.fromkeys(resolved))
+
+    def submit(self, prompt: str, *, mode: str = "sample", project: str | None = None) -> dict:
+        if mode == "sample" and project is None:
+            return super().submit(prompt)
+        if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 4000:
+            raise ValueError("Task requires 1-4000 characters")
+        if prompt.strip()[:6].upper() == "REPLY:":
+            raise ValueError("REPLY prompts route to the owner thread, not tasks")
+        if mode != "project":
+            raise ValueError("Unknown task mode")
+        target = self._select_root(project)
+        with self.lock:
+            task_id = uuid.uuid4().hex
+            staging = self.root / task_id / "staging"
+            staging.mkdir(parents=True)
+            task = {
+                "id": task_id,
+                "prompt": prompt,
+                "status": "queued",
+                "mode": "project",
+                "project_root": str(target),
+                "base_digest": "",
+                "base_source": "",
+                "history": [],
+                "pending": None,
+                "evidence": None,
+                "approval": None,
+                "injected": False,
+                "calls": 0,
+                "applied_digest": None,
+            }
+            self.store.save(task, "submitted", {"mode": "project"})
+            return task
+
+    def _select_root(self, project: str | None) -> Path:
+        """Return the registered work root matching ``project``, or refuse."""
+        if not isinstance(project, str) or not project:
+            raise ValueError("Project tasks require a registered work root")
+        try:
+            candidate = Path(project).resolve()
+        except OSError:
+            raise ValueError("Unknown work root") from None
+        for root in self.work_roots:
+            if candidate == root:
+                return root
+        raise ValueError("Unknown work root")
+
+    def _task_root(self, task: dict) -> Path:
+        """Return the task's work root, which must still be registered."""
+        try:
+            candidate = Path(task["project_root"]).resolve()
+        except (KeyError, OSError):
+            raise ValueError("Task has no registered work root") from None
+        if candidate not in self.work_roots:
+            raise ValueError("Task work root is no longer registered")
+        return candidate
+
+    def _execute(self, task: dict, operation: Operation, *, deadline=float("inf")):
+        if task.get("mode") != "project":
+            return super()._execute(task, operation, deadline=deadline)
+        return self._execute_project(task, operation)
+
+    def _execute_project(self, task: dict, operation: Operation) -> dict:
+        root = self._task_root(task)
+        staging = self.folder(task["id"], "staging")
+        if operation.name in {"read_file", "write_file"}:
+            expected = {"path"} if operation.name == "read_file" else {"path", "content"}
+            if set(operation.arguments) != expected:
+                raise ValueError("Invalid file operation arguments")
+            rel = operation.arguments["path"]
+            if operation.name == "read_file":
+                try:
+                    return {"content": read_project_file(root, rel)}
+                except ValueError:
+                    logger.debug("rejected project read: %r", rel)
+                    raise
+            try:
+                staged_digest = stage_project_file(staging, rel, operation.arguments["content"])
+            except ValueError:
+                logger.debug("rejected project write: %r", rel)
+                raise
+            task["evidence"] = None
+            return {"staged": rel, "digest": staged_digest}
+        if operation.name == "validate" and not operation.arguments:
+            return {
+                "passed": False,
+                "checks": "none-configured",
+                "detail": (
+                    "This serve runs no automated checks for project files; "
+                    "the owner reviews the staged diff before anything is applied."
+                ),
+            }
+        if operation.name == "ask_owner":
+            return self._park_question(task, operation)
+        raise ValueError(f"Unknown or invalid tool: {operation.name}")
+
+    def _prepare_approval(self, task: dict) -> None:
+        if task.get("mode") != "project":
+            return super()._prepare_approval(task)
+        staging = self.folder(task["id"], "staging")
+        root = self._task_root(task)
+        staged = staged_project_files(staging)
+        if not staged:
+            raise ValueError("No staged project changes")
+        files = []
+        for rel in staged:
+            staged_digest = digest((staging / rel).read_bytes().decode("utf-8"))
+            try:
+                base_digest = digest(read_project_file(root, rel))
+                exists = True
+            except ValueError:
+                base_digest = None
+                exists = False
+            files.append(
+                {
+                    "path": rel,
+                    "staged_digest": staged_digest,
+                    "base_digest": base_digest,
+                    "exists": exists,
+                }
+            )
+        task["approval"] = {
+            "nonce": secrets.token_urlsafe(24),
+            "expires": time.time() + TASK_APPROVAL_SECONDS,
+            "files": files,
+            "checks": "none",
+            "evidence_digest": digest("none"),
+        }
+        task["status"] = "awaiting_approval"
+        self.store.save(task, "approval_requested", {"files": [entry["path"] for entry in files]})
+
+    def approve(self, task_id: str, nonce: str, *, now: float | None = None) -> dict:
+        peek = self.store.get(task_id)
+        if peek.get("mode") != "project":
+            return super().approve(task_id, nonce, now=now)
+        with self.lock:
+            task = self.store.get(task_id)
+            approval = task["approval"]
+            if task["status"] != "awaiting_approval" or not approval:
+                raise ValueError("No pending approval")
+            if not isinstance(nonce, str):
+                raise ValueError("Invalid or expired approval")  # noqa: TRY004
+            try:
+                nonce.encode("ascii")
+            except UnicodeEncodeError:
+                raise ValueError("Invalid or expired approval")
+            if (
+                not secrets.compare_digest(approval["nonce"], nonce)
+                or (time.time() if now is None else now) >= approval["expires"]
+            ):
+                raise ValueError("Invalid or expired approval")
+            if self.store.cancelled(task_id):
+                raise ValueError("Cancellation invalidated this approval")
+            root = self._task_root(task)
+            staging = self.folder(task_id, "staging")
+            recorded = approval.get("files") or []
+            if staged_project_files(staging) != sorted(entry["path"] for entry in recorded):
+                task["status"] = "review_required"
+                task["approval"] = None
+                self.store.save(task, "approval_invalidated")
+                raise ValueError("Reviewed staged files changed")
+            for entry in recorded:
+                try:
+                    staged_text = (staging / entry["path"]).read_bytes().decode("utf-8")
+                except (OSError, UnicodeDecodeError):
+                    staged_text = None
+                if staged_text is None or digest(staged_text) != entry["staged_digest"]:
+                    task["status"] = "review_required"
+                    task["approval"] = None
+                    self.store.save(task, "approval_invalidated")
+                    raise ValueError("Reviewed staged files changed")
+                try:
+                    current_base = digest(read_project_file(root, entry["path"]))
+                except ValueError:
+                    current_base = None
+                if current_base != entry["base_digest"]:
+                    task["status"] = "review_required"
+                    task["approval"] = None
+                    self.store.save(task, "approval_invalidated")
+                    raise ValueError("Reviewed project files changed")
+            logger.debug("approval consumed for project task %s", task_id)
+            task["status"] = "applying"
+            self.store.save(task, "apply_started")
+            applied = []
+            for entry in recorded:
+                destination = resolve_project_path(root, entry["path"])
+                if destination == self.root or self.root in destination.parents:
+                    raise ValueError("Apply target overlaps the runtime store")
+                if not destination.parent.is_dir():
+                    raise ValueError("Apply target parent directory is missing")
+                staged_text = (staging / entry["path"]).read_bytes().decode("utf-8")
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        dir=destination.parent, delete=False
+                    ) as stream:
+                        temporary = Path(stream.name)
+                        stream.write(staged_text.encode())
+                    resolve_project_path(root, entry["path"])
+                    os.replace(temporary, destination)
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+                applied.append({"path": entry["path"], "digest": digest(staged_text)})
+            task["status"] = "completed"
+            task["applied_digest"] = digest(
+                json.dumps(applied, sort_keys=True, separators=(",", ":"))
+            )
+            task["approval"] = None
+            self.store.save(task, "applied", {"files": applied})
+            return task
+
+    def reconcile(self, task_id: str) -> dict:
+        peek = self.store.get(task_id)
+        if peek.get("mode") != "project":
+            return super().reconcile(task_id)
+        with self.lock:
+            task = self.store.get(task_id)
+            if task["status"] == "applying":
+                approved = task["approval"]
+                root = self._task_root(task)
+                applied = []
+                complete = bool(approved and approved.get("files"))
+                for entry in approved.get("files") or []:
+                    try:
+                        current = digest(read_project_file(root, entry["path"]))
+                    except ValueError:
+                        current = None
+                    if current != entry["staged_digest"]:
+                        complete = False
+                        break
+                    applied.append({"path": entry["path"], "digest": current})
+                task["status"] = "completed" if complete else "review_required"
+                if complete:
+                    task["applied_digest"] = digest(
+                        json.dumps(applied, sort_keys=True, separators=(",", ":"))
+                    )
+            elif task["status"] in {"running", "reconciliation_required"}:
+                pending = task["pending"]
+                if pending and pending["name"] == "write_file":
+                    root = self._task_root(task)
+                    staging = self.folder(task["id"], "staging")
+                    try:
+                        rel = pending["arguments"].get("path", "")
+                        resolve_project_path(root, rel)
+                        actual = digest((staging / rel).read_bytes().decode("utf-8"))
+                    except (ValueError, OSError, UnicodeDecodeError):
+                        raise ValueError(
+                            "Uncertain edit differs; manual inspection required"
+                        ) from None
+                    if actual != digest(pending["arguments"].get("content", "")):
+                        raise ValueError("Uncertain edit differs; manual inspection required")
+                    task["history"].append(
+                        {
+                            "name": "write_file",
+                            "arguments": pending["arguments"],
+                            "result": {"digest": actual},
+                        }
+                    )
+                elif pending:
+                    raise ValueError("Uncertain non-write operation needs manual inspection")
+                task["pending"] = None
+                task["status"] = "paused"
+            else:
+                raise ValueError("Task has no interrupted operation")
+            task["approval"] = None
+            task["evidence"] = None
+            self.store.save(task, "reconciled", {"status": task["status"]})
+            return task
+
+    def revalidate(self, task_id):
+        if self.store.get(task_id).get("mode") == "project":
+            raise ValueError("Project tasks have no automated checks to re-run")
+        return super().revalidate(task_id)
+
+    def sample(self, task_id, csv_text):
+        if self.store.get(task_id).get("mode") == "project":
+            raise ValueError("CSV samples apply to the registered sample task only")
+        return super().sample(task_id, csv_text)
+
+    def review(self, task_id: str) -> dict:
+        task = self.store.get(task_id)
+        if task.get("mode") != "project":
+            return super().review(task_id)
+        if task.get("supervisor_thread"):
+            raise ValueError("Task id is a planning thread; use the thread routes")
+        root = self._task_root(task)
+        staging = self.folder(task_id, "staging")
+        files = []
+        parts = []
+        for rel in staged_project_files(staging):
+            try:
+                base_text = read_project_file(root, rel)
+            except ValueError:
+                base_text = ""
+            staged_text = (staging / rel).read_bytes().decode("utf-8")
+            parts.append(
+                "".join(
+                    difflib.unified_diff(
+                        base_text.splitlines(True),
+                        staged_text.splitlines(True),
+                        fromfile="base/" + rel,
+                        tofile="candidate/" + rel,
+                    )
+                )
+            )
+            files.append(
+                {
+                    "path": rel,
+                    "base_digest": digest(base_text) if base_text else None,
+                    "staged_digest": digest(staged_text),
+                }
+            )
+        return {"task": task, "root": str(root), "files": files, "diff": "".join(parts)}
