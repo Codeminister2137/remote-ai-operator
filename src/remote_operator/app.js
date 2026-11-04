@@ -1991,6 +1991,7 @@ async function dictateViaMeta(ctx) {
   const base = field.value;
   const shortLang = dictateShortLang(lang.value);
   let accumulated = "";
+  let receipts = [];
   let slices = 0;
   let stopping = false;
   let recorder = null;
@@ -2078,12 +2079,14 @@ async function dictateViaMeta(ctx) {
     status.textContent = "Recording with Meta (slice " + slice + ", up to 55s each)... Words appear when you press Stop.";
     const blob = await recordSlice();
     if (!blob) { failed = failed || new Error("Recording failed."); break; }
-    if (blob.size < 1024) continue; // Instant stop; nothing worth billing.
+    if (blob.size < 1024) { receipts.push("slice " + slice + ": skipped, under 1KB"); continue; }
+    receipts.push("slice " + slice + ": " + Math.round(blob.size / 1024) + "KB audio");
     status.textContent = "Transcribing slice " + slice + " with Meta... Press Stop to finish.";
     chain = chain.then(async () => {
       if (failed) return;
       const result = await transcribeSlice(blob, slice, shortLang, ctx.inputHint);
       const text = ((result && result.text) || "").trim();
+      receipts.push("slice " + slice + ": transcript " + text.length + " chars");
       if (text) {
         accumulated = accumulated ? accumulated + " " + text : text;
         field.value = joinDictation(base, accumulated);
@@ -2109,19 +2112,20 @@ async function dictateViaMeta(ctx) {
     startBrowserDictation(ctx);
     return;
   }
+  const receiptNote = receipts.length ? " [" + receipts.slice(-4).join("; ") + "]" : "";
   if (accumulated) {
     field.value = joinDictation(base, accumulated);
     const buddy = document.querySelector('[data-send-lang-for="' + field.id + '"]');
     if (buddy) buddy.value = shortLang; // Dictated text is tagged on send.
     status.textContent = "Dictation added (Meta, " + dictateLangName(lang.value) +
       (failed ? "; stopped early: " + failed.message : "") +
-      "). Review and edit before sending. Nothing was sent.";
+      "). Review and edit before sending. Nothing was sent." + receiptNote;
     if (failed) message(failed.message);
   } else if (failed) {
-    status.textContent = failed.message + " Field unchanged.";
+    status.textContent = failed.message + " Field unchanged." + receiptNote;
     field.value = base;
   } else {
-    status.textContent = "No speech captured; field unchanged.";
+    status.textContent = "No speech captured; field unchanged." + receiptNote;
     field.value = base;
   }
   finish();
