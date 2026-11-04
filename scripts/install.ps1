@@ -3,8 +3,9 @@
 
    What it does:
      1. Checks Python (>= 3.12).
-     2. Offers to install uv when missing, then creates or reuses .venv
-        and installs the operator (prefers uv, falls back to plain Python).
+     2. Offers to install uv and ffmpeg when missing, then creates or
+        reuses .venv and installs the operator (prefers uv, falls back
+        to plain Python).
      3. Creates .env with a random owner password (OPERATOR_ACCESS_TOKEN)
         when missing. An existing password is kept and NEVER printed.
      4. Asks which code folder the agent may develop (project tasks).
@@ -368,6 +369,21 @@ function Install-Uv {
   if ($null -eq (Find-UvCommand)) { throw 'uv installed but is not on PATH yet.' }
 }
 
+function Install-Ffmpeg {
+  Write-Host 'Installing ffmpeg (audio converter for voice dictation)...'
+  $winget = Get-Command winget.exe, winget -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  if ($null -eq $winget) { throw 'winget is not available.' }
+  & $winget.Source install -e --id Gyan.FFmpeg `
+    --accept-source-agreements --accept-package-agreements
+  if ($LASTEXITCODE -ne 0) { throw 'winget could not install ffmpeg.' }
+  $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') +
+    ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
+  if ($null -eq (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+    throw 'ffmpeg installed but is not on PATH yet (sign out and back in).'
+  }
+}
+
 function Install-Tailscale {
   Write-Host 'Installing Tailscale (Windows may show an administrator approval dialog)...'
   $winget = Get-Command winget.exe, winget -ErrorAction SilentlyContinue |
@@ -456,6 +472,27 @@ function Invoke-Installer {
       }
     } else {
       Write-Host 'Skipping uv; plain Python will be used instead.'
+    }
+  }
+
+  # ffmpeg: the server needs it to convert browser audio for Meta transcription.
+  if ($null -eq (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+    $wantsFfmpeg = $false
+    if (-not $NonInteractive) {
+      Write-Host 'ffmpeg (audio converter for voice dictation) was not found.'
+      $wantsFfmpeg = Read-Choice 'Install ffmpeg now (winget)?' $true
+    }
+    if ($wantsFfmpeg) {
+      try {
+        Install-Ffmpeg
+        Write-Host 'ffmpeg installed.'
+      } catch {
+        Write-Host "Could not install ffmpeg automatically: $($_.Exception.Message)"
+        $manualSteps += 'Install ffmpeg (winget install -e --id Gyan.FFmpeg) or voice dictation falls back to browser speech.'
+      }
+    } else {
+      Write-Host 'Skipping ffmpeg; voice dictation will use browser speech instead of Meta.'
+      $manualSteps += 'Install ffmpeg (winget install -e --id Gyan.FFmpeg) to enable Meta voice dictation.'
     }
   }
 
