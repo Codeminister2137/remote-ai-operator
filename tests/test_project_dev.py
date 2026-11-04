@@ -1,6 +1,7 @@
 """Project-task checks: path admission, staging, approval and apply boundaries."""
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -293,17 +294,60 @@ class ProjectTaskTests(unittest.TestCase):
             self.operator.approve(task["id"], result["approval"]["nonce"])
         self.assertEqual(self.operator.store.get(task["id"])["status"], "review_required")
 
-    def test_sample_and_revalidate_refused(self):
+    def test_sample_refused_and_revalidate_remints(self):
         task = self.submit()
         ops = [Operation("write_file", {"path": "app/main.py", "content": "print('v2')\n"})]
         result = self.operator.run(task["id"], ScriptedOps(ops))
         with self.assertRaises(ValueError):
             self.operator.sample(task["id"], "id\n")
+        old_nonce = result["approval"]["nonce"]
+        fresh = self.operator.revalidate(task["id"])
+        self.assertEqual(fresh["status"], "awaiting_approval")
+        self.assertNotEqual(fresh["approval"]["nonce"], old_nonce)
         with self.assertRaises(ValueError):
-            self.operator.revalidate(task["id"])
-        self.operator.approve(task["id"], result["approval"]["nonce"])
+            self.operator.approve(task["id"], old_nonce)
+        self.operator.approve(task["id"], fresh["approval"]["nonce"])
         with self.assertRaises(ValueError):
             self.operator.sample(task["id"], "id\n")
+
+    def test_revalidate_recovers_expired_approval(self):
+        task = self.submit()
+        ops = [Operation("write_file", {"path": "app/main.py", "content": "print('v2')\n"})]
+        result = self.operator.run(task["id"], ScriptedOps(ops))
+        stored = self.operator.store.get(task["id"])
+        stored["approval"]["expires"] = time.time() - 1
+        self.operator.store.save(stored, "fixture_expired")
+        with self.assertRaises(ValueError):
+            self.operator.approve(task["id"], result["approval"]["nonce"])
+        fresh = self.operator.revalidate(task["id"])
+        self.assertEqual(fresh["status"], "awaiting_approval")
+        self.operator.approve(task["id"], fresh["approval"]["nonce"])
+        self.assertEqual(self.operator.store.get(task["id"])["status"], "completed")
+
+    def test_revalidate_recovers_review_required(self):
+        task = self.submit()
+        ops = [Operation("write_file", {"path": "app/main.py", "content": "print('v2')\n"})]
+        result = self.operator.run(task["id"], ScriptedOps(ops))
+        (self.work / "app" / "main.py").write_text("print('v1b')\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.operator.approve(task["id"], result["approval"]["nonce"])
+        self.assertEqual(self.operator.store.get(task["id"])["status"], "review_required")
+        fresh = self.operator.revalidate(task["id"])
+        self.assertEqual(fresh["status"], "awaiting_approval")
+        self.operator.approve(task["id"], fresh["approval"]["nonce"])
+        self.assertEqual(self.operator.store.get(task["id"])["status"], "completed")
+        self.assertEqual(
+            (self.work / "app" / "main.py").read_text(encoding="utf-8"), "print('v2')\n"
+        )
+
+    def test_revalidate_without_staged_changes_needs_review(self):
+        task = self.submit()
+        with self.assertRaises(ValueError):
+            self.operator.run(task["id"], ScriptedOps([]))
+        self.assertEqual(self.operator.store.get(task["id"])["status"], "paused")
+        with self.assertRaises(ValueError):
+            self.operator.revalidate(task["id"])
+        self.assertEqual(self.operator.store.get(task["id"])["status"], "review_required")
 
     def test_apply_refuses_runtime_overlap(self):
         base = Path(self.directory.name)
