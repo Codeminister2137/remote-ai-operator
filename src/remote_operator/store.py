@@ -75,7 +75,8 @@ class Store:
         """Return summaries for the most recent tasks.
 
         ``limit`` is clamped to the inclusive range 1..50. Each summary
-        contains ``id``, a truncated ``prompt`` preview and ``status``.
+        contains ``id``, a truncated ``prompt`` preview, ``status`` and the
+        task ``mode`` (``sample`` for legacy rows without one).
         """
         if type(limit) is not int or not 1 <= limit <= 50:
             raise ValueError(f"limit must be an integer between 1 and 50: got {limit!r}")

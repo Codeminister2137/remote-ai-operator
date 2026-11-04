@@ -202,6 +202,10 @@ class Supervisor:
         if summary and "summary" not in args:
             args = {**args, "summary": summary}
         human = humanize_operation(str(name), args)
+        words = summary.strip() if isinstance(summary, str) else ""
+        if words and words not in human:
+            shown = words if len(words) <= 500 else words[:497] + "..."
+            human = f"{shown}\n{human}"
         return f"[{model.name}] {human}", "meta"
 
     def write_plan(self, thread_id: str) -> dict:

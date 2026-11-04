@@ -282,6 +282,40 @@ class SupervisorUnitTests(unittest.TestCase):
             self.supervisor.list_threads(0)
         with self.assertRaises(ValueError):
             self.supervisor.list_threads(99)
+
+    def test_live_reply_prefers_model_words(self):
+        from remote_operator.control import Operation
+
+        class WordyModel:
+            name = "wordy-test-model"
+
+            def next_operation(self, history, *, prompt):
+                return Operation(
+                    "read_file",
+                    {"path": "sample-task.md"},
+                    summary="Let me look at the task file first.",
+                )
+
+        thread = self.supervisor.open_thread("topic")
+        reply = self.supervisor.post_message(WordyModel(), thread["id"], "hello")
+        self.assertEqual(reply["route"], "meta")
+        self.assertIn("Let me look at the task file first.", reply["reply"])
+        self.assertIn("Next step: read sample-task.md.", reply["reply"])
+
+    def test_live_reply_template_without_model_words(self):
+        from remote_operator.control import Operation
+
+        class QuietModel:
+            name = "quiet-test-model"
+
+            def next_operation(self, history, *, prompt):
+                return Operation("read_file", {"path": "sample-task.md"})
+
+        thread = self.supervisor.open_thread("topic")
+        reply = self.supervisor.post_message(QuietModel(), thread["id"], "hello")
+        self.assertEqual(reply["reply"], "[quiet-test-model] Next step: read sample-task.md.")
+
+
 class HumanizeOperationTests(unittest.TestCase):
     def test_known_operations_read_as_sentences(self):
         from remote_operator.supervisor import humanize_operation

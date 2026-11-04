@@ -125,7 +125,11 @@ async function api(path, method = "GET", body) {
   return data;
 }
 function message(text) { element("message").textContent = text; }
-function accessStatus(text) { element("accessStatus").textContent = text; }
+function accessStatus(text, isError) {
+  const status = element("accessStatus");
+  status.textContent = text;
+  status.className = isError ? "status-error" : "";
+}
 async function guarded(action) {
   try { await action(); } catch (error) { message(error.message); }
 }
@@ -1025,7 +1029,7 @@ async function refresh() {
   task = review.task;
   if (location.hash.slice(1) !== task.id) location.hash = task.id;
   element("recentTasks").value = task.id;
-  element("status").textContent = humanizeStatus(task.status);
+  element("status").textContent = (task.mode === "project" ? "Repository task · " : "Sample task · ") + humanizeStatus(task.status);
   element("status").title = "Raw status: " + task.status;
   renderDiffViews(review.diff, "No candidate change.");
   const isProject = task.mode === "project";
@@ -1113,6 +1117,11 @@ element("submit").onclick = () => guarded(async () => {
       {prompt: element("prompt").value};
     const created = await api("/api/tasks", "POST", submission);
     if (session !== sessionRevision) return;
+    if (!created.reply) {
+      message(target.startsWith("project:") ?
+        "Repository task created under " + target.slice("project:".length) + " — running." :
+        "Sample task created (safe practice file) — running.");
+    }
     if (created.reply) {
       await loadSupervisorThreads();
       await openSupervisorThread(created.thread_id);
@@ -1335,9 +1344,9 @@ element("connect").onclick = () => guarded(async () => {
   try {
     await loadMode(session);
     if (session === sessionRevision)
-      accessStatus(selectedMode ? "Connected. Execution mode loaded." : "Connected, but no execution mode was loaded. Check the server is running, then press Connect again.");
+      accessStatus(selectedMode ? "Connected. Execution mode loaded." : "Connected, but no execution mode was loaded. Check the server is running, then press Connect again.", !selectedMode);
   } catch (error) {
-    if (session === sessionRevision) accessStatus("Connect failed: " + error.message);
+    if (session === sessionRevision) accessStatus("Connect failed: " + error.message, true);
     throw error;
   } finally {
     if (session === sessionRevision) { connecting = false; actions(); }
@@ -1356,7 +1365,7 @@ element("enterSession").onclick = () => guarded(async () => {
       accessStatus("Connected. Private session started.");
     }
   } catch (error) {
-    if (session === sessionRevision) accessStatus("Connect failed: " + error.message);
+    if (session === sessionRevision) accessStatus("Connect failed: " + error.message, true);
     throw error;
   } finally {
     if (session === sessionRevision) { connecting = false; actions(); }
@@ -1763,9 +1772,7 @@ function startBrowserDictation(ctx) {
     field.focus();
   };
   setRecording(true);
-  status.textContent = (ctx.fallbackNote ? "Meta failed (" + ctx.fallbackNote + "); browser listening instead. " : "") +
-    "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
-  ctx.fallbackNote = null;
+  status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
   try {
     session.start();
   } catch (error) {
@@ -2111,9 +2118,10 @@ async function dictateViaMeta(ctx) {
   }
   if (failed && !accumulated && Dictation.supported()) {
     finish();
-    ctx.fallbackNote = failed.message;
-    message(failed.message + " Using browser speech instead.");
-    startBrowserDictation(ctx);
+    ctx.preferBrowser = true;
+    status.textContent = "Meta transcription failed (" + failed.message + ")." +
+      " Press Dictate again to use browser speech instead.";
+    message("Meta transcription failed (" + failed.message + "). Press Dictate again for browser speech.");
     return;
   }
   const receiptNote = receipts.length ? " [" + receipts.slice(-4).join("; ") + "]" : "";
@@ -2148,6 +2156,11 @@ function wireDictation(fieldId, buttonId, langId, statusId, noun, inputHint) {
   ctx.button.onclick = () => {
     if (ctx.busy) return; // A Meta session replaces this handler while recording.
     if (ctx.rec) { ctx.stopBrowser(); return; } // Toggle browser session off.
+    if (ctx.preferBrowser && Dictation.supported()) {
+      ctx.preferBrowser = false;
+      startBrowserDictation(ctx);
+      return;
+    }
     if (MetaStt.active()) dictateViaMeta(ctx);
     else if (Dictation.supported()) startBrowserDictation(ctx);
     else {
