@@ -1763,9 +1763,7 @@ function startBrowserDictation(ctx) {
     field.focus();
   };
   setRecording(true);
-  status.textContent = (ctx.fallbackNote ? "Meta failed (" + ctx.fallbackNote + "); browser listening instead. " : "") +
-    "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
-  ctx.fallbackNote = null;
+  status.textContent = "Listening (" + dictateLangName(lang.value) + ")... Speak now; press Stop or pause to finish.";
   try {
     session.start();
   } catch (error) {
@@ -2111,9 +2109,10 @@ async function dictateViaMeta(ctx) {
   }
   if (failed && !accumulated && Dictation.supported()) {
     finish();
-    ctx.fallbackNote = failed.message;
-    message(failed.message + " Using browser speech instead.");
-    startBrowserDictation(ctx);
+    ctx.preferBrowser = true;
+    status.textContent = "Meta transcription failed (" + failed.message + ")." +
+      " Press Dictate again to use browser speech instead.";
+    message("Meta transcription failed (" + failed.message + "). Press Dictate again for browser speech.");
     return;
   }
   const receiptNote = receipts.length ? " [" + receipts.slice(-4).join("; ") + "]" : "";
@@ -2148,6 +2147,11 @@ function wireDictation(fieldId, buttonId, langId, statusId, noun, inputHint) {
   ctx.button.onclick = () => {
     if (ctx.busy) return; // A Meta session replaces this handler while recording.
     if (ctx.rec) { ctx.stopBrowser(); return; } // Toggle browser session off.
+    if (ctx.preferBrowser && Dictation.supported()) {
+      ctx.preferBrowser = false;
+      startBrowserDictation(ctx);
+      return;
+    }
     if (MetaStt.active()) dictateViaMeta(ctx);
     else if (Dictation.supported()) startBrowserDictation(ctx);
     else {
