@@ -3,7 +3,8 @@
 
    What it does:
      1. Checks Python (>= 3.12).
-     2. Creates or reuses .venv and installs the operator (prefers uv).
+     2. Offers to install uv when missing, then creates or reuses .venv
+        and installs the operator (prefers uv, falls back to plain Python).
      3. Creates .env with a random owner password (OPERATOR_ACCESS_TOKEN)
         when missing. An existing password is kept and NEVER printed.
      4. Asks which code folder the agent may develop (project tasks).
@@ -335,6 +336,29 @@ function Test-TailscaleServing($TailscaleExe, $Port) {
   } catch { return $false }
 }
 
+function Find-UvCommand {
+  $cmd = Get-Command uv -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -ne $cmd) { return $cmd.Source }
+  # A fresh winget install may not be on this shell's PATH yet; refresh it
+  # from the registry once before giving up.
+  $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') +
+    ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
+  $cmd = Get-Command uv -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -ne $cmd) { return $cmd.Source }
+  return $null
+}
+
+function Install-Uv {
+  Write-Host 'Installing uv (fast Python installer)...'
+  $winget = Get-Command winget.exe, winget -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  if ($null -eq $winget) { throw 'winget is not available.' }
+  & $winget.Source install -e --id astral-sh.uv `
+    --accept-source-agreements --accept-package-agreements
+  if ($LASTEXITCODE -ne 0) { throw 'winget could not install uv.' }
+  if ($null -eq (Find-UvCommand)) { throw 'uv installed but is not on PATH yet.' }
+}
+
 function Install-Tailscale {
   Write-Host 'Installing Tailscale (Windows may show an administrator approval dialog)...'
   $winget = Get-Command winget.exe, winget -ErrorAction SilentlyContinue |
@@ -405,6 +429,26 @@ function Invoke-Installer {
       'then re-run this installer.')
   }
   Write-Host "Using Python: $pythonExe"
+
+  # uv: faster installs using the project lockfile; offer to install it.
+  if ($null -eq (Find-UvCommand)) {
+    $wantsUv = $false
+    if (-not $NonInteractive) {
+      Write-Host 'uv (fast Python installer) was not found.'
+      $wantsUv = Read-Choice 'Install uv now (winget)?' $true
+    }
+    if ($wantsUv) {
+      try {
+        Install-Uv
+        Write-Host 'uv installed.'
+      } catch {
+        Write-Host "Could not install uv automatically: $($_.Exception.Message)"
+        Write-Host 'Continuing with plain Python instead.'
+      }
+    } else {
+      Write-Host 'Skipping uv; plain Python will be used instead.'
+    }
+  }
 
   # 2. Program files ---------------------------------------------------
   Write-Step 'Installing the program files'
@@ -482,6 +526,7 @@ function Invoke-Installer {
     }
     Write-Host 'The agent can read files and propose changes in this folder.'
     Write-Host 'Nothing is written until you approve the diff in the browser.'
+    Write-Host 'A short folder name works too (like demo-repo); the full path is saved.'
     $answer = (Read-Host 'Code folder for the agent? [Enter keeps current, "none" clears]').Trim()
     if ($answer -eq '') { $chosenRoots = $existingRoots }
     elseif ($answer.ToLowerInvariant() -eq 'none') { $chosenRoots = @() }
