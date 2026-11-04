@@ -210,6 +210,17 @@ if (!String(el("approvalSubject").textContent).includes("staged files 2")) {
   fail("subject missed staged count: " + el("approvalSubject").textContent);
 }
 
+// Sample target locks the request to the fixed sample text; project targets unlock it.
+run(`selectedMode = {mode: "scripted"}; busy = false; connecting = false;
+     element("taskTarget").value = "sample";
+     element("prompt").value = "write 7 random sentences"; syncPromptForTarget();`);
+if (el("prompt").disabled !== true) fail("prompt enabled on sample target");
+if (el("prompt").value !== run(`defaultPrompt`)) fail("prompt not reset on sample target");
+if (el("dictate-prompt").disabled !== true) fail("dictate enabled on locked prompt");
+run(`element("taskTarget").value = "project:demo"; syncPromptForTarget();`);
+if (el("prompt").disabled !== false) fail("prompt disabled on project target");
+if (!html.includes("request box is locked")) fail("sample prompt lock hint missing");
+
 // Concurrent inbox polls fetch once; the second call is dropped, not duplicated.
 (async () => {
   run(`selectedMode = {mode: "scripted"}; inboxCursor = 0; inboxItems = []; ownerFloorSeq = 0;
