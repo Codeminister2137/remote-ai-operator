@@ -79,7 +79,7 @@ Also confirm no private plans or raw trial evidence in the tree.
 ## 7. Repo + judge access (per 20:00 decisions)
 
 - Make the repo public (now/at-submit/keep-private per decision).
-- Deliver URL + access code via the decided channel (never in repo).
+- Deliver URL + access code via the decided channel (code already public in README by owner decision 2026-11-03 open entry; no separate delivery needed).
 
 ## 8. Video, upload, submit
 
