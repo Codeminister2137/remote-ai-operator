@@ -681,7 +681,7 @@ def _stt_unavailable_message(who: Principal) -> str:
     """
     if who.hosted:
         return (
-            "Transcription unavailable: attach a provider key in Supervise, "
+            "Transcription unavailable: attach your Meta key under 'Your model key', "
             "or use browser dictation instead"
         )
     return (

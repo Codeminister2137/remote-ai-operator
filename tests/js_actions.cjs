@@ -151,6 +151,12 @@ run(`selectedMode = {mode: "meta"}; modelRouteConfigured = true; sessionKeyAttac
 if (!String(el("key-note").textContent).includes("own Meta account")) {
   fail("meta note lost funding: " + el("key-note").textContent);
 }
+if (!String(el("key-note").textContent).includes("live AI instead of the recording")) {
+  fail("meta note hides what the key buys: " + el("key-note").textContent);
+}
+if (!html.includes("switches the sample from a recording to a real agent run")) {
+  fail("quick-start hides what the key buys");
+}
 run(`selectedMode = {mode: "baseten"}; modelRouteConfigured = false; keyNote();`);
 if (!String(el("key-note").textContent).includes("No Baseten model route")) {
   fail("baseten no-route note wrong: " + el("key-note").textContent);

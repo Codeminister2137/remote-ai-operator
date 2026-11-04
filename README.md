@@ -1,24 +1,46 @@
 # Remote AI Operator
 
-> **Judges start here (5 minutes, no install):** live demo at
-> `https://remote-operator--hosted.us-east.modal.run` — the entry code is public
-> in [Hosted visitor mode](#hosted-visitor-mode). Full path: [Judge quick-start
-> card](docs/judge-card.md) (code → wizard → sample → approve → try-it).
+**Supervise a coding agent from your phone. Approve the exact change — nothing else.**
 
-A standalone prototype for supervised coding with host-generated validation and
-approval of an exact change. Started during the October 26–November 4, 2026 event.
+> **Judges — try it live (5 minutes, no install):**
+> `https://remote-operator--hosted.us-east.modal.run` ·
+> entry code `KwWLEbaTQ-YzSDqn4pqEz5hdnVHBShJz` (public by owner decision —
+> entry is open, sessions stay isolated per visit).
+> Guided path: [Judge quick-start card](docs/judge-card.md)
+> (code → wizard → sample → approve → try-it).
+
+This project began as a way to drive my other project, ai-workbench, remotely:
+everyday app development from anywhere, and a way to talk to my locally-run
+models when away from the PC. It grew into a standalone supervised-coding
+operator — and its own chat, approvals, and remote operation were used
+throughout this event to build it. Started October 26–November 4, 2026;
+everything a judge touches was built during the event.
+
+## Hosted demo vs local install
+
+| | Hosted demo (link above) | Local install (below) |
+|---|---|---|
+| Fixed sample task (CSV import) | Yes — scripted (free) or live Meta AI with your own key | Yes |
+| Supervised runs, chat, dictation, try-it | Yes | Yes |
+| Custom work on your own repositories | No — needs local folders | Yes, via `--work-root` |
+| Cost to you | $0 on scripted; your own key/limits on Meta | Your own grant/key |
+| Install | None | ~15 min, Windows + Docker |
+
+Honest limits: hosted runs the fixed sample only — your key switches that
+sample from a recording to a live agent run; it does not unlock custom tasks.
+Repository tasks run no automated checks (you are the reviewer). Broader
+repository tools and release work remain unfinished. No private packages are
+required.
 
 **Default: clearly labelled scripted offline reference** (a fixed pre-written
-demo: no AI, no cost, no key needed). The prepared Meta model adapter (Responses
-API) requires explicit live activation and verified finite credit admission;
-a small live source-edit/test run is verified (see docs/live-acceptance.md). The application provides controlled
-edits, append-only local records (SQLite receipts), isolated tests, cancellation, exact-change approval and a
-working sample import-results screen. Scripted remote-phone operation is verified;
-the complete real Meta HTTPS browser flow and owner-confirmed physical-phone Meta
-submission/review/approval are verified. Broader repository tools and release work
-remain unfinished. No private packages are required.
-
-For a short independent walkthrough, see [Reviewer guide](docs/reviewer-guide.md).
+demo: no AI, no cost, no key needed). The Meta model adapter (Responses API)
+requires explicit activation and finite credit admission; a live
+source-edit/test run is verified (see docs/live-acceptance.md). Controlled
+edits, append-only local records (SQLite receipts), isolated tests,
+cancellation, exact-change approval and a working sample import-results
+screen. Scripted and real-Meta phone operation are verified on a physical
+phone. For a short independent walkthrough, see
+[Reviewer guide](docs/reviewer-guide.md).
 
 ## Phone operation (served UI)
 
