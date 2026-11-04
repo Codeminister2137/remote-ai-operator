@@ -126,15 +126,13 @@ class JudgeAccounts:
             row = db.execute(
                 "SELECT salt, password_hash FROM judge_accounts WHERE username=?", (username,)
             ).fetchone()
-        candidate = (
-            hashlib.pbkdf2_hmac(
-                "sha256", password.encode(), bytes.fromhex(row[0]), Pbkdf2_ITERATIONS
-            ).hex()
-            if row
-            else secrets.token_hex(32)
-        )
-        # Dummy comparison on unknown users keeps timing uniform.
+        # Always run the password hash, even for unknown users: skipping the
+        # 600k-iteration PBKDF2 would let remote timing distinguish valid
+        # usernames from invalid ones. The dummy salt keeps the work uniform;
+        # the dummy comparison below then fails the same way as a wrong hash.
+        salt = bytes.fromhex(row[0]) if row else b"\x00" * 16
         expected = row[1] if row else secrets.token_hex(32)
+        candidate = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, Pbkdf2_ITERATIONS).hex()
         if not hmac.compare_digest(candidate, expected):
             with self._lock:
                 fails, _ = self._throttle.get(username, [0, 0.0])
