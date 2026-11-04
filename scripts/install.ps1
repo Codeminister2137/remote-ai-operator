@@ -361,6 +361,18 @@ function Find-UvCommand {
   return $null
 }
 
+function Find-FfmpegCommand {
+  $cmd = Get-Command ffmpeg -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -ne $cmd) { return $cmd.Source }
+  # A previous install may not be on this shell's PATH yet; refresh it
+  # from the registry once before offering a reinstall.
+  $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') +
+    ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
+  $cmd = Get-Command ffmpeg -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -ne $cmd) { return $cmd.Source }
+  return $null
+}
+
 function Install-Uv {
   Write-Host 'Installing uv (fast Python installer)...'
   $winget = Get-Command winget.exe, winget -ErrorAction SilentlyContinue |
@@ -379,10 +391,16 @@ function Install-Ffmpeg {
   if ($null -eq $winget) { throw 'winget is not available.' }
   & $winget.Source install -e --id Gyan.FFmpeg `
     --accept-source-agreements --accept-package-agreements
-  if ($LASTEXITCODE -ne 0) { throw 'winget could not install ffmpeg.' }
-  $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') +
-    ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
-  if ($null -eq (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+  if ($LASTEXITCODE -ne 0) {
+    # winget reports a nonzero code when the package is already installed;
+    # that counts as success when the binary is actually usable.
+    if ($null -ne (Find-FfmpegCommand)) {
+      Write-Host 'ffmpeg was already installed; using it.'
+      return
+    }
+    throw 'winget could not install ffmpeg.'
+  }
+  if ($null -eq (Find-FfmpegCommand)) {
     throw 'ffmpeg installed but is not on PATH yet (sign out and back in).'
   }
 }
@@ -479,7 +497,7 @@ function Invoke-Installer {
   }
 
   # ffmpeg: the server needs it to convert browser audio for Meta transcription.
-  if ($null -eq (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+  if ($null -eq (Find-FfmpegCommand)) {
     $wantsFfmpeg = $false
     if (-not $NonInteractive) {
       Write-Host 'ffmpeg (audio converter for voice dictation) was not found.'
@@ -564,6 +582,7 @@ function Invoke-Installer {
       ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
   }
   $typedAnswer = $false
+  $rootsKeptPrevious = $false
   if ($WorkRoot.Count -gt 0) {
     $chosenRoots = @($WorkRoot)
   } elseif ($NonInteractive) {
@@ -576,6 +595,7 @@ function Invoke-Installer {
     }
     Write-Host 'The agent can read files and propose changes in this folder.'
     Write-Host 'Nothing is written until you approve the diff in the browser.'
+    Write-Host 'The folder must already exist; the installer never creates it.'
     Write-Host 'A short folder name works too (like demo-repo); the full path is saved.'
     $answer = (Read-Host 'Code folder for the agent? [Enter keeps current, "none" clears]').Trim()
     if ($answer -eq '') { $chosenRoots = $existingRoots }
@@ -595,6 +615,7 @@ function Invoke-Installer {
   if ($typedAnswer -and $validRoots.Count -eq 0 -and $existingRoots.Count -gt 0) {
     Write-Host "No folder matched '$answer'; kept the previous code folder: $($existingRoots -join '; ')"
     $validRoots = $existingRoots
+    $rootsKeptPrevious = $true
   }
   Set-DotEnvValue $envPath 'OPERATOR_WORK_ROOTS' ($validRoots -join ';')
   if ($validRoots.Count -gt 0) {
@@ -760,6 +781,15 @@ function Invoke-Installer {
     Write-Host 'PASSWORD: your existing password (unchanged, not shown here).'
     Write-Host "Type it on the phone when the page asks for it. To change it, see $guideRef,"
     Write-Host "section 'Changing the password'."
+  }
+  Write-Host ''
+  if ($validRoots.Count -gt 0) {
+    Write-Host "CODE FOLDER: $($validRoots -join '; ')"
+    if ($rootsKeptPrevious) {
+      Write-Host '(kept your previous folder because the new answer matched nothing)'
+    }
+  } else {
+    Write-Host 'CODE FOLDER: none (sample task only).'
   }
   Write-Host ''
   Write-Host 'The helper also starts by itself every time you sign in to Windows.'
