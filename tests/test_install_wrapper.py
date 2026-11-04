@@ -58,8 +58,34 @@ class WrapperStderrTests(unittest.TestCase):
         self.assertIn("Meta API key? [Enter keeps the saved key / skips]", text)
         self.assertIn("Set-DotEnvValue $envPath 'META_API_KEY' $keyAnswer", text)
         self.assertIn("never printed or shared", text)
-        self.assertIn("MODEL KEY: saved (used after the server restarts).", text)
-        self.assertIn("MODEL KEY: none (Meta features need one).", text)
+        self.assertIn(
+            "MODEL KEY: saved (used only when the serve is explicitly started in Meta mode).",
+            text,
+        )
+        self.assertIn(
+            "MODEL KEY: none (Meta mode needs a key plus an explicit Meta-mode serve).", text
+        )
+
+    def test_model_key_prompt_does_not_promise_activation_on_restart(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertNotIn("used after the server restarts", text)
+        self.assertIn("Saving the key does not switch modes by itself", text)
+
+    def test_health_wait_names_its_actual_timeout(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("up to 15 seconds", text)
+        self.assertIn("did not answer within 15 seconds", text)
+        self.assertNotIn("30 seconds", text)
+
+    def test_wrapper_paths_survive_embedded_quotes(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn(".Replace('__REPO__', $Root.Replace(\"'\", \"''\"))", text)
+        self.assertIn(".Replace('__VENVPYTHON__', $VenvPython.Replace(\"'\", \"''\"))", text)
+
+    def test_changed_work_roots_restart_the_serve(self):
+        text = INSTALL_PS1.read_text(encoding="utf-8")
+        self.assertIn("$rootsChanged = (($validRoots -join ';')", text)
+        self.assertIn("-or $rootsChanged", text)
 
 
 if __name__ == "__main__":

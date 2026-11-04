@@ -260,8 +260,10 @@ if (-not [string]::IsNullOrWhiteSpace($origin)) { $serveArgs += @('--public-orig
 $ErrorActionPreference = 'Continue'
 & $VenvPython @serveArgs *>> $LogFile
 '@
-  $content = $template.Replace('__REPO__', $Root).Replace('__PORT__', "$Port").Replace(
-    '__VENVPYTHON__', $VenvPython)
+  # The template holds these in single-quoted strings, so embedded quotes
+  # (legal in Windows paths) must be doubled or the wrapper is a syntax error.
+  $content = $template.Replace('__REPO__', $Root.Replace("'", "''")).Replace(
+    '__PORT__', "$Port").Replace('__VENVPYTHON__', $VenvPython.Replace("'", "''"))
   $old = ''
   if (Test-Path $wrapper) { $old = [System.IO.File]::ReadAllText($wrapper) }
   [System.IO.File]::WriteAllText($wrapper, $content, [System.Text.UTF8Encoding]::new($false))
@@ -617,6 +619,7 @@ function Invoke-Installer {
     $validRoots = $existingRoots
     $rootsKeptPrevious = $true
   }
+  $rootsChanged = (($validRoots -join ';') -ne ($existingRoots -join ';'))
   Set-DotEnvValue $envPath 'OPERATOR_WORK_ROOTS' ($validRoots -join ';')
   if ($validRoots.Count -gt 0) {
     Write-Host "Project tasks enabled for: $($validRoots -join '; ')"
@@ -637,6 +640,9 @@ function Invoke-Installer {
   } else {
     Write-Host 'Real Meta answers and Meta voice dictation need your own Meta API key.'
     Write-Host 'The key is stored in the local .env file and never printed or shared.'
+    Write-Host 'Saving the key does not switch modes by itself: the helper keeps'
+    Write-Host 'running the offline reference until it is explicitly started in'
+    Write-Host 'Meta mode with an approved grant (advanced setup).'
     if ($haveKey) { Write-Host 'A key is already saved (not shown).' }
     $keyAnswer = (Read-Host 'Meta API key? [Enter keeps the saved key / skips]').Trim()
     if ($keyAnswer -eq '') {
@@ -766,14 +772,14 @@ function Invoke-Installer {
   Register-ServeTask $TaskName $root $wrapperResult.Path
   Write-Host "The helper will start automatically each time you sign in (entry '$TaskName')."
   $restarted = Restart-ServeTask $TaskName $root `
-    ($wrapperResult.Changed -or $originChanged -or $tokenResult.IsNew)
+    ($wrapperResult.Changed -or $originChanged -or $tokenResult.IsNew -or $rootsChanged)
   if ($restarted -eq 'start-failed') {
     $manualSteps += ("The helper did not start. Open '.runtime\\serve.log' in the " +
       'project folder to see why, then re-run the installer.')
   }
 
   # A launched task is not proof: verify the helper actually answers.
-  Write-Host 'Waiting for the helper to answer (up to 30 seconds)...'
+  Write-Host 'Waiting for the helper to answer (up to 15 seconds)...'
   $answered = $false
   for ($i = 0; $i -lt 15; $i++) {
     if (Test-ServePort $Port) { $answered = $true; break }
@@ -782,7 +788,7 @@ function Invoke-Installer {
   if ($answered) {
     Write-Host "The helper answers at http://127.0.0.1:$Port."
   } else {
-    Write-Host 'The helper did not answer within 30 seconds.'
+    Write-Host 'The helper did not answer within 15 seconds.'
     $manualSteps += ("Start the helper by hand from the project folder: " +
       'powershell -ExecutionPolicy Bypass -File .\.runtime\start-serve.ps1 ' +
       "(then open http://127.0.0.1:$Port). If it fails, the reason is in " +
@@ -819,9 +825,9 @@ function Invoke-Installer {
     Write-Host 'CODE FOLDER: none (sample task only).'
   }
   if ($haveKey -or $keyChanged) {
-    Write-Host 'MODEL KEY: saved (used after the server restarts).'
+    Write-Host 'MODEL KEY: saved (used only when the serve is explicitly started in Meta mode).'
   } else {
-    Write-Host 'MODEL KEY: none (Meta features need one).'
+    Write-Host 'MODEL KEY: none (Meta mode needs a key plus an explicit Meta-mode serve).'
   }
   Write-Host ''
   Write-Host 'The helper also starts by itself every time you sign in to Windows.'
