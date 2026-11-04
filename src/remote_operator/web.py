@@ -69,11 +69,17 @@ class BufferedBodies:
 
 
 class PathAwareBodyLimit(RequestBodyLimitMiddleware):
-    """Keep the 8 KB cap everywhere except the audio upload route.
+    """Keep the JSON cap everywhere except the audio upload route.
 
     Transcription clips legitimately reach megabytes; only `/api/stt/*` gets
     the higher audio allowance, enforced again per-part by the route itself.
     """
+
+    # Largest JSON body the API schemas admit: an 8192-character field at
+    # six bytes per character (worst-case \uXXXX escaping), plus framing.
+    # The cap must stay above that bound or schema-valid input fails with
+    # 413 before validation ever sees it.
+    JSON_BODY_MAX_BYTES = 65536
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -350,7 +356,7 @@ def _base_app(*, public_origin, sessions):
         )
 
     app.add_middleware(BufferedBodies)
-    app.add_middleware(PathAwareBodyLimit, max_body_size=8192)
+    app.add_middleware(PathAwareBodyLimit, max_body_size=PathAwareBodyLimit.JSON_BODY_MAX_BYTES)
     return app
 
 
@@ -667,6 +673,23 @@ def _external_action_routes(app, principal):
         return who.external_actions.cancel(action_id).to_dict()
 
 
+def _stt_unavailable_message(who: Principal) -> str:
+    """Explain a refused transcription with the remedy that exists here.
+
+    Hosted visitors can attach their own key; owner serves have no key
+    control, so transcription there needs an explicit Meta-mode serve.
+    """
+    if who.hosted:
+        return (
+            "Transcription unavailable: attach a provider key in Supervise, "
+            "or use browser dictation instead"
+        )
+    return (
+        "Transcription unavailable: this serve runs without Meta transcription; "
+        "use browser dictation instead"
+    )
+
+
 def _stt_routes(app, principal, stt_transport=None):
     """Register the Meta transcription route (never persists audio or text)."""
     from remote_operator.stt import SttFailure, parse_transcribe_form, transcribe_audio
@@ -675,10 +698,7 @@ def _stt_routes(app, principal, stt_transport=None):
     async def transcribe(request: Request, who: Annotated[Principal, Depends(principal)]):
         """Transcribe one dictation clip with the caller's own Meta key."""
         if who.grant is None or who.key_source is None or not who.key_attached:
-            raise HTTPException(
-                409,
-                "Transcription unavailable: attach a provider key in Supervise, or use browser dictation instead",
-            )
+            raise HTTPException(409, _stt_unavailable_message(who))
         try:
             audio, audio_type, language = parse_transcribe_form(
                 request.headers.get("content-type", ""), await request.body()
@@ -690,10 +710,7 @@ def _stt_routes(app, principal, stt_transport=None):
         except SessionUnavailable:
             raise HTTPException(401, "Visitor session required") from None
         if not isinstance(key, str) or not key:
-            raise HTTPException(
-                409,
-                "Transcription unavailable: attach a provider key in Supervise, or use browser dictation instead",
-            )
+            raise HTTPException(409, _stt_unavailable_message(who))
         try:
             return await asyncio.to_thread(
                 transcribe_audio,

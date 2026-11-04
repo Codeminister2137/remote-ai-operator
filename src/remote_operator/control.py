@@ -1033,9 +1033,34 @@ class ProjectOperator(Operator):
             return task
 
     def revalidate(self, task_id):
-        if self.store.get(task_id).get("mode") == "project":
-            raise ValueError("Project tasks have no automated checks to re-run")
-        return super().revalidate(task_id)
+        if self.store.get(task_id).get("mode") != "project":
+            return super().revalidate(task_id)
+        with self.lock:
+            task = self.store.get(task_id)
+            if (
+                task["status"] not in {"awaiting_approval", "review_required", "paused"}
+                or task["pending"]
+            ):
+                raise ValueError("Task is not available for fresh validation")
+            self._check_control(task_id, float("inf"))
+            task["approval"] = None
+            task["status"] = "running"
+            self.store.save(task, "revalidation_started")
+            try:
+                # No automated checks exist for project files; a fresh review
+                # re-snapshots the staged diff and base digests under a new
+                # nonce. Without this, an expired approval or a
+                # review_required project task has no recovery path.
+                self._prepare_approval(task)
+                return task
+            except RunCancelled:
+                task["status"] = "cancelled"
+                self.store.save(task, "cancelled")
+                return task
+            except Exception:
+                task["status"] = "review_required"
+                self.store.save(task, "revalidation_failed")
+                raise
 
     def sample(self, task_id, csv_text):
         if self.store.get(task_id).get("mode") == "project":

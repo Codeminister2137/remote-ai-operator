@@ -25,6 +25,7 @@ let hiddenPollTicks = 0;
 let triedApproved = false;
 let currentView = "demo";
 let reviewContext = null; // {run_id, thread_id, thread_topic} when opened from a run.
+let lastProjectFiles = []; // Staged files from the latest project review (approval may lag).
 const WORKBENCH_ACTIONS_VISIBLE = false; // Hackathon: hide Workbench section. Post-hackathon: set true to restore.
 const WINDOW_STALE_MINUTES = 30; // Heartbeats older than this are shown as outdated and never light the pill.
 let lastDrain = null; // Latest /api/window drain health (owner serve only).
@@ -163,6 +164,29 @@ function startPolling() {
     finally { pollBusy = false; }
   }, 1000);
 }
+// The task poll above only runs while the selected task is active. Runs,
+// external actions and the inbox also change while idle, so a slower
+// session-scoped loop keeps them fresh without a selected running task.
+let slowTimer = null;
+let slowBusy = false;
+function stopSlowPolling() {
+  if (slowTimer !== null) clearInterval(slowTimer);
+  slowTimer = null;
+}
+function startSlowPolling() {
+  if (slowTimer !== null || !selectedMode) return;
+  slowTimer = setInterval(async () => {
+    if (selectedMode === null) { stopSlowPolling(); return; }
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (slowBusy) return;
+    slowBusy = true;
+    try {
+      try { await refreshExternalActions(); } catch { /* Best-effort background refresh. */ }
+      try { await loadSupervisorRuns(); } catch { /* Best-effort background refresh. */ }
+      try { await pollInbox(); } catch { /* Best-effort background refresh. */ }
+    } finally { slowBusy = false; }
+  }, 5000);
+}
 function stillSelected(id, selection, session) {
   return selectedMode !== null && session === sessionRevision && selection === selectionRevision && element("taskId").value.trim() === id;
 }
@@ -241,7 +265,7 @@ function actions() {
   element("recovery-note").textContent = recoverable && task.status === "running" ?
     "If progress stopped after a disconnect, use Inspect interrupted action below. If a run is still active, wait for it to finish first." :
     "An action may have been interrupted. Inspect its saved result before resuming. This does not repeat the action or approve a change.";
-  element("revalidate").disabled = !active || busy || task.mode === "project" || !["awaiting_approval", "review_required", "paused"].includes(task.status);
+  element("revalidate").disabled = !active || busy || !["awaiting_approval", "review_required", "paused"].includes(task.status);
   element("preview").disabled = !active || busy || task.status !== "completed";
   element("tryApproved").disabled = !active || busy || task.status !== "completed";
   const hasId = selectedMode !== null && !busy && !connecting && !!element("taskId").value.trim();
@@ -453,13 +477,17 @@ element("send-answer").onclick = () => guarded(async () => {
   message("Answer recorded. " + (out.resumed_runs.length ? out.resumed_runs.length + " run(s) resuming." : "Task paused; run it to resume."));
 });
 let supervisorThreadId = "";
+let supervisorThreadStatus = "";
 let supervisorBusy = false;
 let supervisorPlanNonce = "";
 function supervisorNote(text) { element("supervisorNote").textContent = text; }
 function supervisorActions() {
   const ready = selectedMode !== null && !connecting && !supervisorBusy;
   for (const id of ["supervisorThreads", "refreshSupervisor", "supervisorNewTopic", "supervisorOpen"]) element(id).disabled = !ready;
-  const open = ready && !!supervisorThreadId;
+  // Approved threads are closed server-side: chat and planning there always
+  // fail, so the controls stay shut and the note says where to continue.
+  const open = ready && !!supervisorThreadId &&
+    ["open", "planned"].includes(supervisorThreadStatus);
   element("supervisorInput").disabled = !open;
   element("supervisorSend").disabled = !open;
   element("supervisorInputRow").hidden = !open;
@@ -495,18 +523,22 @@ function inboxUnread() {
       item.thread_id !== supervisorThreadId && (threadAckSeq.get(item.thread_id) || 0) < item.seq)) &&
     (item.type !== "parked_question" || (!item.answered && (taskAckSeq.get(item.task_id) || 0) < item.seq)));
 }
+let inboxBusy = false;
 async function pollInbox() {
   const session = sessionRevision;
-  if (selectedMode === null) return;
-  const data = await api("/api/supervisor/inbox?since=" + inboxCursor);
-  if (session !== sessionRevision || selectedMode === null) return;
-  if (ownerFloorSeq < 0 && typeof data.cursor === "number") ownerFloorSeq = data.cursor;
-  if (Array.isArray(data.items) && data.items.length) {
-    inboxItems.push(...data.items);
-    if (inboxItems.length > 50) inboxItems.splice(0, inboxItems.length - 50);
-  }
-  if (typeof data.cursor === "number") inboxCursor = data.cursor;
-  renderBell();
+  if (selectedMode === null || inboxBusy) return;
+  inboxBusy = true; // Concurrent polls would append the same items twice.
+  try {
+    const data = await api("/api/supervisor/inbox?since=" + inboxCursor);
+    if (session !== sessionRevision || selectedMode === null) return;
+    if (ownerFloorSeq < 0 && typeof data.cursor === "number") ownerFloorSeq = data.cursor;
+    if (Array.isArray(data.items) && data.items.length) {
+      inboxItems.push(...data.items);
+      if (inboxItems.length > 50) inboxItems.splice(0, inboxItems.length - 50);
+    }
+    if (typeof data.cursor === "number") inboxCursor = data.cursor;
+    renderBell();
+  } finally { inboxBusy = false; }
 }
 function renderBell() {
   const count = inboxUnread().length;
@@ -646,6 +678,7 @@ async function openSupervisorThread(id) {
   if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Choose a thread first.");
   const detail = await api("/api/supervisor/threads/" + encodeURIComponent(id));
   supervisorThreadId = id;
+  supervisorThreadStatus = detail.thread.status || "";
   const approval = detail.thread.status === "planned" ? detail.thread.approval : null;
   supervisorPlanNonce = approval && approval.nonce ? approval.nonce : "";
   element("supervisorThreads").value = id;
@@ -661,6 +694,8 @@ async function openSupervisorThread(id) {
     } else {
       supervisorNote("Thread open. Approve the plan within ~" + Math.max(1, Math.round(remainingMs / 60000)) + " min. If it expires, write the plan again.");
     }
+  } else if (supervisorThreadStatus !== "open" && supervisorThreadStatus !== "planned") {
+    supervisorNote("Thread " + supervisorThreadStatus + ". Open a new thread to start another planning conversation.");
   } else {
     supervisorNote("Thread open. Chat to refine requirements, then write the plan.");
   }
@@ -773,18 +808,17 @@ function renderApprovalSubject() {
   const promptLine = typeof task.prompt === "string" ? task.prompt.split("\n")[0].slice(0, 90) : "";
   const injected = task.injected ? " \u00b7 injected failure" : "";
   const runner = task.evidence && task.evidence.runner ? task.evidence.runner : "not run yet";
-  const approvalFiles = task.mode === "project" && task.approval && Array.isArray(task.approval.files) ? task.approval.files : [];
+  const stagedFiles = task.mode === "project" && Array.isArray(lastProjectFiles) ? lastProjectFiles : [];
   subject.textContent = kind + " · task " + task.id.slice(0, 12) + " · attempt " + (task.calls || 0) + injected +
     (task.mode === "project" ?
-      " · root " + task.project_root + " · staged files " + approvalFiles.length :
+      " · root " + task.project_root + " · staged files " + stagedFiles.length :
       " · actor " + runner + " · candidate " + short(task.evidence && task.evidence.candidate_digest) +
       " · base " + short(task.base_digest)) + (promptLine ? ' · "' + promptLine + '"' : "") +
     (taskSource ? " \u00b7 opened from " + taskSource : "");
   const rows = [];
   const push = (ok, text) => rows.push({ok, text: (ok ? "PASS " : "FAIL ") + text});
-  const projectFiles = approvalFiles;
   if (task.mode === "project") {
-    push(projectFiles.length > 0, projectFiles.length ? projectFiles.length + " file(s) staged: " + projectFiles.map((entry) => entry.path).join(", ") + "." : "No staged change yet.");
+    push(stagedFiles.length > 0, stagedFiles.length ? stagedFiles.length + " file(s) staged: " + stagedFiles.map((entry) => entry.path).join(", ") + "." : "No staged change yet.");
     push(true, "No automated checks — the owner is the reviewer.");
   } else if (!task.evidence) {
     push(false, "No candidate produced yet.");
@@ -977,7 +1011,7 @@ function applyJudgeVisibility() {
   element("workbenchSection").hidden = judge || !WORKBENCH_ACTIONS_VISIBLE;
 }
 function clearTaskView() {
-  task = null; taskEvents = []; showAllEvents = false; reviewContext = null; triedApproved = false; taskSource = "";
+  task = null; taskEvents = []; showAllEvents = false; reviewContext = null; triedApproved = false; taskSource = ""; lastProjectFiles = [];
   element("status").textContent = "No task selected";
   element("status").title = "";
   renderDiffViews("", "No candidate yet.");
@@ -1034,6 +1068,7 @@ async function refresh() {
   renderDiffViews(review.diff, "No candidate change.");
   const isProject = task.mode === "project";
   const projectFiles = Array.isArray(review.files) ? review.files : [];
+  lastProjectFiles = isProject ? projectFiles : [];
   element("evidence").textContent = isProject ? "No automated checks for repository tasks; you are the reviewer." :
     task.evidence ? JSON.stringify(task.evidence, null, 2) : "Not validated.";
   element("validation-summary").textContent = isProject ? "No automated checks · review the staged diff" :
@@ -1240,7 +1275,11 @@ function displayMode(configuration) {
   updateBuildChip();
   const liveBanner = configuration.mode === "baseten" ?
     "Muse Spark Open · live AI answers (Baseten)" : "Meta AI · live coding with your key";
-  metaSttPreferred = configuration.live_inference === true;
+  // Meta transcription exists only on the Meta route: owner serves wire it
+  // solely in --model-mode meta, and hosted serves report mode "meta" only
+  // with a grant plus an attached key. Baseten serves stay live_inference
+  // but their /api/stt/transcribe always refuses, so gate on the mode.
+  metaSttPreferred = configuration.mode === "meta";
   refreshDictationBackends();
   document.querySelector(".notice").textContent = configuration.live_inference ?
     liveBanner : "Offline reference · no AI calls, no cost";
@@ -1301,6 +1340,7 @@ async function loadMode(session) {
   await refreshWindowStatus();
   if (session !== sessionRevision) return;
   startWindowPolling();
+  startSlowPolling();
   const summaries = await recentTasks();
   if (session !== sessionRevision) return;
   await loadWorkRoots();
@@ -1338,7 +1378,7 @@ async function loadMode(session) {
   } else message("Connected. Review execution mode before submitting your task.");
 }
 element("connect").onclick = () => guarded(async () => {
-  stopPolling(); const session = ++sessionRevision;
+  stopPolling(); stopSlowPolling(); const session = ++sessionRevision;
   selectedMode = null; allowance = null; allowanceCursor = ""; connecting = true; actions();
   accessStatus("Connecting…");
   try {
@@ -1353,7 +1393,7 @@ element("connect").onclick = () => guarded(async () => {
   }
 });
 element("enterSession").onclick = () => guarded(async () => {
-  stopPolling(); const session = ++sessionRevision;
+  stopPolling(); stopSlowPolling(); const session = ++sessionRevision;
   selectedMode = null; allowance = null; allowanceCursor = ""; connecting = true; actions();
   accessStatus("Connecting…");
   try {
@@ -1426,7 +1466,7 @@ element("judgeSignup").onclick = () => guarded(async () => {
   } finally { busy = false; actions(); }
 });
 element("judgeLogin").onclick = () => guarded(async () => {
-  stopPolling(); const session = ++sessionRevision;
+  stopPolling(); stopSlowPolling(); const session = ++sessionRevision;
   selectedMode = null; allowance = null; allowanceCursor = ""; connecting = true; actions();
   try {
     await api("/api/judges/login", "POST", {username: element("judgeName").value.trim(),
@@ -1584,9 +1624,9 @@ element("csvHappy").onclick = () => loadCsvSample("happy");
 element("csvEdges").onclick = () => loadCsvSample("edges");
 element("csvInvalid").onclick = () => loadCsvSample("invalid");
 element("token").addEventListener("input", () => {
-  sessionRevision++; selectionRevision++; stopPolling(); selectedMode = null; task = null; connecting = false;
+  sessionRevision++; selectionRevision++; stopPolling(); stopSlowPolling(); selectedMode = null; task = null; connecting = false;
   allowance = null; allowanceCursor = ""; judgeSession = false;
-  supervisorThreadId = ""; supervisorPlanNonce = "";
+  supervisorThreadId = ""; supervisorThreadStatus = ""; supervisorPlanNonce = "";
   inboxItems = []; inboxCursor = 0; inboxAckSeq = 0; ownerFloorSeq = -1;
   powerArmed = false; element("powerArm").textContent = "Sleep this PC…";
   element("supervisorTranscript").replaceChildren();

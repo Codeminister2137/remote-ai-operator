@@ -49,7 +49,13 @@ const documentStub = {
     return els[id];
   },
   createElement: () => makeEl("anon"),
-  querySelector: () => null,
+  querySelector: (sel) => {
+    if (sel === ".notice") {
+      if (!els[".notice"]) els[".notice"] = makeEl("notice");
+      return els[".notice"];
+    }
+    return null;
+  },
   querySelectorAll: () => [],
   addEventListener() {},
   removeEventListener() {},
@@ -109,10 +115,11 @@ run(`task.evidence.passed = true; actions();`);
 if (el("approve").disabled !== false) fail("approve disabled on passing evidence");
 
 // Project tasks approve on staged approval, never on sample evidence;
-// revalidation stays off because no automated checks exist for them.
+// revalidation re-snapshots the staged diff (no automated checks exist),
+// so expired approvals and review_required tasks can recover.
 run(`task = {id: "t1", status: "awaiting_approval", mode: "project", evidence: null, approval: {nonce: "n"}}; actions();`);
 if (el("approve").disabled !== false) fail("approve disabled on staged project approval");
-if (el("revalidate").disabled !== true) fail("revalidate enabled on project task");
+if (el("revalidate").disabled !== false) fail("revalidate disabled on project task");
 run(`task.approval = null; actions();`);
 if (el("approve").disabled !== true) fail("approve enabled without project approval");
 
@@ -162,5 +169,58 @@ if (html.includes("next task you create")) fail("stale run scope tip kept");
 if (!html.includes('id="leave-note"')) fail("leave retention note missing");
 if (!html.includes("keep tasks across visits")) fail("leave note names no remedy");
 
-console.log("ACTIONS-OK approve gating, submit reasons, hosted note, key funding, scope hints, leave note");
-process.exit(0);
+// Meta dictation follows the Meta route only: Baseten serves are live but
+// their transcribe route always refuses, so they must not prefer Meta.
+run(`displayMode({mode: "baseten", live_inference: true});`);
+if (run(`metaSttPreferred`) !== false) fail("baseten prefers Meta STT");
+run(`displayMode({mode: "meta", live_inference: true});`);
+if (run(`metaSttPreferred`) !== true) fail("meta dropped Meta STT");
+run(`displayMode({mode: "scripted", live_inference: false});`);
+if (run(`metaSttPreferred`) !== false) fail("scripted prefers Meta STT");
+
+// Idle sessions keep runs and inbox fresh on the slow loop; offline starts nothing.
+run(`selectedMode = null; stopSlowPolling(); startSlowPolling();`);
+if (run(`slowTimer`) !== null) fail("slow poll started while offline");
+run(`selectedMode = {mode: "scripted"}; startSlowPolling();`);
+if (run(`slowTimer`) === null) fail("slow poll did not start when connected");
+run(`startSlowPolling(); stopSlowPolling();`);
+if (run(`slowTimer`) !== null) fail("slow poll did not stop");
+
+// Approved threads are closed server-side: chat and planning stay shut.
+run(`selectedMode = {mode: "scripted"}; connecting = false; supervisorBusy = false;
+     supervisorThreadId = "tid"; supervisorThreadStatus = "approved"; supervisorPlanNonce = "";
+     supervisorActions();`);
+if (el("supervisorSend").disabled !== true) fail("send enabled on approved thread");
+if (el("supervisorWritePlan").disabled !== true) fail("write-plan enabled on approved thread");
+if (el("supervisorInput").disabled !== true) fail("input enabled on approved thread");
+run(`supervisorThreadStatus = "open"; supervisorActions();`);
+if (el("supervisorSend").disabled !== false) fail("send disabled on open thread");
+if (el("supervisorWritePlan").disabled !== false) fail("write-plan disabled on open thread");
+
+// Project checklist reports staged files even before any approval exists.
+run(`element("approvalChecklist").replaceChildren = function(){ this.kids = Array.from(arguments); };
+     task = {id: "t1", status: "paused", mode: "project", approval: null, prompt: "p",
+             calls: 1, project_root: "/repo", injected: false, evidence: null};
+     taskSource = ""; reviewContext = null; lastProjectFiles = [{path: "a.txt"}, {path: "b.txt"}];
+     renderApprovalSubject();`);
+const checklistText = run(`element("approvalChecklist").kids.map((k) => k.textContent).join(" | ")`);
+if (!checklistText.includes("2 file(s) staged")) fail("checklist missed staged files: " + checklistText);
+if (checklistText.includes("No staged change")) fail("checklist contradicts staged files: " + checklistText);
+if (!String(el("approvalSubject").textContent).includes("staged files 2")) {
+  fail("subject missed staged count: " + el("approvalSubject").textContent);
+}
+
+// Concurrent inbox polls fetch once; the second call is dropped, not duplicated.
+(async () => {
+  run(`selectedMode = {mode: "scripted"}; inboxCursor = 0; inboxItems = []; ownerFloorSeq = 0;
+       inboxBusy = false; var fetchCalls = [];
+       fetch = (...args) => { fetchCalls.push(args);
+         return Promise.resolve({ok: true, status: 200,
+           text: async () => '{"cursor": 5, "items": []}'}); };
+       pollInbox(); pollInbox();`);
+  await new Promise((r) => setTimeout(r, 100));
+  const calls = run(`fetchCalls.length`);
+  if (calls !== 1) fail("concurrent pollInbox fetched " + calls + "x");
+  console.log("ACTIONS-OK approve gating, submit reasons, hosted note, key funding, scope hints, leave note, stt route, slow poll, thread state, project files, inbox guard");
+  process.exit(0);
+})().catch((err) => fail("async harness: " + (err && err.message)));

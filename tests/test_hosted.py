@@ -593,6 +593,17 @@ class HostedAppTests(unittest.IsolatedAsyncioTestCase):
             await self.enter(client)
             self.assertEqual((await client.get("/api/tasks/" + task["id"])).status_code, 404)
 
+    async def test_visitor_transcribe_refused_names_key_attach(self):
+        await self.enter()
+        response = await self.client.post(
+            "/api/stt/transcribe",
+            headers=self.auth,
+            files={"audio": ("clip.webm", b"RIFF" + b"0" * 2000, "audio/webm")},
+            data={"language": "en"},
+        )
+        self.assertEqual(response.status_code, 409, response.text[:200])
+        self.assertIn("attach a provider key", response.json()["detail"])
+
     async def test_local_owner_app_still_requires_the_bearer_token(self):
         from remote_operator.web import create_app
 

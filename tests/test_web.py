@@ -88,7 +88,7 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
             "/api/tasks", headers=self.auth, json={"prompt": "task", "provider": "paid"}
         )
         self.assertEqual(response.status_code, 422)
-        response = await self.client.post("/api/tasks", headers=self.auth, content="x" * 8193)
+        response = await self.client.post("/api/tasks", headers=self.auth, content="x" * 65537)
         self.assertEqual(response.status_code, 413)
         response = await self.client.get("/api/tasks/missing", headers=self.auth)
         self.assertEqual(response.status_code, 404)
@@ -169,7 +169,9 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
 
         async def large():
-            for _ in range(3):
+            # Past the JSON body cap (64 KiB covers the largest schema-valid
+            # body, so the bound probe must exceed it).
+            for _ in range(17):
                 yield b"x" * 4096
 
         response = await self.client.post("/api/tasks", headers=self.auth, content=large())
@@ -431,3 +433,46 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
             response = await self.client.get("/", headers=self.auth)
             self.assertEqual(response.status_code, 200)
         self.assertTrue(any("request started" in msg.lower() for msg in captured.output))
+
+    async def test_schema_valid_csv_reaches_route_past_old_cap(self):
+        """An 8100-char CSV is schema-valid; the body cap must not 413 it."""
+        csv_text = ("id,title,status\n" + "r,abcdefghij,open\n" * 499)[:8100]
+        self.assertLessEqual(len(csv_text), 8192)
+        response = await self.client.post(
+            "/api/tasks/" + "a" * 32 + "/sample",
+            headers=self.auth,
+            json={"csv_text": csv_text},
+        )
+        # Unknown task: the request reached the route (and schema) instead
+        # of dying at the body-limit middleware with 413.
+        self.assertEqual(response.status_code, 404, response.text[:200])
+
+    async def test_owner_transcribe_refused_without_meta_route(self):
+        """Owner serves have no key control; the refusal must say so."""
+        response = await self.client.post(
+            "/api/stt/transcribe",
+            headers=self.auth,
+            files={"audio": ("clip.webm", b"RIFF" + b"0" * 2000, "audio/webm")},
+            data={"language": "en"},
+        )
+        self.assertEqual(response.status_code, 409, response.text[:200])
+        self.assertIn("without Meta transcription", response.json()["detail"])
+        self.assertNotIn("attach a provider key", response.json()["detail"])
+
+    async def test_baseten_owner_transcribe_refused(self):
+        """Baseten owner serves wire no transcription grant; route refuses."""
+        import httpx
+
+        from remote_operator.web import create_app
+
+        app = create_app(self.operator, self.token, mode="baseten")
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://localhost"
+        ) as client:
+            response = await client.post(
+                "/api/stt/transcribe",
+                headers=self.auth,
+                files={"audio": ("clip.webm", b"RIFF" + b"0" * 2000, "audio/webm")},
+                data={"language": "en"},
+            )
+        self.assertEqual(response.status_code, 409, response.text[:200])
