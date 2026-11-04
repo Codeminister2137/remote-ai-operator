@@ -1905,6 +1905,7 @@ async function transcribeSlice(blob, index, shortLang, inputHint) {
 async function dictateViaMeta(ctx) {
   const field = ctx.field, button = ctx.button, lang = ctx.lang, status = ctx.status;
   ctx.busy = true; // Set synchronously: a second click during mic prompt is ignored.
+  status.textContent = "Waiting for microphone permission...";
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({audio: true});
