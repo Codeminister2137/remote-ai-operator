@@ -31,8 +31,10 @@ class ScriptedOps:
 
     def __init__(self, operations):
         self.operations = list(operations)
+        self.seen_roots = []
 
-    def next_operation(self, history, *, prompt):
+    def next_operation(self, history, *, prompt, project_root=None):
+        self.seen_roots.append(project_root)
         if len(history) >= len(self.operations):
             return Operation("finish", {})
         return self.operations[len(history)]
@@ -168,6 +170,42 @@ class ProjectTaskTests(unittest.TestCase):
             ProjectOperator(runtime, seed, FakeValidator(), work_roots=[runtime])
         with self.assertRaises(ValueError):
             ProjectOperator(runtime, seed, FakeValidator(), work_roots=[runtime / "inner"])
+
+    def test_run_passes_project_root_to_model(self):
+        task = self.submit()
+        model = ScriptedOps(
+            [
+                Operation("read_file", {"path": "app/main.py"}),
+                Operation("write_file", {"path": "app/main.py", "content": "print('v2')\n"}),
+                Operation("validate", {}),
+            ]
+        )
+        self.operator.run(task["id"], model)
+        stored = self.operator.store.get(task["id"])
+        self.assertTrue(model.seen_roots)
+        for seen in model.seen_roots:
+            self.assertEqual(seen, stored["project_root"])
+
+    def test_execution_stopped_carries_failure_detail(self):
+        from remote_operator.scripted import ScriptedModel
+
+        task = self.submit()
+        with self.assertRaises(ValueError):
+            self.operator.run(task["id"], ScriptedModel())
+        stored = self.operator.store.get(task["id"])
+        self.assertEqual(stored["status"], "paused")
+        events = self.operator.store.events(task["id"])
+        stopped = [item for item in events if item["kind"] == "execution_stopped"]
+        self.assertEqual(len(stopped), 1)
+        self.assertIn("live inference", stopped[0]["payload"]["detail"])
+
+    def test_scripted_reference_refuses_project_tasks(self):
+        from remote_operator.scripted import ScriptedModel
+
+        with self.assertRaisesRegex(ValueError, "live inference"):
+            ScriptedModel().next_operation([], prompt="x", project_root=str(self.work))
+        operation = ScriptedModel().next_operation([], prompt="x")
+        self.assertEqual(operation.name, "read_file")
 
     def test_lifecycle_stages_and_applies(self):
         task = self.submit()

@@ -910,7 +910,7 @@ function renderEvents() {
     const label = document.createElement("span");
     label.textContent = (start + offset + 1) + " · " + (eventNames[event.kind] || humanizeStatus(event.kind)) + (event.payload.injected ? " (injected)" : "") +
       (event.payload.name ? " · " + event.payload.name : "") +
-      (event.kind === "transport_failed" && typeof event.payload.detail === "string" ? " · " + event.payload.detail : "");
+      ((event.kind === "transport_failed" || event.kind === "execution_stopped") && typeof event.payload.detail === "string" && event.payload.detail ? " · " + event.payload.detail : "");
     item.title = "Raw event: " + event.kind;
     item.append(label);
     return item;

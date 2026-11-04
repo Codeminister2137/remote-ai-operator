@@ -47,7 +47,12 @@ class ScriptedModel:
 
     name = "SCRIPTED OFFLINE REFERENCE (not Meta inference)"
 
-    def next_operation(self, history, *, prompt):
+    def next_operation(self, history, *, prompt, project_root=None):
+        if project_root is not None:
+            raise ValueError(
+                "Project tasks require live inference; "
+                "the scripted reference only runs the sample task"
+            )
         _validate_history_actions(history)
         names = [entry["name"] for entry in history]
         if not names:

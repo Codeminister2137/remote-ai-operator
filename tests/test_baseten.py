@@ -119,6 +119,29 @@ class BasetenContracts(unittest.TestCase):
         self.assertEqual([message["role"] for message in body["messages"]], ["system", "user"])
         self.assertEqual(actor.name, "Baseten / " + MODEL)
 
+    def test_project_tasks_send_project_system_prompt_and_tools(self):
+        from remote_operator.baseten import (
+            INSTRUCTIONS,
+            PROJECT_INSTRUCTIONS,
+            PROJECT_TOOLS,
+            TOOLS,
+        )
+
+        actor = self.actor()
+        actor.next_operation([], prompt="task", project_root="/repo")
+        sent = json.loads(self.requests[-1].content)
+        system = next(m for m in sent["messages"] if m["role"] == "system")["content"]
+        self.assertEqual(system, PROJECT_INSTRUCTIONS)
+        self.assertEqual(sent["tools"], PROJECT_TOOLS)
+        self.assertNotIn("issue_import.py", system)
+        self.assertNotIn("/repo", json.dumps(sent))
+        plain = self.actor()
+        plain.next_operation([], prompt="task")
+        sent_plain = json.loads(self.requests[-1].content)
+        system_plain = next(m for m in sent_plain["messages"] if m["role"] == "system")["content"]
+        self.assertEqual(system_plain, INSTRUCTIONS)
+        self.assertEqual(sent_plain["tools"], TOOLS)
+
     def test_explicit_reasoning_effort_is_sent(self):
         def serve(request):
             body = json.loads(request.content)
