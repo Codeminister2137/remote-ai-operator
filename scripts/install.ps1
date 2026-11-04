@@ -12,7 +12,8 @@
      5. Offers to install Tailscale (private-network app for phone access).
         You can say no; the PC program still works on this PC.
      6. Registers the serve to start automatically at sign-in (a per-user
-        Scheduled Task - no admin needed) and starts it now.
+        Scheduled Task - no admin needed), starts it now and checks that
+        it answers. The summary always shows how to start it by hand.
      7. Prints the phone web address and what is left to do by hand.
 
    Run from the project folder in PowerShell:
@@ -284,6 +285,14 @@ function Stop-OwnServe($Root) {
       try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch { }
     }
   } catch { }
+}
+
+function Test-ServePort($Port) {
+  $client = New-Object Net.Sockets.TcpClient
+  try {
+    $iar = $client.BeginConnect('127.0.0.1', $Port, $null, $null)
+    return $iar.AsyncWaitHandle.WaitOne(1000)
+  } catch { return $false } finally { $client.Close() }
 }
 
 function Restart-ServeTask($TaskName, $Root, [bool]$ConfigChanged) {
@@ -670,6 +679,23 @@ function Invoke-Installer {
       'project folder to see why, then re-run the installer.')
   }
 
+  # A launched task is not proof: verify the helper actually answers.
+  Write-Host 'Waiting for the helper to answer (up to 30 seconds)...'
+  $answered = $false
+  for ($i = 0; $i -lt 15; $i++) {
+    if (Test-ServePort $Port) { $answered = $true; break }
+    Start-Sleep -Seconds 1
+  }
+  if ($answered) {
+    Write-Host "The helper answers at http://127.0.0.1:$Port."
+  } else {
+    Write-Host 'The helper did not answer within 30 seconds.'
+    $manualSteps += ("Start the helper by hand from the project folder: " +
+      'powershell -ExecutionPolicy Bypass -File .\.runtime\start-serve.ps1 ' +
+      "(then open http://127.0.0.1:$Port). If it fails, the reason is in " +
+      "'.runtime\serve.log'.")
+  }
+
   # 6. Summary ----------------------------------------------------------
   Write-Step 'Done'
   Write-Host ''
@@ -692,6 +718,8 @@ function Invoke-Installer {
   }
   Write-Host ''
   Write-Host 'The helper also starts by itself every time you sign in to Windows.'
+  Write-Host 'START IT YOURSELF (any time, from the project folder):'
+  Write-Host '  powershell -ExecutionPolicy Bypass -File .\.runtime\start-serve.ps1'
   Write-Host "If something looks wrong, check '.runtime\\serve.log' in the project folder."
   if ($null -ne $serveUrl) {
     Write-Host ''
