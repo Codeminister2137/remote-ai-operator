@@ -255,6 +255,9 @@ $serveArgs += @('serve', '--port', "$Port")
 if (-not [string]::IsNullOrWhiteSpace($origin)) { $serveArgs += @('--public-origin', $origin) }
 
 '' + "`n=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') starting serve ===`n" | Out-File -Append -Encoding utf8 $LogFile
+# Native stderr must not abort the server: with 'Stop' in effect, a redirected
+# stderr line (e.g. the no-SMTP notice) becomes a fatal NativeCommandError.
+$ErrorActionPreference = 'Continue'
 & $VenvPython @serveArgs *>> $LogFile
 '@
   $content = $template.Replace('__REPO__', $Root).Replace('__PORT__', "$Port").Replace(
