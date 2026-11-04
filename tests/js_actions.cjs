@@ -108,6 +108,14 @@ if (el("approve").disabled !== true) fail("approve enabled on failed evidence");
 run(`task.evidence.passed = true; actions();`);
 if (el("approve").disabled !== false) fail("approve disabled on passing evidence");
 
+// Project tasks approve on staged approval, never on sample evidence;
+// revalidation stays off because no automated checks exist for them.
+run(`task = {id: "t1", status: "awaiting_approval", mode: "project", evidence: null, approval: {nonce: "n"}}; actions();`);
+if (el("approve").disabled !== false) fail("approve disabled on staged project approval");
+if (el("revalidate").disabled !== true) fail("revalidate enabled on project task");
+run(`task.approval = null; actions();`);
+if (el("approve").disabled !== true) fail("approve enabled without project approval");
+
 // Disabled Create names the allowance block.
 run(`selectedMode = {mode: "meta", live_inference: true};
      allowance = {enabled: true, expired: true, remaining_usd_estimate: 0, requests_used: 0, requests_limit: 5};
