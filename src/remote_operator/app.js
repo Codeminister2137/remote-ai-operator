@@ -2013,10 +2013,35 @@ async function dictateViaMeta(ctx) {
   button.onclick = () => stop();
   setRecording(true);
   const recordStarted = Date.now();
+  let audioCtx = null, analyser = null, levelData = null;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC && stream && stream.getAudioTracks().length) {
+      audioCtx = new AC();
+      const source = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      levelData = new Uint8Array(analyser.frequencyBinCount);
+    }
+  } catch { audioCtx = null; analyser = null; }
+  function levelTag() {
+    if (!analyser) return "";
+    try {
+      analyser.getByteTimeDomainData(levelData);
+      let peak = 0;
+      for (let i = 0; i < levelData.length; i++) {
+        const v = Math.abs(levelData[i] - 128);
+        if (v > peak) peak = v;
+      }
+      return peak > 8 ? " Hearing you." : " No audio yet — check the mic.";
+    } catch { return ""; }
+  }
   const ticker = setInterval(() => {
     if (stopping) return;
     const secs = Math.floor((Date.now() - recordStarted) / 1000);
-    status.textContent = "Recording with Meta (" + secs + "s elapsed)... Press Stop to finish.";
+    status.textContent = "Recording with Meta (" + secs + "s elapsed)." + levelTag() +
+      " Words appear when you press Stop (or every 55s).";
   }, 1000);
   function recordSlice() {
     return new Promise((resolve) => {
@@ -2050,7 +2075,7 @@ async function dictateViaMeta(ctx) {
   }
   while (!stopping && !failed) {
     const slice = ++slices;
-    status.textContent = "Recording with Meta (slice " + slice + ", up to 55s each)... Press Stop to finish.";
+    status.textContent = "Recording with Meta (slice " + slice + ", up to 55s each)... Words appear when you press Stop.";
     const blob = await recordSlice();
     if (!blob) { failed = failed || new Error("Recording failed."); break; }
     if (blob.size < 1024) continue; // Instant stop; nothing worth billing.
@@ -2069,6 +2094,7 @@ async function dictateViaMeta(ctx) {
   function finish() {
     clearInterval(ticker);
     Dictation.clearActive(stop);
+    try { if (audioCtx) audioCtx.close(); } catch { /* Best-effort. */ }
     for (const track of stream.getTracks()) { try { track.stop(); } catch { /* Best-effort. */ } }
     ctx.busy = false;
     setRecording(false);

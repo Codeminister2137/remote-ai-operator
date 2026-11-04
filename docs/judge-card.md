@@ -38,6 +38,14 @@ the right field. The Access panel collapses once connected.
 No-key path stays fully usable: offline reference, sample review,
 approval, sample import run — zero cost, zero AI calls.
 
+Scope (both paths): the hosted demo runs the fixed sample task only —
+one source file plus its acceptance checks. A custom request still
+funnels into that sample; the demo never builds arbitrary projects.
+No-key path: the offline reference answers from a fixed script — try
+how the system works, zero AI. Key path: real Meta AI works within the
+sample. Real-repository development is a self-hosted feature and is
+shown in the submission video.
+
 ### 2:30–3:30 · Sample
 
 In the Demo view, step 2, press **Load sample review**. It reuses one of
