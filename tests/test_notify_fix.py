@@ -311,6 +311,17 @@ class InboxTests(unittest.TestCase):
         texts = [item["text"] for item in inbox["items"]]
         self.assertEqual(texts, ["alpha", "beta"])
 
+    def test_owner_message_links_prior_assistant_turn(self):
+        thread = self.supervisor.open_thread("topic")
+        self.supervisor.post_message(ScriptedModel(), thread["id"], "alpha")
+        self.supervisor.post_message(ScriptedModel(), thread["id"], "do A and C")
+        inbox = read_inbox(self.operator, since=0)
+        replies = [item["in_reply_to"] for item in inbox["items"]]
+        history = self.operator.store.get(thread["id"])["history"]
+        assistants = [turn["text"] for turn in history if turn["role"] == "assistant"]
+        self.assertEqual(replies[0], "")
+        self.assertEqual(replies[1], assistants[0][:500])
+
     def test_parked_question_links_run_and_tracks_answer(self):
         _, run_id = _approved(self.supervisor)
         SupervisorRunner(self.operator).drain(AskOnceModel())
