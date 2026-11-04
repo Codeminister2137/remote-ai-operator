@@ -57,16 +57,15 @@ no horizontal overflow.
   change side-by-side or as one list, with an evidence card (how many
   of the 7 safety checks passed, where they ran, how long they took),
   a pass/fail approval checklist and a footer countdown showing the
-  time left to approve. **Load sample review** (Demo step 2) fetches a
-  ready-made review; **Try it in Demo step 3** runs the approved
+  time left to approve. **Load sample review** (Build view step 2) fetches a
+  ready-made review; **Try it in Step 3** runs the approved
   importer and jumps to its result table.
 - **Judge visits** hide the owner-only Worker & machine and Pending
   actions from Workbench sections; those belong to an earlier internal
   product, not to this judged entry. The footer names the exact served
   version, for bug reports.
 
-> PLACEHOLDER (parent): phone-width screenshots not captured here — no
-> headless browser in this environment (`chromium` absent). Suggested:
+> Phone-width screenshots pending capture: they were not taken yet. Suggested:
 > wizard + bell badge, chat bubbles, dictation row, split diff with
 > evidence card. See docs/judge-card.md for the full capture list.
 

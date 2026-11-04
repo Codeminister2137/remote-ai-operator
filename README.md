@@ -1,12 +1,18 @@
 # Remote AI Operator
 
+> **Judges start here (5 minutes, no install):** live demo at
+> `https://remote-operator--hosted.us-east.modal.run` — the entry code is public
+> in [Hosted visitor mode](#hosted-visitor-mode). Full path: [Judge quick-start
+> card](docs/judge-card.md) (code → wizard → sample → approve → try-it).
+
 A standalone prototype for supervised coding with host-generated validation and
 approval of an exact change. Started during the October 26–November 4, 2026 event.
 
-**Default: clearly labelled scripted offline reference.** The prepared Meta Responses
-adapter requires explicit live activation and verified finite credit admission;
+**Default: clearly labelled scripted offline reference** (a fixed pre-written
+demo: no AI, no cost, no key needed). The prepared Meta model adapter (Responses
+API) requires explicit live activation and verified finite credit admission;
 a small live source-edit/test run is verified (see docs/live-acceptance.md). The application provides controlled
-edits, SQLite receipts, isolated tests, cancellation, exact-change approval and a
+edits, append-only local records (SQLite receipts), isolated tests, cancellation, exact-change approval and a
 working sample import-results screen. Scripted remote-phone operation is verified;
 the complete real Meta HTTPS browser flow and owner-confirmed physical-phone Meta
 submission/review/approval are verified. Broader repository tools and release work
@@ -31,14 +37,14 @@ see [Judge quick-start card](docs/judge-card.md).
 - Dictation: speech transcribed by Meta in ~55-second pieces charged
   to the shared allowance, or by the browser's own speech recognition
   when Meta is unavailable; fills the field only, never sends.
-- Run settings box: plan-only vs run-it mode, watched vs unwatched
-  supervision, approval time limits (tasks ~60 min, plans ~10 min),
+- Run settings box: Planning only vs Plan + implement run mode, Attended vs
+  Unattended supervision, approval time limits (tasks ~60 min, plans ~10 min),
   and PC sleep with confirm, delay and cancel.
 - Review and approve: the exact change side-by-side or as one list,
   evidence card, approval checklist, approval countdown and the
   Approve / Reject actions for the selected task or plan.
   **Load sample review** fetches a ready-made review; **Try it in
-  Demo step 3** jumps to the outcome.
+  Step 3** jumps to the outcome.
 - Owner questions: the worker can pause one task with a question
   while other runs continue; answering resumes it.
 - The server runs queued work itself every 30 s; no manual command is
@@ -128,7 +134,7 @@ The scripted actor installs a fixed reference candidate; the controller injects
 one labelled failure after its completed edit. Recovery does not repeat that edit.
 Docker executes the protected sample tests. Approval applies one reviewed source
 file only to `.runtime/TASK_ID/target/issue_import.py`, leaving the seed unchanged.
-The nonce expires after ten minutes. A changed candidate, target or receipt
+The nonce expires after sixty minutes. A changed candidate, target or receipt
 invalidates approval. Protected-test and runner-image changes also require fresh validation. Do not share printed runtime records containing approvals.
 
 `reject TASK_ID` refuses the pending change. `reconcile TASK_ID` inspects an
@@ -155,14 +161,18 @@ supported network deployment is the hosted visitor mode below. Do not expose thi
 server through forwarding or an unreviewed proxy.
 Desktop and simulated mobile layouts have been exercised in a real browser; the owner has verified the scripted workflow on a physical phone over Wi-Fi and mobile data. See docs/phone-access.md for exact HTTPS-origin preparation.
 
-After connecting, the **Tasks** chooser lists the latest 20 saved tasks. With no bookmark,
-the newest task loads automatically. Selecting one only loads its recorded state;
+After connecting, the **Recent tasks** list shows the latest 20 saved tasks. With no
+task link (no `#task-id` in the address bar), nothing loads automatically —
+select a saved task or create a new one. Selecting one only loads its recorded state;
 it never starts inference or approves a change. A running task resumes progress
 polling after reconnect. Manual task IDs remain an optional recovery control.
 
 API: POST `/api/tasks`; authenticated GET `/api/tasks?limit=20` returns only bounded
-id/prompt/status summaries (limit 1..50); GET `/api/tasks/{id}` and `/events?after=SEQUENCE`;
-POST `/run`, `/approve`, `/reject`, `/reconcile`, `/cancel`, `/revalidate`, `/sample`. Every API request requires
+id/prompt/status summaries (limit 1..50); GET `/api/tasks/{id}` and
+`/api/tasks/{id}/events?after=SEQUENCE`;
+POST `/api/tasks/{id}/run`, `/api/tasks/{id}/approve`, `/api/tasks/{id}/reject`,
+`/api/tasks/{id}/reconcile`, `/api/tasks/{id}/cancel`, `/api/tasks/{id}/revalidate`,
+`/api/tasks/{id}/sample`. Every API request to this local server requires
 `Authorization: Bearer TOKEN`. The server selects the actor; scripted mode is default. See docs/meta-tooling.md for guarded Meta activation. No endpoint
 accepts a provider, billing source, shell command or arbitrary workspace path.
 
@@ -210,9 +220,10 @@ is still unforgeable but visits end with the process. Hosted sessions start on t
 scripted reference at zero inference cost. A visitor Meta key can be attached for
 that session only and detached at any time; it is never used as identity, never
 persisted and never falls back to another key. Real Meta work additionally requires
-an owner-configured grant; without one the key endpoint refuses. Judges instead
-register with the access code, log in with their own password, and set their
-own finite limits against their own key; the server pins the model via
+a live model route set up by whoever runs the server (already set on the deployed
+judge URL below); without one the key endpoint refuses. Judges register with the
+access code, log in with their own password, and set their own finite limits
+against their own key; the server pins the model via
 `OPERATOR_JUDGE_MODEL` and the owner pays nothing (see docs/modal-hosting.md).
 Without an attached key, visitors can only run the free scripted reference —
 every real model call spends the visitor's own key under their own limits.
@@ -317,10 +328,10 @@ watchdog and explicit cleanup remain. Custom runner images must provide GNU
 `timeout`. Runner deadline changes invalidate pending validation approvals, requiring
 fresh validation; completed records are preserved.
 
-The Tasks section has an explicit **New task** control. It clears selected progress,
+The **Demo task history** section has an explicit **Start new demo draft** button. It clears selected progress,
 review evidence and sample results without deleting or cancelling saved work.
 **Create and run new task** creates a separate task. The empty saved-task option
-also opens this draft; refreshing the saved list keeps the draft selected.
+(**New task (no saved task selected)**) also opens this draft; refreshing the saved list keeps the draft selected.
 Activity entries are numbered within the selected task, latest 20 first.
 **Show all activity** expands that task's history.
 
@@ -329,7 +340,8 @@ and tested live on the real runtime; the hosted access-code visit flow, signed
 visits that survive restarts and durable state written by one process at a time
 are implemented, covered by local tests and live-verified at
 `https://remote-operator--hosted.us-east.modal.run`
-(offline reference, no judge grant enabled). Personal local Docker hosting remains
+(offline reference, plus a judge-funded live run to completion — see docs/modal-hosting.md).
+Personal local Docker hosting remains
 the default. See [docs/modal-hosting.md](docs/modal-hosting.md) for evidence and limits.
 
 ## License

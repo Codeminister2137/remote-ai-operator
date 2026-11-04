@@ -40,7 +40,7 @@ Four stages, each visible in the served UI and each human-gated:
    queued ones oldest-first, stopping again where a human must approve.
 4. **Inbox notifies** — the owner is pulled back only when needed: the
    🔔 inbox bell jumps to waiting owner questions and run results;
-   mail receipts cover finished jobs in watched and unwatched mode.
+   mail receipts cover finished jobs in attended and unattended mode.
 
 The loop composes: a plan approval enqueues a run, the run stops at code
 approval, the approved code runs as the visible feature outcome.
@@ -70,7 +70,7 @@ to judges.
 | Meta Responses tool adapter, scoped controller | Event-built (Nov 2026) | `meta.py`, `control.py`; BUILD_LOG-dated |
 | Task/event store, allowance ledger, reconciliation | Event-built (Nov 2026) | Durable receipts, exact-source approval |
 | Isolated validation (Docker + Modal Sandbox) | Event-built (Nov 2026) | Live-accepted on both runners |
-| Served UI: wizard, chat, review, split diff, evidence | Event-built (Nov 2026) | `app.js` / `index.html`, incl. loop3 branches |
+| Served UI: wizard, chat, review, split diff, evidence | Event-built (Nov 2026) | `app.js` / `index.html` |
 | Inbox bell + owner-question parking | Event-built (Nov 2026) | `ask_owner` op, bell jump-to-unread |
 | Supervisor threads, plans, drain worker, hosted sweeper | Event-built (Nov 2026) | `supervisor.py`, `supervisor_runner.py` |
 | Dictation (Meta STT + Web Speech fallback) | Event-built (Nov 2026) | `stt.py`; audio never persisted |
@@ -126,14 +126,15 @@ Live use requires an authorized Meta key, verified credits and a finite private 
 Follow docs/reviewer-guide.md, or the 5-minute path in docs/judge-card.md
 (code → wizard → sample → approve → try-it).
 
-A hosted scripted demo is deployed at
+A hosted demo is deployed at
 `https://remote-operator--hosted.us-east.modal.run` and is live-verified (access
 code, per-visitor isolation, scripted run, exact approval, cold-start recovery and a
-real-browser UI pass). Judges receive the shared access code out-of-band; it is never
-committed. The hosted app starts on the labelled scripted reference at zero inference
-cost and has no access to the owner's PC or private source. A visitor may attach their
-own Meta key only when a finite judge grant is enabled; until then the key endpoint
-refuses. Existing published repository:
+real-browser UI pass, plus a judge-funded live run to completion). The demo access
+code is public in the README (open entry; visits stay isolated). The hosted app
+starts on the labelled scripted reference at zero inference
+cost and has no access to the owner's PC or private source. A judge registers an
+account, sets their own finite grant and attaches their own Meta key; without any
+grant the key endpoint refuses. Existing published repository:
 `https://github.com/Codeminister2137/remote-ai-operator/tree/main`.
 The current local review candidate has not been published. Video URL remains
 pending explicit recording/upload approval and an actual reviewed recording.
