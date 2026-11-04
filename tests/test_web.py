@@ -457,7 +457,7 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.status_code, 409, response.text[:200])
         self.assertIn("without Meta transcription", response.json()["detail"])
-        self.assertNotIn("attach a provider key", response.json()["detail"])
+        self.assertNotIn("attach your Meta key", response.json()["detail"])
 
     async def test_baseten_owner_transcribe_refused(self):
         """Baseten owner serves wire no transcription grant; route refuses."""

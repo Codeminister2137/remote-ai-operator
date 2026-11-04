@@ -1320,8 +1320,8 @@ function keyNote() {
     return;
   }
   element("key-note").textContent = sessionKeyAttached ?
-    "Your key is attached for this session. Model calls are charged to your own Meta account, not the host's." :
-    "No key attached. This demo runs the fixed offline reference and makes no model requests.";
+    "Your key is attached for this session. Model calls are charged to your own Meta account, not the host's; the fixed sample now runs with live AI instead of the recording, and chat replies and dictation use real inference." :
+    "No key attached. This demo runs the fixed offline reference and makes no model requests. Attach a key to run the same sample with live AI.";
 }
 async function loadMode(session) {
   const configuration = await api("/api/config");

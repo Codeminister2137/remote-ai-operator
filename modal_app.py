@@ -46,6 +46,9 @@ volume = modal.Volume.from_name("remote-operator-state", create_if_missing=True,
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
+    # Dictation clips arrive as webm/opus and need conversion; without this
+    # every hosted Meta transcription fails with 502 and falls back.
+    .apt_install("ffmpeg")
     .pip_install_from_pyproject("pyproject.toml", optional_dependencies=["modal"])
     .env({"PYTHONPATH": "/app/src:/app", "OPERATOR_BUILD_COMMIT": _deploy_commit()})
     .add_local_dir(

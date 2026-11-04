@@ -602,7 +602,7 @@ class HostedAppTests(unittest.IsolatedAsyncioTestCase):
             data={"language": "en"},
         )
         self.assertEqual(response.status_code, 409, response.text[:200])
-        self.assertIn("attach a provider key", response.json()["detail"])
+        self.assertIn("attach your Meta key", response.json()["detail"])
 
     async def test_local_owner_app_still_requires_the_bearer_token(self):
         from remote_operator.web import create_app
