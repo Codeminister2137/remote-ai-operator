@@ -510,6 +510,11 @@ function supervisorActions() {
   element("supervisorSend").disabled = !open;
   element("supervisorInputRow").hidden = !open;
   element("supervisorSend").hidden = !open;
+  // The chat dictate row must follow its field: a visible button with a
+  // hidden field strands dictation (the Build prompt is locked by design).
+  const dictateRow = document.querySelector('[data-dictate-for="supervisorInput"]');
+  if (dictateRow) dictateRow.hidden = !open;
+  element("dictate-supervisor").disabled = !open;
   element("supervisorWritePlan").disabled = !open;
   element("supervisorApprovePlan").disabled = !open || !supervisorPlanNonce;
   updatePlanSettingsNote();
