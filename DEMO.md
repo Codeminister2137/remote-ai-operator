@@ -25,7 +25,7 @@ The private product is neither shown nor required to install or run this demo.
    creating a task. Account credits alone never authorize unlimited requests.
 3. Connect the phone through the already-approved private HTTPS transport. Keep
    credentials, device hostname and unrelated personal screens out of the frame.
-4. Select **New task**, review the sample request and enable the labelled injected
+4. Select **Start new demo draft**, review the locked sample request and enable the labelled injected
    failure. **Create and run new task** must create fresh work; loading a saved task
    does not prove a new live run. Keep original receipts and unedited capture private.
 5. Review source and independent validation before the owner approves on the phone.
@@ -36,12 +36,12 @@ The private product is neither shown nor required to install or run this demo.
 | Time | Show | Say / establish |
 | --- | --- | --- |
 | 0–20 | App title and event-built contribution slate | “Remote AI Operator lets me supervise a coding task from my phone. This standalone controller, Meta tool adapter, recovery, evidence and approval interface were built during the event.” |
-| 20–40 | Phone New task, request, Meta mode, finite allowance | “Add CSV import to this small issue tracker: accept valid rows and report missing fields and duplicates. Meta will implement the source; the controller limits its tools and spending.” |
+| 20–40 | Phone new draft, locked request, Meta mode, finite allowance | “Add CSV import to this small issue tracker: accept valid rows and report missing fields and duplicates. Meta will implement the source; the controller limits its tools and spending.” |
 | 40–80 | Actual Meta tool events and candidate diff | “Meta inspects the API, edits the importer and requests tests. Generated code runs in a network-disabled container without model credentials.” |
 | 80–105 | Labelled injected failure, retained edit, recovery event | “This interruption is deliberately injected after a saved edit. Recovery retains that edit and continues without blindly repeating the mutation.” |
 | 105–135 | Passed summary, exact diff, receipt details briefly | “These are host-observed checks of the candidate. Approval is tied to these source bytes, the base and validation policy. Changed state requires fresh review.” |
 | 135–165 | Physical owner approval, Run approved import, 2 accepted/2 errors | “I approve this exact local change. The applied code now imports the valid rows and reports the duplicate and missing title.” |
-| 165–180 | Source setup and limitations slate | “The public source runs independently. This prototype handles one registered source file; it does not yet control arbitrary repositories or wake a PC.” |
+| 165–180 | Source setup and limitations slate | “The public source runs independently. The sample handles one registered source file; real-repository work runs on local serves with staged approvals and no automated checks; no PC wake.” |
 
 Make edits to waiting time visible. Keep actual execution order truthful. Do not
 substitute scripted output for live Meta, hide a failed check or claim switching
@@ -61,14 +61,13 @@ confirm 4 Meta responses, retained injected edit, 7 passing checks, exact applie
 and 2 accepted rows/2 errors. Physical device use and human approval are owner-confirmed;
 those facts are not inferred from HTTP headers. See docs/live-acceptance.md.
 
-Still required: three-minute recording, review of the exact public tree/history,
-judge access and owner-authorized
-publication/submission. Apache-2.0 is resolved. A source archive is a review artifact,
+Recording, public-tree review, judge access and owner-authorized
+publication/submission are complete. Apache-2.0 is resolved. A source archive is a review artifact,
 not a published submission. Never include private plans or raw trial evidence.
 
 The hosted visitor flow (shared access code, signed resumable session, session-only
 visitor key, per-visitor tasks, single-writer durable state) is implemented, covered by
 local tests and live-verified at `https://remote-operator--hosted.us-east.modal.run`
-(scripted mode, no judge grant). The access code is supplied separately. Recording and
-submission remain owner-authorized steps. See docs/modal-hosting.md for exact evidence
+(scripted mode plus a judge-funded live run to completion). The access code is public
+in the README (open entry). See docs/modal-hosting.md for exact evidence
 and limits.

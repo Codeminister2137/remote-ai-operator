@@ -104,7 +104,10 @@ completed edit. Seven independent safety checks verify behaviour. The user
 reviews the exact change and approves applying it to a separate local demo target.
 Executing that applied code accepts two valid issues and reports duplicate/missing
 field errors. A fresh physical-phone run is owner-confirmed and its saved effects
-are independently checked. The required three-minute video remains to be recorded.
+are independently checked. The required three-minute video was recorded
+2026-11-04/05 and submitted with the entry (scripted take with on-camera
+disclosure — Meta's API timed out repeatedly in submission-hour traffic;
+live Meta runs stand on the acceptance record and hosted judge runs).
 
 ## Technical depth
 
@@ -135,15 +138,17 @@ starts on the labelled scripted reference at zero inference
 cost and has no access to the owner's PC or private source. A judge registers an
 account, sets their own finite grant and attaches their own Meta key; without any
 grant the key endpoint refuses. Existing published repository:
-`https://github.com/Codeminister2137/remote-ai-operator/tree/main`.
-The current local review candidate has not been published. Video URL remains
-pending explicit recording/upload approval and an actual reviewed recording.
-The owner's private phone network is not a shared
+`https://github.com/Codeminister2137/remote-ai-operator/tree/main`
+(all review candidates published; main is the judged tree).
+Video recorded and submitted with the entry (URL as entered in the
+event form). The owner's private phone network is not a shared
 judge endpoint.
 
 ## Scope and honest limits
 
-One registered source file; no arbitrary private-repository execution. Retrying
+The sample task covers one registered source file; real-repository tasks
+exist on local serves via `--work-root` with staged-diff approval and no
+automated checks (the reviewer is the human). Retrying
 on the same AI route is demonstrated; switching providers mid-task is not
 implemented. No PC wake, full desktop control, private-product integration or
 provider-enforced billing cap is claimed. Spending is judge-funded through a
