@@ -202,6 +202,9 @@ if (el("supervisorInput").disabled !== true) fail("input enabled on approved thr
 run(`supervisorThreadStatus = "open"; supervisorActions();`);
 if (el("supervisorSend").disabled !== false) fail("send disabled on open thread");
 if (el("supervisorWritePlan").disabled !== false) fail("write-plan disabled on open thread");
+if (el("dictate-supervisor").disabled !== false) fail("chat dictate disabled on open thread");
+run(`supervisorThreadId = ""; supervisorActions();`);
+if (el("dictate-supervisor").disabled !== true) fail("chat dictate enabled with no thread");
 
 // Project checklist reports staged files even before any approval exists.
 run(`element("approvalChecklist").replaceChildren = function(){ this.kids = Array.from(arguments); };
