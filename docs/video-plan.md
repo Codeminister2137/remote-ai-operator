@@ -47,7 +47,7 @@ Ground rules (from `docs/submission-draft.md`, binding):
 | Time | Show | Say / establish |
 | --- | --- | --- |
 | 0–20 | App title; Build view; allowance panel | "Remote AI Operator lets me supervise a coding task from my phone. This controller, Meta adapter, recovery, evidence and approval UI were built during the event." |
-| 20–40 | New task, request text, Meta mode, inject-failure checked, Create and run | "Add CSV import: accept valid rows, report missing fields and duplicates. Meta implements; the controller limits tools and spending. The injected failure is deliberate." |
+| 20–40 | Locked prefilled request, Meta mode, inject-failure checked, Create and run | "Add CSV import: accept valid rows, report missing fields and duplicates. Meta implements; the controller limits tools and spending. The injected failure is deliberate." |
 | 40–80 | Tool events arriving; worker pill Working; candidate diff in Review | "Meta inspects the source and spec, edits the importer, requests tests. Generated code runs in a network-disabled container without model credentials." |
 | 80–105 | Injected-failure event, retained edit, recovery, resume to review | "The interruption lands after a saved edit. Recovery keeps that edit and continues without repeating the mutation." |
 | 105–135 | Passed summary, exact diff, receipt details briefly | "Host-observed checks of the candidate. Approval binds these source bytes, the base and the validation policy; changed state needs fresh review." |
