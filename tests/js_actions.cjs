@@ -160,6 +160,9 @@ if (!html.includes("switches the sample from a recording to a real agent run")) 
 if (!html.includes('<section id="judge-start" hidden>')) {
   fail("judge quick-start leaks onto local serves");
 }
+if (!html.includes("the local project is much more capable than this demo")) {
+  fail("hosted demo hides the local capability gap");
+}
 run(`selectedMode = {mode: "baseten"}; modelRouteConfigured = false; keyNote();`);
 if (!String(el("key-note").textContent).includes("No Baseten model route")) {
   fail("baseten no-route note wrong: " + el("key-note").textContent);
