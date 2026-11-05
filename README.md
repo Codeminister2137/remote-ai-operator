@@ -18,6 +18,11 @@ everything a judge touches was built during the event.
 
 ## Hosted demo vs local install
 
+**The hosted demo is a fixed-sample taste — the local install is much more
+capable:** custom work on your own repositories with staged-diff approval,
+full supervision with mail/inbox, your own grant and models. Hosted shows
+the loop; local is the actual tool.
+
 | | Hosted demo (link above) | Local install (below) |
 |---|---|---|
 | Fixed sample task (CSV import) | Yes — scripted (free) or live Meta AI with your own key | Yes |

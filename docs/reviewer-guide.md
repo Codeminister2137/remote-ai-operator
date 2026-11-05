@@ -80,6 +80,6 @@ See docs/live-acceptance.md for completed real-model evidence and its limitation
 Run the automated commands in README.md; enable OPERATOR_DOCKER_TESTS=1 for actual
 container checks. The optional browser script requires Node 24+ and Edge/Chromium,
 uses a fresh local scripted server and closes its own processes. It spends no
-model credits. Inspect BUILD_LOG.md and DEMO.md for new-work attribution and the
-recording plan. A physical-phone Meta task and approval are owner-confirmed; the
-three-minute recording remains a separate acceptance gate.
+model credits. Inspect BUILD_LOG.md for new-work attribution.
+A physical-phone Meta task and approval are owner-confirmed; the
+three-minute recording is submitted with the entry.

@@ -53,7 +53,7 @@ checks, safe resume after interruptions, exact-change approval, a mobile browser
 UI and a durable hosted deployment on Modal written by one process at a time.
 A small issue-tracker CSV import provides a visible feature outcome. Existing
 private-product implementation is not included or required. Dependencies retain
-their own licenses; the original repository is Apache-2.0. See BUILD_LOG.md and DEMO.md.
+their own licenses; the original repository is Apache-2.0. See BUILD_LOG.md.
 
 This entry was built with Muse Code: the agentic coding assistant authored,
 tested and iterated the implementation under the author's direction, with every
@@ -161,11 +161,9 @@ Best Agentic Use-Case: the model chooses controlled coding actions, observes too
 results and produces a tested feature under human supervision. Request consideration;
 do not claim eligibility or an award before organizer/judge confirmation.
 
-## Recording preparation
+## Recording (complete)
 
-Use DEMO.md's 180-second storyboard. Keep Meta mode and injected-failure labels
-visible; show actual diff, passed summary, physical review/approval and applied result.
-Use a fresh task for a new live recording; label any replay of the saved acceptance.
-Crop bearer credentials, private hostnames, personal notifications and live nonces.
-Keep unedited evidence privately. Visibly shorten waits without rearranging effects.
-Do not present automated developer acceptance as a physical human button press.
+Recorded 2026-11-04/05 and submitted with the entry: scripted take with
+on-camera disclosure. Fresh task, injected-failure labels, actual diff,
+passed summary, physical review/approval and applied result shown;
+no secrets in frame; waits shortened visibly without rearranging effects.
