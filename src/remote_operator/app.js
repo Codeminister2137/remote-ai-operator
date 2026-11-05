@@ -1680,6 +1680,7 @@ element("taskId").addEventListener("input", () => {
     element("onboard-wizard").hidden = !judgeLoginOffered;
     renderWizard();
     element("key-section").hidden = false;
+    element("judge-start").hidden = false;
     element("key-controls").hidden = !modelRouteConfigured;
     element("access-note").textContent = "Private demo: enter the access code to open your own session.";
     keyNote();

@@ -157,6 +157,9 @@ if (!String(el("key-note").textContent).includes("live AI instead of the recordi
 if (!html.includes("switches the sample from a recording to a real agent run")) {
   fail("quick-start hides what the key buys");
 }
+if (!html.includes('<section id="judge-start" hidden>')) {
+  fail("judge quick-start leaks onto local serves");
+}
 run(`selectedMode = {mode: "baseten"}; modelRouteConfigured = false; keyNote();`);
 if (!String(el("key-note").textContent).includes("No Baseten model route")) {
   fail("baseten no-route note wrong: " + el("key-note").textContent);
